@@ -291,6 +291,23 @@ test("anthropic alias 'sonnet' remains unknown without discovered version metada
   assert.equal(metadata.modelId, "sonnet");
 });
 
+test("DeepSeek family detection does not replace authoritative context metadata", async () => {
+  clearModelContextMetadataCache();
+  const metadata = await resolveModelContextLength({
+    providerId: "local",
+    modelId: "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B-GGUF",
+    rawMetadata: { loaded_context_length: 32768 },
+    providerConfig: {
+      models: {
+        "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B-GGUF": { contextLength: 16384 },
+      },
+    },
+  });
+
+  assert.equal(metadata.contextLength, 32768);
+  assert.equal(metadata.source, "lmstudio-api");
+});
+
 test("anthropic alias 'opus' remains unknown without discovered version metadata", async () => {
   clearModelContextMetadataCache();
   const metadata = await resolveModelContextLength({

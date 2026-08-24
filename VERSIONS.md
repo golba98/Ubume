@@ -3,6 +3,18 @@
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
 
+## v1.0.17 — 2026-08-24
+
+Codexa now supports native OpenAI-compatible tool calls for verified Local
+models, including structured multi-call turns, streamed argument assembly,
+reasoning preservation, matching tool-result IDs, approvals, and malformed-call
+recovery. DeepSeek-family Local models receive bounded compatibility defaults
+without guessed context limits. Codexa Native also groups its PyTorch and CuPy
+routes behind one provider entry with a dedicated model picker.
+
+This release makes terminal-render tests deterministic and prepares the scoped
+package for publication through GitHub Packages.
+
 ## v1.0.16 — 2026-08-16
 
 Codexa now saves conversations per workspace and lets you reopen them with

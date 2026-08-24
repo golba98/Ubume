@@ -1,6 +1,6 @@
 {
   "name": "@golba98/codexa",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "description": "Terminal UI for Codexa — TypeScript + Bun + Ink",
   "type": "module",
   "bin": {
@@ -13,12 +13,12 @@
     "install:dev-bin": "node scripts/install-local-dev-bin.mjs",
     "debug:claude-models": "bun run --silent src/core/providerRuntime/claudeCodeDiscoveryDebug.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
+    "test": "bun test --max-concurrency=1",
     "audit:codexa-gap": "node scripts/audit-codexa-capabilities.mjs",
     "smoke:terminal-bench": "node scripts/smoke-terminal-bench.mjs",
     "gen-build-info": "node scripts/gen-build-info.mjs",
     "build": "bun run gen-build-info && bun run typecheck",
-    "prepublishOnly": "npm run gen-build-info && npm run typecheck && npm test"
+    "prepublishOnly": "npm run gen-build-info && npm run typecheck && bun test --max-concurrency=1"
   },
   "dependencies": {
     "ink": "^7.1.0",
@@ -42,6 +42,9 @@
     "url": "https://github.com/golba98/Codexa/issues"
   },
   "homepage": "https://github.com/golba98/Codexa#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "license": "MIT",
   "files": [
     "bin/",

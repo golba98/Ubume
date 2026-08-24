@@ -1,11 +1,13 @@
 import type { ProviderId, ProviderWorkspaceOverride } from "../providerLauncher/types.js";
 
-export type CapabilitySource = "api" | "cli" | "config" | "known-registry" | "unknown";
-export type CapabilityConfidence = "verified" | "configured" | "known" | "unknown";
+export type CapabilitySource = "api" | "cli" | "config" | "detected-family" | "known-registry" | "unknown";
+export type CapabilityConfidence = "verified" | "configured" | "detected" | "known" | "unknown";
+export type LocalModelFamily = "deepseek";
 
 export interface ModelCapabilityProfile {
   providerId: ProviderId;
   modelId: string;
+  family: LocalModelFamily | null;
   maxOutputTokens: number | null;
   supportsStreaming: boolean | null;
   supportsToolCalls: boolean | null;
@@ -74,6 +76,20 @@ const NESTED_METADATA_KEYS = [
   "config",
 ] as const;
 
+const MODEL_IDENTITY_FIELDS = [
+  "id",
+  "name",
+  "model",
+  "model_id",
+  "modelId",
+  "display_name",
+  "displayName",
+  "repository",
+  "repo",
+  "path",
+  "publisher",
+] as const;
+
 const capabilityCache = new Map<string, ModelCapabilityProfile>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -98,6 +114,32 @@ function cacheKey(options: ResolveModelCapabilityProfileOptions): string {
   });
 }
 
+function deepSeekIdentity(value: string): boolean {
+  return /(^|[^a-z0-9])deep[\s_\-./:]*seek(?=$|[^a-z0-9])/i.test(value);
+}
+
+function metadataIdentityValues(raw: unknown): string[] {
+  if (!isRecord(raw)) return [];
+  const values: string[] = [];
+  for (const field of MODEL_IDENTITY_FIELDS) {
+    if (typeof raw[field] === "string") values.push(raw[field]);
+  }
+  for (const nestedKey of NESTED_METADATA_KEYS) {
+    const nested = raw[nestedKey];
+    if (!isRecord(nested)) continue;
+    for (const field of MODEL_IDENTITY_FIELDS) {
+      if (typeof nested[field] === "string") values.push(nested[field]);
+    }
+  }
+  return values;
+}
+
+export function detectLocalModelFamily(modelId: string, rawMetadata?: unknown): LocalModelFamily | null {
+  return [modelId, ...metadataIdentityValues(rawMetadata)].some(deepSeekIdentity)
+    ? "deepseek"
+    : null;
+}
+
 export function clearModelCapabilityProfileCache(): void {
   capabilityCache.clear();
 }
@@ -110,6 +152,7 @@ function unknownProfile(
   return {
     providerId,
     modelId,
+    family: null,
     maxOutputTokens: null,
     supportsStreaming: null,
     supportsToolCalls: null,
@@ -191,6 +234,7 @@ function resolveFromRawMetadata(
   return {
     providerId,
     modelId,
+    family: null,
     maxOutputTokens,
     supportsStreaming,
     supportsToolCalls,
@@ -226,6 +270,7 @@ function resolveFromConfig(
   return {
     providerId,
     modelId,
+    family: null,
     maxOutputTokens,
     supportsStreaming,
     supportsToolCalls,
@@ -245,6 +290,7 @@ function resolveFromKnownRegistry(
   return {
     providerId,
     modelId,
+    family: null,
     maxOutputTokens: entry.maxOutputTokens ?? null,
     supportsStreaming: entry.supportsStreaming ?? null,
     supportsToolCalls: entry.supportsToolCalls ?? null,
@@ -255,34 +301,83 @@ function resolveFromKnownRegistry(
   };
 }
 
+function resolveFromDetectedFamily(
+  providerId: ProviderId,
+  modelId: string,
+  rawMetadata?: unknown,
+): ModelCapabilityProfile | null {
+  if (providerId !== "local") return null;
+  const family = detectLocalModelFamily(modelId, rawMetadata);
+  if (family !== "deepseek") return null;
+  return {
+    providerId,
+    modelId,
+    family,
+    maxOutputTokens: null,
+    supportsStreaming: true,
+    supportsToolCalls: true,
+    supportsSystemPrompt: null,
+    supportsVision: null,
+    source: "detected-family",
+    confidence: "detected",
+  };
+}
+
+function mergeProfiles(options: {
+  providerId: ProviderId;
+  modelId: string;
+  rawMetadata?: unknown;
+  profiles: readonly (ModelCapabilityProfile | null)[];
+}): ModelCapabilityProfile {
+  const profiles = options.profiles.filter((profile): profile is ModelCapabilityProfile => profile !== null);
+  const first = profiles[0];
+  const family = detectLocalModelFamily(options.modelId, options.rawMetadata)
+    ?? profiles.find((profile) => profile.family)?.family
+    ?? null;
+  const value = <K extends keyof Pick<ModelCapabilityProfile,
+    "maxOutputTokens" | "supportsStreaming" | "supportsToolCalls" | "supportsSystemPrompt" | "supportsVision"
+  >>(field: K): ModelCapabilityProfile[K] => {
+    for (const profile of profiles) {
+      if (profile[field] !== null) return profile[field];
+    }
+    return null as ModelCapabilityProfile[K];
+  };
+
+  if (!first && !family) return unknownProfile(options.providerId, options.modelId);
+  return {
+    providerId: options.providerId,
+    modelId: options.modelId,
+    family,
+    maxOutputTokens: value("maxOutputTokens"),
+    supportsStreaming: value("supportsStreaming"),
+    supportsToolCalls: value("supportsToolCalls"),
+    supportsSystemPrompt: value("supportsSystemPrompt"),
+    supportsVision: value("supportsVision"),
+    source: first?.source ?? "unknown",
+    confidence: first?.confidence ?? "unknown",
+    ...(options.rawMetadata !== undefined ? { raw: options.rawMetadata } : {}),
+  };
+}
+
 export function resolveModelCapabilityProfileCached(
   options: ResolveModelCapabilityProfileOptions,
 ): ModelCapabilityProfile {
   const key = cacheKey(options);
   const cached = capabilityCache.get(key);
-  if (cached && !(options.rawMetadata !== undefined && cached.source === "unknown")) {
+  if (cached && options.rawMetadata === undefined) {
     return cached;
   }
 
   const raw = resolveFromRawMetadata(options.providerId, options.modelId, options.rawMetadata);
-  if (raw) {
-    capabilityCache.set(key, raw);
-    return raw;
-  }
-
   const config = resolveFromConfig(options.providerId, options.modelId, options.providerConfig);
-  if (config) {
-    capabilityCache.set(key, config);
-    return config;
-  }
-
+  const detected = resolveFromDetectedFamily(options.providerId, options.modelId, options.rawMetadata);
   const registry = resolveFromKnownRegistry(options.providerId, options.modelId);
-  if (registry) {
-    capabilityCache.set(key, registry);
-    return registry;
-  }
-
-  const result = unknownProfile(options.providerId, options.modelId);
+  const result = mergeProfiles({
+    providerId: options.providerId,
+    modelId: options.modelId,
+    rawMetadata: options.rawMetadata,
+    profiles: [raw, config, detected, registry],
+  });
   capabilityCache.set(key, result);
   return result;
 }

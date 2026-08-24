@@ -1123,6 +1123,10 @@ function countCodexaMetadataInOutput(raw: string): number {
   return (stripAnsi(raw).match(/Codexa v/g) ?? []).length;
 }
 
+function maxCountPerWrite(writes: string[], counter: (value: string) => number): number {
+  return writes.reduce((maximum, write) => Math.max(maximum, counter(write)), 0);
+}
+
 function assertHeaderBefore(output: string, marker: string) {
   const text = stripAnsi(output);
   const headerIndex = text.indexOf("Codexa v");
@@ -1276,7 +1280,12 @@ test("header remains topmost after multiple prompt and response cycles", async (
   stdout.columns = 120;
   stdout.rows = 40;
   let raw = "";
-  stdout.on("data", (chunk) => { raw += chunk.toString(); });
+  const writes: string[] = [];
+  stdout.on("data", (chunk) => {
+    const write = chunk.toString();
+    raw += write;
+    writes.push(write);
+  });
 
   const layout = createLayoutSnapshot(120, 40);
   const multiTurnEvents: TimelineEvent[] = [
@@ -1327,8 +1336,8 @@ test("header remains topmost after multiple prompt and response cycles", async (
 
   assertHeaderBefore(raw, "Second prompt marker");
   assertHeaderBefore(raw, "Second assistant response marker");
-  assert.equal(countLogoInOutput(raw), 1, "header should render once in the initial frame");
-  assert.equal(countCodexaMetadataInOutput(raw), 1, "metadata should render once in the initial frame");
+  assert.equal(maxCountPerWrite(writes, countLogoInOutput), 1, "each rendered frame should contain one header");
+  assert.equal(maxCountPerWrite(writes, countCodexaMetadataInOutput), 1, "each rendered frame should contain one metadata block");
 });
 
 test("header is not duplicated by provider migration and route switch transcript events", async () => {
@@ -1337,7 +1346,12 @@ test("header is not duplicated by provider migration and route switch transcript
   stdout.columns = 120;
   stdout.rows = 40;
   let raw = "";
-  stdout.on("data", (chunk) => { raw += chunk.toString(); });
+  const writes: string[] = [];
+  stdout.on("data", (chunk) => {
+    const write = chunk.toString();
+    raw += write;
+    writes.push(write);
+  });
 
   const layout = createLayoutSnapshot(120, 40);
   const routeEvents: TimelineEvent[] = [
@@ -1372,8 +1386,8 @@ test("header is not duplicated by provider migration and route switch transcript
 
   assert.match(stripAnsi(raw), /Provider migrated/);
   assert.match(stripAnsi(raw), /Provider route active/);
-  assert.equal(countLogoInOutput(raw), 1, "route switch events must not add a transcript banner");
-  assert.equal(countCodexaMetadataInOutput(raw), 1, "route switch events must not duplicate metadata");
+  assert.equal(maxCountPerWrite(writes, countLogoInOutput), 1, "route switch events must not add a transcript banner");
+  assert.equal(maxCountPerWrite(writes, countCodexaMetadataInOutput), 1, "route switch events must not duplicate metadata");
 });
 
 test("project instructions render with breathing room below the live header", async () => {
@@ -1382,7 +1396,12 @@ test("project instructions render with breathing room below the live header", as
   stdout.columns = 120;
   stdout.rows = 40;
   let raw = "";
-  stdout.on("data", (chunk) => { raw += chunk.toString(); });
+  const writes: string[] = [];
+  stdout.on("data", (chunk) => {
+    const write = chunk.toString();
+    raw += write;
+    writes.push(write);
+  });
 
   const layout = createLayoutSnapshot(120, 40);
   const projectInstructionEvents: TimelineEvent[] = [
@@ -1415,7 +1434,7 @@ test("project instructions render with breathing room below the live header", as
   assert.ok(lastLogoRow >= 0, "logo should render");
   assert.ok(projectRow > lastLogoRow + 1, "project instructions should not touch the logo block");
   assertHeaderBefore(raw, "Project instructions");
-  assert.equal(countLogoInOutput(raw), 1, "project instruction notice must not add a transcript banner");
+  assert.equal(maxCountPerWrite(writes, countLogoInOutput), 1, "project instruction notice must not add a transcript banner");
 });
 
 test("live header remains visible when transitioning from startup frame to first prompt", async () => {

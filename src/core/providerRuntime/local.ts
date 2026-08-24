@@ -1,6 +1,6 @@
 import { sanitizeTerminalOutput } from "../terminal/terminalSanitize.js";
 import { runAgentLoop, type AgentChatMessage, type AgentChatResponse } from "../agent/loop.js";
-import { parseOpenAiToolCalls } from "../agent/protocol.js";
+import { agentToolDefinitions, parseOpenAiToolCallsDetailed } from "../agent/protocol.js";
 import type { BackendRunHandlers } from "../providers/types.js";
 import type { ProviderWorkspaceOverride } from "../providerLauncher/types.js";
 import type {
@@ -502,12 +502,16 @@ function extractNonStreamingResponse(body: unknown): ExtractedLocalResponse {
   const choices = isRecord(body) && Array.isArray(body.choices) ? body.choices : [];
   const recognizedFields = new Set<string>();
   const finishReasons: string[] = [];
-  const toolCalls = choices.flatMap((choice) => {
+  const parsedToolCalls = choices.flatMap((choice) => {
     if (!isRecord(choice)) return [];
     if (typeof choice.finish_reason === "string") finishReasons.push(choice.finish_reason);
     const message = isRecord(choice.message) ? choice.message : null;
-    return message ? parseOpenAiToolCalls(message.tool_calls) : [];
+    return message ? parseOpenAiToolCallsDetailed(message.tool_calls) : [];
   });
+  const toolCalls = parsedToolCalls
+    .filter((item) => item.kind === "valid")
+    .map((item) => item.call);
+  const malformedToolCalls = parsedToolCalls.filter((item) => item.kind === "malformed");
 
   const content: string[] = [];
   const reasoning: string[] = [];
@@ -522,7 +526,6 @@ function extractNonStreamingResponse(body: unknown): ExtractedLocalResponse {
     const answer = messageContent || legacyText;
     if (answer.trim()) {
       content.push(answer);
-      continue;
     }
 
     const reasoningText = message
@@ -537,10 +540,11 @@ function extractNonStreamingResponse(body: unknown): ExtractedLocalResponse {
   }
 
   return {
-    // Reasoning is a fallback only. A response with both fields should show its
-    // final answer, while reasoning-only servers still produce useful text.
-    text: (content.length > 0 ? content : reasoning).join("").trim(),
+    text: content.join("").trim(),
+    ...(reasoning.length > 0 ? { reasoning: reasoning.join("").trim() } : {}),
     ...(toolCalls.length > 0 ? { toolCalls } : {}),
+    ...(malformedToolCalls.length > 0 ? { malformedToolCalls } : {}),
+    finishReason: finishReasons[0] ?? null,
     diagnostics: {
       choiceCount: choices.length,
       finishReasons: [...new Set(finishReasons)],
@@ -571,8 +575,28 @@ interface StreamingToolCallAccumulator {
 
 interface StreamingCompletionAccumulator {
   content: string;
+  reasoningContent: string;
   reasoning: string;
+  analysis: string;
   toolCalls: Map<number, StreamingToolCallAccumulator>;
+  finishReasons: string[];
+  malformedEventCount: number;
+}
+
+function appendStreamFragment(current: string, fragment: string): string {
+  if (!fragment) return current;
+  if (!current) return fragment;
+  if (fragment === current || current.endsWith(fragment)) return current;
+  if (fragment.startsWith(current)) return fragment;
+  return `${current}${fragment}`;
+}
+
+function streamFragmentsCompatible(current: string | undefined, fragment: string | undefined): boolean {
+  if (!current || !fragment) return true;
+  if (current === fragment || current.endsWith(fragment) || fragment.startsWith(current)) return true;
+  if (current.length === fragment.length) return false;
+  if (current.startsWith("call_") && fragment.startsWith("call_")) return false;
+  return true;
 }
 
 function applyStreamDelta(line: string, accumulator: StreamingCompletionAccumulator): void {
@@ -584,26 +608,35 @@ function applyStreamDelta(line: string, accumulator: StreamingCompletionAccumula
     const parsed = JSON.parse(data) as { choices?: unknown[] };
     for (const rawChoice of parsed.choices ?? []) {
       if (!isRecord(rawChoice)) continue;
+      if (typeof rawChoice.finish_reason === "string") accumulator.finishReasons.push(rawChoice.finish_reason);
       const delta = isRecord(rawChoice.delta) ? rawChoice.delta : rawChoice;
       accumulator.content += textFromContent(delta.content) || textFromContent(rawChoice.text);
-      accumulator.reasoning += textFromContent(delta.reasoning_content)
-        || textFromContent(delta.reasoning)
-        || textFromContent(delta.analysis);
+      accumulator.reasoningContent += textFromContent(delta.reasoning_content);
+      accumulator.reasoning += textFromContent(delta.reasoning);
+      accumulator.analysis += textFromContent(delta.analysis);
       if (!Array.isArray(delta.tool_calls)) continue;
       for (let position = 0; position < delta.tool_calls.length; position += 1) {
         const rawCall = delta.tool_calls[position];
         if (!isRecord(rawCall)) continue;
-        const index = typeof rawCall.index === "number" ? rawCall.index : position;
+        const explicitIndex = typeof rawCall.index === "number" ? rawCall.index : null;
+        const index = explicitIndex ?? position;
+        if (explicitIndex !== null && explicitIndex !== position && !accumulator.toolCalls.has(explicitIndex)) {
+          const provisional = accumulator.toolCalls.get(position);
+          if (provisional && streamFragmentsCompatible(provisional.id, typeof rawCall.id === "string" ? rawCall.id : undefined)) {
+            accumulator.toolCalls.delete(position);
+            accumulator.toolCalls.set(explicitIndex, provisional);
+          }
+        }
         const current = accumulator.toolCalls.get(index) ?? { name: "", arguments: "" };
         const fn = isRecord(rawCall.function) ? rawCall.function : null;
-        if (typeof rawCall.id === "string") current.id = rawCall.id;
-        if (fn && typeof fn.name === "string") current.name += fn.name;
-        if (fn && typeof fn.arguments === "string") current.arguments += fn.arguments;
+        if (typeof rawCall.id === "string") current.id = appendStreamFragment(current.id ?? "", rawCall.id);
+        if (fn && typeof fn.name === "string") current.name = appendStreamFragment(current.name, fn.name);
+        if (fn && typeof fn.arguments === "string") current.arguments = appendStreamFragment(current.arguments, fn.arguments);
         accumulator.toolCalls.set(index, current);
       }
     }
   } catch {
-    // Ignore keepalive or malformed SSE records; later valid records remain usable.
+    accumulator.malformedEventCount += 1;
   }
 }
 
@@ -614,8 +647,12 @@ async function readStreamingResponse(response: Response): Promise<AgentChatRespo
   let buffer = "";
   const accumulated: StreamingCompletionAccumulator = {
     content: "",
+    reasoningContent: "",
     reasoning: "",
+    analysis: "",
     toolCalls: new Map(),
+    finishReasons: [],
+    malformedEventCount: 0,
   };
   while (true) {
     const { value, done } = await reader.read();
@@ -628,16 +665,23 @@ async function readStreamingResponse(response: Response): Promise<AgentChatRespo
     }
   }
   applyStreamDelta(buffer, accumulated);
-  const toolCalls = [...accumulated.toolCalls.entries()]
+  const parsedToolCalls = [...accumulated.toolCalls.entries()]
     .sort(([left], [right]) => left - right)
-    .map(([, call]) => parseOpenAiToolCalls([{ id: call.id, type: "function", function: {
+    .flatMap(([, call]) => parseOpenAiToolCallsDetailed([{ id: call.id, type: "function", function: {
       name: call.name,
       arguments: call.arguments,
-    } }]))
-    .flat();
+    } }]));
+  const toolCalls = parsedToolCalls
+    .filter((item) => item.kind === "valid")
+    .map((item) => item.call);
+  const malformedToolCalls = parsedToolCalls.filter((item) => item.kind === "malformed");
+  const reasoning = accumulated.reasoningContent || accumulated.reasoning || accumulated.analysis;
   return {
-    text: (accumulated.content.trim() ? accumulated.content : accumulated.reasoning).trim(),
+    text: accumulated.content.trim(),
+    ...(reasoning.trim() ? { reasoning: reasoning.trim() } : {}),
     ...(toolCalls.length > 0 ? { toolCalls } : {}),
+    ...(malformedToolCalls.length > 0 ? { malformedToolCalls } : {}),
+    finishReason: accumulated.finishReasons[0] ?? null,
   };
 }
 
@@ -650,6 +694,8 @@ async function postLocalChatCompletion(options: {
   signal?: AbortSignal;
   handlers: BackendRunHandlers;
   capProfile: import("./capabilityProfile.js").ModelCapabilityProfile;
+  toolProtocol: "none" | "text" | "openai";
+  turnIndex: number;
 }): Promise<AgentChatResponse> {
   const model = getCachedSelectedModel(options.config, options.request.route.modelId);
   const includeSystemPrompt = options.capProfile.supportsSystemPrompt !== false;
@@ -659,6 +705,9 @@ async function postLocalChatCompletion(options: {
       : []),
     { role: "user" as const, content: options.request.prompt },
   ];
+  const tools = options.toolProtocol === "openai"
+    ? agentToolDefinitions(options.request.runIntent ?? "normal")
+    : [];
   const response = await options.fetchImpl(`${options.config.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -669,6 +718,8 @@ async function postLocalChatCompletion(options: {
       model,
       messages,
       stream: options.stream,
+      ...(options.capProfile.maxOutputTokens !== null ? { max_tokens: options.capProfile.maxOutputTokens } : {}),
+      ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
     }),
     signal: options.signal,
   });
@@ -686,15 +737,37 @@ async function postLocalChatCompletion(options: {
 
   if (options.stream && response.headers.get("content-type")?.toLowerCase().includes("text/event-stream")) {
     const streamed = await readStreamingResponse(response);
-    if (!streamed.text.trim() && (streamed.toolCalls?.length ?? 0) === 0) {
-      throw new Error("Local OpenAI-compatible API returned an empty streaming response.");
+    if (streamed.reasoning?.trim()) {
+      options.handlers.onProgress?.({
+        id: `local-reasoning-${options.turnIndex}`,
+        source: "reasoning",
+        text: streamed.reasoning,
+      });
+    }
+    if (
+      !streamed.text.trim()
+      && (streamed.toolCalls?.length ?? 0) === 0
+      && (streamed.malformedToolCalls?.length ?? 0) === 0
+    ) {
+      throw new Error("Local OpenAI-compatible API returned no visible assistant text or tool call after streaming completed.");
     }
     return streamed;
   }
 
   const parsed = JSON.parse(await response.text()) as unknown;
   const extracted = extractNonStreamingResponse(parsed);
-  if (!extracted.text.trim() && (extracted.toolCalls?.length ?? 0) === 0) {
+  if (extracted.reasoning?.trim()) {
+    options.handlers.onProgress?.({
+      id: `local-reasoning-${options.turnIndex}`,
+      source: "reasoning",
+      text: extracted.reasoning,
+    });
+  }
+  if (
+    !extracted.text.trim()
+    && (extracted.toolCalls?.length ?? 0) === 0
+    && (extracted.malformedToolCalls?.length ?? 0) === 0
+  ) {
     throw emptyResponseError(options.config, model, extracted.diagnostics);
   }
   return extracted;
@@ -722,12 +795,18 @@ export async function runLocalOpenAiCompatible(
     providerConfig: request.localConfig ?? configuredOverride,
     rawMetadata: rawMeta,
   });
+  const toolProtocol = capProfile.supportsToolCalls === true
+    ? "openai"
+    : capProfile.supportsToolCalls === false
+      ? "none"
+      : "text";
   const text = await runAgentLoop({
     request,
     handlers,
     includeSystemPrompt: capProfile.supportsSystemPrompt !== false,
+    toolProtocol,
     signal: options.signal,
-    sendMessages: async (messages) =>
+    sendMessages: async (messages, turnIndex) =>
       postLocalChatCompletion({
         request,
         config,
@@ -740,6 +819,8 @@ export async function runLocalOpenAiCompatible(
         signal: options.signal,
         handlers,
         capProfile,
+        toolProtocol,
+        turnIndex,
       }),
   });
   if (!text) throw new Error("Local OpenAI-compatible API returned no assistant text after tool execution.");

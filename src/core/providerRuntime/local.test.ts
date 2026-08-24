@@ -384,11 +384,6 @@ test("Local provider extracts common OpenAI-compatible response text shapes", as
       },
       expected: "Final answer",
     },
-    {
-      name: "reasoning-only fallback",
-      body: { choices: [{ message: { reasoning_content: "Useful reasoning-only response" } }] },
-      expected: "Useful reasoning-only response",
-    },
   ];
 
   for (const fixture of fixtures) {
@@ -399,6 +394,56 @@ test("Local provider extracts common OpenAI-compatible response text shapes", as
     );
     assert.equal(text, fixture.expected, fixture.name);
   }
+});
+
+test("DeepSeek reasoning stays separate from visible final content without duplication", async () => {
+  const progress: string[] = [];
+  const deltas: string[] = [];
+  const text = await runLocalOpenAiCompatible(
+    buildRequest({
+      route: { providerId: "local", modelId: "deepseek-v3.2", backendKind: "local-openai-compatible" },
+      localConfig: { baseUrl: "http://local.test/v1" },
+    }),
+    {
+      onResponse: () => undefined,
+      onError: assert.fail,
+      onProgress: (update) => progress.push(update.text),
+      onAssistantDelta: (chunk) => deltas.push(chunk),
+    },
+    {
+      fetchImpl: (async () => jsonResponse({
+        choices: [{
+          finish_reason: "stop",
+          message: {
+            reasoning_content: "Inspect the request once.",
+            reasoning: "Inspect the request twice.",
+            content: "Final answer only.",
+          },
+        }],
+      })) as typeof fetch,
+    },
+  );
+
+  assert.equal(text, "Final answer only.");
+  assert.deepEqual(progress, ["Inspect the request once."]);
+  assert.deepEqual(deltas, ["Final answer only."]);
+  assert.doesNotMatch(text, /reasoning_content|Inspect the request/);
+});
+
+test("reasoning-only completed response is not exposed as a final answer", async () => {
+  await assert.rejects(
+    () => runLocalOpenAiCompatible(
+      buildRequest({
+        route: { providerId: "local", modelId: "deepseek-r1", backendKind: "local-openai-compatible" },
+        localConfig: { baseUrl: "http://local.test/v1" },
+      }),
+      { onResponse: () => undefined, onError: assert.fail },
+      { fetchImpl: (async () => jsonResponse({
+        choices: [{ finish_reason: "stop", message: { reasoning_content: "Internal only" } }],
+      })) as typeof fetch },
+    ),
+    /no assistant text/i,
+  );
 });
 
 test("Local provider reports safe response-shape diagnostics for a genuinely empty completion", async () => {
@@ -493,16 +538,23 @@ test("Local provider requests streaming by default to avoid long-generation head
 test("Local provider reconstructs streamed text and OpenAI tool-call arguments", async () => {
   await withTempWorkspace(async (workspaceRoot) => {
     let chatCount = 0;
-    const fetchImpl = (async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const progress: string[] = [];
+    const completedTools: string[] = [];
+    const fetchImpl = (async (_input, init) => {
+      bodies.push(init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : {});
       chatCount += 1;
       const records = chatCount === 1
         ? [
-          { choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", type: "function", function: { name: "list_", arguments: "{\"pa" } }] } }] },
-          { choices: [{ delta: { tool_calls: [{ index: 0, function: { name: "files", arguments: "th\":\".\"}" } }] } }] },
+          { choices: [{ delta: { reasoning_content: "Check ", tool_calls: [{ id: "call_", type: "function", function: { name: "list_", arguments: "{\"pa" } }] } }] },
+          { choices: [{ delta: { reasoning_content: "files.", tool_calls: [{ index: 1, id: "1", function: { name: "files", arguments: "th\":\".\"}" } }] } }] },
+          { choices: [{ delta: {}, finish_reason: "tool_calls" }] },
         ]
         : [
+          { choices: [{ delta: { reasoning: "Summarize." } }] },
           { choices: [{ delta: { content: "Listed " } }] },
           { choices: [{ delta: { content: "the workspace." } }] },
+          { choices: [{ delta: {}, finish_reason: "stop" }] },
         ];
       return new Response(`${records.map((record) => `data: ${JSON.stringify(record)}\n\n`).join("")}data: [DONE]\n\n`, {
         headers: { "Content-Type": "text/event-stream" },
@@ -510,13 +562,34 @@ test("Local provider reconstructs streamed text and OpenAI tool-call arguments",
     }) as typeof fetch;
 
     const text = await runLocalOpenAiCompatible(
-      buildRequest({ workspaceRoot, localConfig: { baseUrl: "http://local.test/v1" } }),
-      { onResponse: () => undefined, onError: assert.fail },
+      buildRequest({
+        workspaceRoot,
+        route: { providerId: "local", modelId: "deepseek-r1-distill-qwen-32b", backendKind: "local-openai-compatible" },
+        localConfig: { baseUrl: "http://local.test/v1" },
+      }),
+      {
+        onResponse: () => undefined,
+        onError: assert.fail,
+        onProgress: (update) => progress.push(update.text),
+        onToolActivity: (activity) => {
+          if (activity.status === "completed") completedTools.push(activity.command);
+        },
+      },
       { fetchImpl },
     );
 
     assert.equal(text, "Listed the workspace.");
     assert.equal(chatCount, 2);
+    assert.deepEqual(progress, ["Check files.", "Summarize."]);
+    assert.deepEqual(completedTools, ["list_files: ."]);
+    const firstBody = bodies[0] as { tools?: unknown[]; tool_choice?: string };
+    assert.ok((firstBody.tools?.length ?? 0) > 0);
+    assert.equal(firstBody.tool_choice, "auto");
+    const secondBody = bodies[1] as { messages?: Array<Record<string, unknown>> };
+    const assistant = secondBody.messages?.find((message) => message.role === "assistant" && Array.isArray(message.tool_calls));
+    const tool = secondBody.messages?.find((message) => message.role === "tool");
+    assert.equal(((assistant?.tool_calls as Array<Record<string, unknown>>)?.[0]?.id), "call_1");
+    assert.equal(tool?.tool_call_id, "call_1");
   });
 });
 
@@ -561,10 +634,12 @@ test("Local provider executes unterminated text tool calls before final answer",
 test("Local provider executes OpenAI-style tool_calls before final answer", async () => {
   await withTempWorkspace(async (workspaceRoot) => {
     const assistantDeltas: string[] = [];
-    const bodies: Array<{ messages?: Array<{ role: string; content: string }> }> = [];
+    const bodies: Array<{ messages?: Array<Record<string, unknown>>; tools?: unknown[]; max_tokens?: number }> = [];
     let chatCount = 0;
     const fetchImpl = (async (_input, init) => {
-      const body = init?.body ? JSON.parse(String(init.body)) as { messages?: Array<{ role: string; content: string }> } : {};
+      const body = init?.body
+        ? JSON.parse(String(init.body)) as { messages?: Array<Record<string, unknown>>; tools?: unknown[]; max_tokens?: number }
+        : {};
       bodies.push(body);
       chatCount += 1;
       if (chatCount === 1) {
@@ -572,6 +647,7 @@ test("Local provider executes OpenAI-style tool_calls before final answer", asyn
           choices: [{
             message: {
               content: null,
+              reasoning_content: "I need to write the requested file.",
               tool_calls: [{
                 id: "call_1",
                 type: "function",
@@ -590,10 +666,14 @@ test("Local provider executes OpenAI-style tool_calls before final answer", asyn
     const text = await runLocalOpenAiCompatible(
       buildRequest({
         workspaceRoot,
+        route: { providerId: "local", modelId: "deepseek-v3.1", backendKind: "local-openai-compatible" },
         runtime: resolveRuntimeConfig(normalizeRuntimeConfig({
           policy: { sandboxMode: "danger-full-access", approvalPolicy: "never" },
         })),
-        localConfig: { baseUrl: "http://local.test/v1" },
+        localConfig: {
+          baseUrl: "http://local.test/v1",
+          models: { "deepseek-v3.1": { maxOutputTokens: 2048 } },
+        },
       }),
       {
         onResponse: () => undefined,
@@ -606,8 +686,110 @@ test("Local provider executes OpenAI-style tool_calls before final answer", asyn
     assert.equal(text, "Created main.rs.");
     assert.equal(await readFile(path.join(workspaceRoot, "main.rs"), "utf8"), "fn main() { println!(\"hi\"); }\n");
     assert.deepEqual(assistantDeltas, ["Created main.rs."]);
-    assert.match(bodies[1]?.messages?.at(-1)?.content ?? "", /<tool_result name="write_file">/);
-    assert.match(bodies[1]?.messages?.at(-1)?.content ?? "", /main\.rs/);
+    assert.ok((bodies[0]?.tools?.length ?? 0) > 0);
+    assert.equal(bodies[0]?.max_tokens, 2048);
+    const history = bodies[1]?.messages ?? [];
+    const assistant = history.find((message) => message.role === "assistant" && Array.isArray(message.tool_calls));
+    const tool = history.find((message) => message.role === "tool");
+    assert.equal(assistant?.reasoning_content, "I need to write the requested file.");
+    assert.equal(((assistant?.tool_calls as Array<Record<string, unknown>>)?.[0]?.id), "call_1");
+    assert.equal(tool?.tool_call_id, "call_1");
+    assert.match(String(tool?.content ?? ""), /<tool_result name="write_file">/);
+    assert.match(String(tool?.content ?? ""), /main\.rs/);
+    assert.doesNotMatch(text, /tool_result|tool_calls|reasoning_content/);
+  });
+});
+
+test("DeepSeek native multi-call history keeps calls and tool results distinct", async () => {
+  await withTempWorkspace(async (workspaceRoot) => {
+    const bodies: Array<{ messages?: Array<Record<string, unknown>> }> = [];
+    let chatCount = 0;
+    const fetchImpl = (async (_input, init) => {
+      bodies.push(init?.body ? JSON.parse(String(init.body)) as { messages?: Array<Record<string, unknown>> } : {});
+      chatCount += 1;
+      if (chatCount === 1) {
+        return jsonResponse({
+          choices: [{
+            finish_reason: "tool_calls",
+            message: {
+              content: "I will create both files.",
+              reasoning: "Create both files.",
+              tool_calls: [
+                { id: "call_a", type: "function", function: { name: "write_file", arguments: "{\"path\":\"a.txt\",\"content\":\"A\"}" } },
+                { id: "call_b", type: "function", function: { name: "write_file", arguments: "{\"path\":\"b.txt\",\"content\":\"B\"}" } },
+              ],
+            },
+          }],
+        });
+      }
+      return jsonResponse({ choices: [{ finish_reason: "stop", message: { content: "Created both files." } }] });
+    }) as typeof fetch;
+
+    const text = await runLocalOpenAiCompatible(
+      buildRequest({
+        workspaceRoot,
+        route: { providerId: "local", modelId: "deepseek-v3", backendKind: "local-openai-compatible" },
+        runtime: resolveRuntimeConfig(normalizeRuntimeConfig({
+          policy: { sandboxMode: "danger-full-access", approvalPolicy: "never" },
+        })),
+        localConfig: { baseUrl: "http://local.test/v1" },
+      }),
+      { onResponse: () => undefined, onError: assert.fail },
+      { fetchImpl },
+    );
+
+    assert.equal(text, "Created both files.");
+    assert.doesNotMatch(text, /I will create/);
+    assert.equal(await readFile(path.join(workspaceRoot, "a.txt"), "utf8"), "A");
+    assert.equal(await readFile(path.join(workspaceRoot, "b.txt"), "utf8"), "B");
+    const toolMessages = (bodies[1]?.messages ?? []).filter((message) => message.role === "tool");
+    assert.deepEqual(toolMessages.map((message) => message.tool_call_id), ["call_a", "call_b"]);
+  });
+});
+
+test("DeepSeek malformed native arguments return a tool error without execution", async () => {
+  await withTempWorkspace(async (workspaceRoot) => {
+    const bodies: Array<{ messages?: Array<Record<string, unknown>> }> = [];
+    let chatCount = 0;
+    const fetchImpl = (async (_input, init) => {
+      bodies.push(init?.body ? JSON.parse(String(init.body)) as { messages?: Array<Record<string, unknown>> } : {});
+      chatCount += 1;
+      if (chatCount === 1) {
+        return jsonResponse({
+          choices: [{
+            finish_reason: "tool_calls",
+            message: {
+              content: null,
+              tool_calls: [{
+                id: "call_bad",
+                type: "function",
+                function: { name: "write_file", arguments: "{\"path\":\"bad.txt\"," },
+              }],
+            },
+          }],
+        });
+      }
+      return jsonResponse({ choices: [{ finish_reason: "stop", message: { content: "The malformed call was not executed." } }] });
+    }) as typeof fetch;
+
+    const text = await runLocalOpenAiCompatible(
+      buildRequest({
+        workspaceRoot,
+        route: { providerId: "local", modelId: "deepseek-r1", backendKind: "local-openai-compatible" },
+        runtime: resolveRuntimeConfig(normalizeRuntimeConfig({
+          policy: { sandboxMode: "danger-full-access", approvalPolicy: "never" },
+        })),
+        localConfig: { baseUrl: "http://local.test/v1" },
+      }),
+      { onResponse: () => undefined, onError: assert.fail },
+      { fetchImpl },
+    );
+
+    assert.equal(text, "The malformed call was not executed.");
+    await assert.rejects(readFile(path.join(workspaceRoot, "bad.txt"), "utf8"));
+    const tool = (bodies[1]?.messages ?? []).find((message) => message.role === "tool");
+    assert.equal(tool?.tool_call_id, "call_bad");
+    assert.match(String(tool?.content ?? ""), /Malformed tool call/);
   });
 });
 
