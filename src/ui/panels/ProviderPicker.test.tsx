@@ -6,7 +6,12 @@ import { Box, Text, render } from "ink";
 import { buildProviderRegistry } from "../../core/providerLauncher/registry.js";
 import type { ProviderConfig, ProviderId, ProviderPickerAction } from "../../core/providerLauncher/types.js";
 import { createLayoutSnapshot } from "../layout.js";
-import { ProviderPicker, getTableLayout } from "./ProviderPicker.js";
+import {
+  ProviderPicker,
+  getCodexaNativeModelProviders,
+  getTableLayout,
+  groupCodexaNativeProviders,
+} from "./ProviderPicker.js";
 import { ThemeProvider } from "../theme.js";
 
 class TestInput extends PassThrough {
@@ -807,7 +812,7 @@ test("ProviderPicker keeps each selected provider visible at normal size", async
   }
 });
 
-test("ProviderPicker cursor remains visible on codexa-PyTorch, Local, and Antigravity", async () => {
+test("ProviderPicker cursor remains visible on Codexa Native, Local, and Antigravity", async () => {
   const providers = buildProviderRegistry({
     activeModel: "gpt-5.4-mini",
     workspaceConfig: { workspaceDefaultProviderId: "openai" },
@@ -818,19 +823,127 @@ test("ProviderPicker cursor remains visible on codexa-PyTorch, Local, and Antigr
     providers,
     selectedIndex: providers.findIndex((provider) => provider.id === "codexa-native"),
   });
-  assertSelectedProviderLine(nativeFrame, "codexa-PyTorch");
+  assertSelectedProviderLine(nativeFrame, "Codexa Native");
 
   const localFrame = await renderProviderPickerAtIndex({
     providers,
-    selectedIndex: providers.findIndex((provider) => provider.id === "local"),
+    selectedIndex: groupCodexaNativeProviders(providers).findIndex((provider) => provider.id === "local"),
   });
   assertSelectedProviderLine(localFrame, "Local");
 
   const antigravityFrame = await renderProviderPickerAtIndex({
     providers,
-    selectedIndex: providers.findIndex((provider) => provider.id === "antigravity"),
+    selectedIndex: groupCodexaNativeProviders(providers).findIndex((provider) => provider.id === "antigravity"),
   });
   assertSelectedProviderLine(antigravityFrame, "Antigravity");
+});
+
+test("Codexa Native grouping keeps route identities while improving model labels", () => {
+  const providers = buildProviderRegistry({
+    activeModel: "gpt-5.4-mini",
+    env: { CODEXA_CHANNEL: "local-dev" },
+  });
+
+  const grouped = groupCodexaNativeProviders(providers);
+  const models = getCodexaNativeModelProviders(providers);
+
+  assert.equal(grouped.filter((provider) => provider.displayName === "Codexa Native").length, 1);
+  assert.equal(grouped.some((provider) => provider.displayName === "codexa-PyTorch"), false);
+  assert.equal(grouped.some((provider) => provider.displayName === "CuPy"), false);
+  assert.deepEqual(models.map((provider) => [provider.id, provider.displayName]), [
+    ["codexa-native", "Codexa PyTorch"],
+    ["codexa-cupy", "Codexa CuPy"],
+  ]);
+});
+
+test("Codexa Native opens a responsive child page and selects exactly one backend", async () => {
+  const providers = buildProviderRegistry({
+    activeModel: "gpt-5.4-mini",
+    env: { CODEXA_CHANNEL: "local-dev" },
+  });
+  const actions: string[] = [];
+  const harness = createInkHarness(
+    <ThemeProvider theme="purple">
+      <ProviderPicker
+        layout={createLayoutSnapshot(100, 21)}
+        providers={providers}
+        onAction={(providerId, action) => actions.push(`${providerId}:${action}`)}
+        onCancel={() => actions.push("cancel")}
+      />
+    </ThemeProvider>,
+  );
+
+  try {
+    await sleep(80);
+    const nativeIndex = groupCodexaNativeProviders(providers)
+      .findIndex((provider) => provider.id === "codexa-native");
+    for (let index = 0; index < nativeIndex; index += 1) {
+      harness.stdin.write("j");
+      await sleep(30);
+    }
+    harness.stdin.write("\r");
+    await sleep(80);
+
+    const childFrame = getLatestBoxFrame(harness.getOutput());
+    assert.match(childFrame, /Codexa Native Models/);
+    assert.match(childFrame, /Codexa PyTorch/);
+    assert.match(childFrame, /Codexa CuPy/);
+    assert.doesNotMatch(childFrame, /OpenAI|Anthropic|Mistral Vibe|Local|Antigravity/);
+    assert.deepEqual(actions, []);
+
+    harness.stdin.write("j");
+    await sleep(30);
+    harness.stdin.write("\r");
+    await sleep(80);
+    assert.deepEqual(actions, ["codexa-cupy:use-in-codexa"]);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("Codexa Native child page inherits compact resize windowing and Escape returns to providers", async () => {
+  const providers = buildProviderRegistry({
+    activeModel: "gpt-5.4-mini",
+    env: { CODEXA_CHANNEL: "local-dev" },
+  });
+  const harness = createInkHarness(
+    <ThemeProvider theme="purple">
+      <ProviderPicker
+        layout={createLayoutSnapshot(44, 12)}
+        panelLayout={{ mode: "compact", availableRows: 2, availableCols: 42 }}
+        providers={providers}
+        onAction={() => {}}
+        onCancel={() => {}}
+      />
+    </ThemeProvider>,
+  );
+
+  try {
+    await sleep(80);
+    const nativeIndex = groupCodexaNativeProviders(providers)
+      .findIndex((provider) => provider.id === "codexa-native");
+    for (let index = 0; index < nativeIndex; index += 1) {
+      harness.stdin.write("j");
+      await sleep(30);
+    }
+    harness.stdin.write("\r");
+    await sleep(80);
+    assert.match(getLatestBoxFrame(harness.getOutput()), /Codexa Native Models · 1\/2/);
+
+    harness.stdin.write("j");
+    await sleep(50);
+    const resizedChildFrame = getLatestBoxFrame(harness.getOutput());
+    assert.match(resizedChildFrame, /Codexa Native Models · 2\/2/);
+    assertSelectedProviderLine(resizedChildFrame, "Codexa CuPy");
+
+    harness.stdin.write("\u001b");
+    await sleep(80);
+    const parentFrame = getLatestBoxFrame(harness.getOutput());
+    assert.match(parentFrame, /Providers/);
+    assertSelectedProviderLine(parentFrame, "Codexa Native");
+  } finally {
+    await harness.cleanup();
+  }
 });
 
 test("ProviderPicker at wide standard size keeps selectable providers compact and contiguous", async () => {

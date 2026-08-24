@@ -17,7 +17,7 @@ function normalizeRuntimeAvailability(value: unknown): RuntimeAvailability {
 
 function formatRuntimeProviderLabel(providerId: ProviderId): string {
   if (providerId === "local") return "Local";
-  if (providerId === "codexa-native") return "Codexa Native";
+  if (providerId === "codexa-native" || providerId === "codexa-cupy") return "Codexa Native";
   if (providerId === "google") return "Google";
   if (providerId === "anthropic") return "Anthropic";
   if (providerId === "mistral") return "Mistral Vibe CLI";

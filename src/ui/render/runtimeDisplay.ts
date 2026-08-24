@@ -32,8 +32,8 @@ const PROVIDER_DISPLAY: Record<string, string> = {
   google: "Gemini CLI",
   mistral: "Mistral Vibe CLI",
   local: "Local",
-  "codexa-native": "codexa-PyTorch",
-  "codexa-cupy": "CuPy",
+  "codexa-native": "Codexa Native",
+  "codexa-cupy": "Codexa Native",
   antigravity: "Antigravity CLI",
 };
 

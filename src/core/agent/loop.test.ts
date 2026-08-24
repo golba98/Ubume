@@ -222,12 +222,15 @@ test("structured provider tool calls are executed before final text", async () =
       request: request(workspaceRoot, "write a rust file"),
       handlers: handlers().handlers,
       includeSystemPrompt: true,
+      toolProtocol: "openai",
       sendMessages: async (_messages: readonly AgentChatMessage[], index) => ({
         text: index === 0 ? "" : "Created main.rs.",
         toolCalls: index === 0
           ? [{
+            id: "call_write",
             name: "write_file",
             arguments: { path: "main.rs", content: "fn main() { println!(\"hi\"); }\n" },
+            rawArguments: "{\"path\":\"main.rs\",\"content\":\"fn main() { println!(\\\"hi\\\"); }\\n\"}",
           }]
           : undefined,
       }),
@@ -235,6 +238,45 @@ test("structured provider tool calls are executed before final text", async () =
 
     assert.equal(text, "Created main.rs.");
     assert.equal(await readFile(path.join(workspaceRoot, "main.rs"), "utf8"), "fn main() { println!(\"hi\"); }\n");
+  });
+});
+
+test("native tool-call IDs are preserved and replayed IDs are not executed twice", async () => {
+  await withTempWorkspace(async (workspaceRoot) => {
+    let chatCalls = 0;
+    const histories: AgentChatMessage[][] = [];
+    const text = await runAgentLoop({
+      request: request(workspaceRoot, "write once"),
+      handlers: handlers().handlers,
+      includeSystemPrompt: true,
+      toolProtocol: "openai",
+      sendMessages: async (messages) => {
+        histories.push([...messages]);
+        chatCalls += 1;
+        if (chatCalls <= 2) {
+          return {
+            text: "",
+            reasoning: chatCalls === 1 ? "Write the file." : "Retry the same call.",
+            finishReason: "tool_calls",
+            toolCalls: [{
+              id: "stable_call_id",
+              name: "write_file",
+              arguments: { path: "once.txt", content: "once" },
+              rawArguments: "{\"path\":\"once.txt\",\"content\":\"once\"}",
+            }],
+          };
+        }
+        return { text: "Finished after one write.", finishReason: "stop" };
+      },
+    });
+
+    assert.equal(text, "Finished after one write.");
+    assert.equal(await readFile(path.join(workspaceRoot, "once.txt"), "utf8"), "once");
+    const secondRequest = histories[1] ?? [];
+    const assistant = secondRequest.find((message) => message.role === "assistant");
+    const tool = secondRequest.find((message) => message.role === "tool");
+    assert.equal(assistant?.role === "assistant" ? assistant.reasoning_content : null, "Write the file.");
+    assert.equal(tool?.role === "tool" ? tool.tool_call_id : null, "stable_call_id");
   });
 });
 

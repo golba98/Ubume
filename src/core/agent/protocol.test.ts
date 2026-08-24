@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseAgentToolCall, parseOpenAiToolCalls, serializeToolResult } from "./protocol.js";
+import {
+  agentToolDefinitions,
+  parseAgentToolCall,
+  parseOpenAiToolCalls,
+  parseOpenAiToolCallsDetailed,
+  serializeToolResult,
+} from "./protocol.js";
 
 test("parses a valid single tool call block", () => {
   const result = parseAgentToolCall('<tool_call>{"name":"read_file","arguments":{"path":"src/app.tsx"}}</tool_call>');
@@ -49,9 +55,34 @@ test("parses OpenAI-style tool_calls", () => {
   }]);
 
   assert.deepEqual(result, [{
+    id: "call_1",
     name: "write_file",
     arguments: { path: "main.rs", content: "fn main() {}\n" },
+    rawArguments: "{\"path\":\"main.rs\",\"content\":\"fn main() {}\\n\"}",
   }]);
+});
+
+test("preserves malformed OpenAI tool calls as protocol errors", () => {
+  const result = parseOpenAiToolCallsDetailed([{
+    id: "call_bad",
+    function: { name: "read_file", arguments: "{\"path\":" },
+  }]);
+
+  assert.deepEqual(result, [{
+    kind: "malformed",
+    id: "call_bad",
+    name: "read_file",
+    rawArguments: "{\"path\":" ,
+    error: "Tool call arguments were not valid JSON.",
+  }]);
+});
+
+test("native tool definitions exclude mutating tools in Plan mode", () => {
+  assert.deepEqual(
+    agentToolDefinitions("plan").map((definition) => definition.function.name),
+    ["list_files", "read_file", "get_workspace_info"],
+  );
+  assert.ok(agentToolDefinitions("normal").some((definition) => definition.function.name === "write_file"));
 });
 
 test("parses tool_calls embedded inside a tool_call block", () => {

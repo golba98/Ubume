@@ -191,6 +191,14 @@ flowchart TD
 
 Provider truthfulness is an invariant: selectable routes must match actual `routeAvailable` and configuration state. A provider that can only be launched externally must not be presented as though Codexa can route an in-app conversation through it.
 
+### Local OpenAI-compatible model profiles
+
+The `local` runtime owns compatibility for models served by LM Studio, Ollama, and similar OpenAI-compatible servers. Model-family detection is part of the capability profile rather than provider registration, so DeepSeek-family models remain Local routes and never become a separate provider.
+
+Local capability fields resolve independently: authoritative server metadata wins, explicit per-model configuration fills missing fields, detected-family defaults fill only remaining compatibility gaps, and unknown models retain the generic Local behavior. Context length remains owned by the separate context-metadata resolver, and detected families do not invent context or output-token limits.
+
+For models with native tool support, Codexa sends OpenAI `tools`, retains assistant tool-call IDs and reasoning separately from visible content, appends results as `tool` messages with matching `tool_call_id` values, and then requests the next assistant turn. Streaming response normalization buffers fragmented IDs, names, and JSON arguments into complete logical calls before the agent loop can execute them. Models without verified or detected native support keep the legacy Local text-tool protocol; models explicitly reporting no tool support receive no tools.
+
 ## Session and UI state
 
 The session stores timeline events separately from the visual lifecycle state. Static events are completed transcript content; active events contain the currently changing run. `UIState` drives composer availability, activity styling, and action-required presentation.

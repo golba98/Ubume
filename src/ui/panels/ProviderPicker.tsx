@@ -38,6 +38,47 @@ interface ProviderActionItem {
   disabledReason?: string | null;
 }
 
+type ProviderPickerMode = "providers" | "codexa-native-models";
+
+const CODEXA_NATIVE_PROVIDER_IDS = new Set<ProviderId>(["codexa-native", "codexa-cupy"]);
+
+function isCodexaNativeProvider(provider: ProviderConfig): boolean {
+  return CODEXA_NATIVE_PROVIDER_IDS.has(provider.id);
+}
+
+export function groupCodexaNativeProviders(providers: readonly ProviderConfig[]): ProviderConfig[] {
+  const nativeProviders = providers.filter(isCodexaNativeProvider);
+  if (nativeProviders.length === 0) return [...providers];
+
+  const primary = nativeProviders.find((provider) => provider.id === "codexa-native") ?? nativeProviders[0]!;
+  const active = nativeProviders.find((provider) => provider.isActiveRoute);
+  const defaultProvider = nativeProviders.find((provider) => provider.isDefault);
+  const grouped: ProviderConfig = {
+    ...primary,
+    displayName: "Codexa Native",
+    currentModel: (active ?? defaultProvider ?? primary).currentModel,
+    enabled: nativeProviders.some((provider) => provider.enabled),
+    isDefault: nativeProviders.some((provider) => provider.isDefault),
+    isActiveRoute: nativeProviders.some((provider) => provider.isActiveRoute),
+    routeUnavailableReason: nativeProviders.every((provider) => provider.routeUnavailableReason)
+      ? nativeProviders[0]?.routeUnavailableReason ?? null
+      : null,
+  };
+
+  const firstNativeIndex = providers.findIndex(isCodexaNativeProvider);
+  return providers.filter((provider, index) => {
+    if (!isCodexaNativeProvider(provider)) return true;
+    return index === firstNativeIndex;
+  }).map((provider) => isCodexaNativeProvider(provider) ? grouped : provider);
+}
+
+export function getCodexaNativeModelProviders(providers: readonly ProviderConfig[]): ProviderConfig[] {
+  return providers.filter(isCodexaNativeProvider).map((provider) => ({
+    ...provider,
+    displayName: provider.id === "codexa-native" ? "Codexa PyTorch" : "Codexa CuPy",
+  }));
+}
+
 function clampIndex(index: number, length: number): number {
   if (length <= 0) return 0;
   return Math.max(0, Math.min(length - 1, index));
@@ -91,17 +132,24 @@ export function ProviderPicker({
   const theme = useTheme();
   const budget = useAppLayoutBudget();
   const { isFocused } = useFocus({ id: FOCUS_IDS.providerPicker, autoFocus: true });
+  const groupedProviders = useMemo(() => groupCodexaNativeProviders(providers), [providers]);
+  const codexaNativeModels = useMemo(() => getCodexaNativeModelProviders(providers), [providers]);
   const initialIndex = initialProviderId
-    ? Math.max(0, providers.findIndex((p) => p.id === initialProviderId))
+    ? Math.max(0, groupedProviders.findIndex((provider) =>
+        initialProviderId === "codexa-cupy"
+          ? provider.id === "codexa-native"
+          : provider.id === initialProviderId))
     : 0;
   const [providerIndex, setProviderIndex] = useState(initialIndex);
-  const mode = "providers" as const;
+  const [mode, setMode] = useState<ProviderPickerMode>("providers");
   const [scrollOffset, setScrollOffset] = useState(0);
+
+  const pickerProviders = mode === "codexa-native-models" ? codexaNativeModels : groupedProviders;
 
   const contextLayout = useActivePanelLayout();
   const activeLayout = (activePanelLayout ?? contextLayout) as ActivePanelLayout | undefined;
 
-  const selectedProvider = providers[clampIndex(providerIndex, providers.length)];
+  const selectedProvider = pickerProviders[clampIndex(providerIndex, pickerProviders.length)];
   const shellWidth = getShellWidth(layout?.cols ?? 120);
   const panelWidth = activeLayout
     ? activeLayout.width
@@ -161,7 +209,16 @@ export function ProviderPicker({
   const streamWidth = cols.stream;
   const statusWidth = cols.status;
 
-  const helpText = "Enter use · Esc close";
+  const helpText = mode === "codexa-native-models"
+    ? "Enter use · Esc back"
+    : "Enter use · Esc close";
+
+  const openCodexaNativeModels = () => {
+    const selectedNativeIndex = codexaNativeModels.findIndex((provider) => provider.isActiveRoute || provider.isDefault);
+    setMode("codexa-native-models");
+    setProviderIndex(Math.max(0, selectedNativeIndex));
+    setScrollOffset(0);
+  };
 
   const actions = useMemo<ProviderActionItem[]>(() => {
     const routeUnavailable = selectedProvider?.routeMode === "in-codexa";
@@ -201,44 +258,63 @@ export function ProviderPicker({
     }
 
     if (key.escape) {
+      if (mode === "codexa-native-models") {
+        const groupedIndex = groupedProviders.findIndex((provider) => provider.id === "codexa-native");
+        setMode("providers");
+        setProviderIndex(Math.max(0, groupedIndex));
+        setScrollOffset(0);
+        return;
+      }
       onCancel();
       return;
     }
 
-    if (mode === "providers") {
+    if (mode === "providers" || mode === "codexa-native-models") {
       if (key.home) {
         setProviderIndex(0);
         return;
       }
       if (key.end) {
-        setProviderIndex(Math.max(0, providers.length - 1));
+        setProviderIndex(Math.max(0, pickerProviders.length - 1));
         return;
       }
       if (key.pageUp) {
-        setProviderIndex((current) => clampIndex(current - Math.max(1, windowResult?.capacity ?? 1), providers.length));
+        setProviderIndex((current) => clampIndex(current - Math.max(1, windowResult?.capacity ?? 1), pickerProviders.length));
         return;
       }
       if (key.pageDown) {
-        setProviderIndex((current) => clampIndex(current + Math.max(1, windowResult?.capacity ?? 1), providers.length));
+        setProviderIndex((current) => clampIndex(current + Math.max(1, windowResult?.capacity ?? 1), pickerProviders.length));
         return;
       }
       if (key.upArrow || input === "k") {
-        setProviderIndex((current) => clampIndex(current - 1, providers.length));
+        setProviderIndex((current) => clampIndex(current - 1, pickerProviders.length));
         return;
       }
       if (key.downArrow || input === "j") {
-        setProviderIndex((current) => clampIndex(current + 1, providers.length));
+        setProviderIndex((current) => clampIndex(current + 1, pickerProviders.length));
         return;
       }
       if (input.toLowerCase() === "u" && selectedProvider) {
+        if (mode === "providers" && selectedProvider.id === "codexa-native" && codexaNativeModels.length > 0) {
+          openCodexaNativeModels();
+          return;
+        }
         onAction(selectedProvider.id, "use-in-codexa");
         return;
       }
       if (input.toLowerCase() === "s" && selectedProvider) {
+        if (mode === "providers" && selectedProvider.id === "codexa-native" && codexaNativeModels.length > 0) {
+          openCodexaNativeModels();
+          return;
+        }
         onAction(selectedProvider.id, "set-default");
         return;
       }
       if (key.return && selectedProvider) {
+        if (mode === "providers" && selectedProvider.id === "codexa-native" && codexaNativeModels.length > 0) {
+          openCodexaNativeModels();
+          return;
+        }
         onAction(selectedProvider.id, "use-in-codexa");
       }
       return;
@@ -247,17 +323,16 @@ export function ProviderPicker({
 
   // ─── Layout & Windowing ───────────────────────────────────────────────────
 
-  const activeRouteIndex = providers.findIndex((provider) => provider.isActiveRoute);
+  const activeRouteIndex = pickerProviders.findIndex((provider) => provider.isActiveRoute);
 
   const windowResult = useMemo(() => {
-    if (mode !== "providers") return null;
     const showBorder = availableRows >= 3;
     const showTitle = availableRows >= 2;
     const useCompactRows = true;
     const showHeaders = false;
     const chromeRows = (showTitle ? 1 : 0) + (showHeaders ? 1 : 0);
     let viewport = calculateResponsivePickerViewport({
-      itemCount: providers.length,
+      itemCount: pickerProviders.length,
       selectedIndex: providerIndex,
       availableRows,
       chromeRows,
@@ -268,7 +343,7 @@ export function ProviderPicker({
       && (activeRouteIndex < viewport.start || activeRouteIndex >= viewport.end);
     if (reserveCurrent) {
       viewport = calculateResponsivePickerViewport({
-        itemCount: providers.length,
+        itemCount: pickerProviders.length,
         selectedIndex: providerIndex,
         availableRows,
         chromeRows: chromeRows + 1,
@@ -288,25 +363,24 @@ export function ProviderPicker({
       reserveCurrent,
       renderMode: useCompactRows ? ("compact" as const) : viewport.hasOverflow ? ("windowed" as const) : ("full" as const),
     };
-  }, [mode, providers.length, providerIndex, availableRows, resolvedPanelLayout.mode, scrollOffset, activeRouteIndex]);
+  }, [pickerProviders.length, providerIndex, availableRows, resolvedPanelLayout.mode, scrollOffset, activeRouteIndex]);
 
   useEffect(() => {
-    setProviderIndex((current) => clampIndex(current, providers.length));
-  }, [providers.length]);
+    setProviderIndex((current) => clampIndex(current, pickerProviders.length));
+  }, [pickerProviders.length]);
 
   useEffect(() => {
     if (windowResult) setScrollOffset(windowResult.start);
   }, [windowResult?.start]);
 
   const visibleProviders = useMemo(() => {
-    if (mode !== "providers") return [];
-    if (!windowResult) return providers;
-    return providers.slice(windowResult.start, windowResult.end);
-  }, [mode, providers, windowResult]);
+    if (!windowResult) return pickerProviders;
+    return pickerProviders.slice(windowResult.start, windowResult.end);
+  }, [pickerProviders, windowResult]);
 
   const titleText = (windowResult?.showRange)
-      ? `Providers · ${windowResult.selectedIndex + 1}/${providers.length}`
-      : "Providers";
+      ? `${mode === "codexa-native-models" ? "Codexa Native Models" : "Providers"} · ${windowResult.selectedIndex + 1}/${pickerProviders.length}`
+      : mode === "codexa-native-models" ? "Codexa Native Models" : "Providers";
   const showCurrent = false;
 
   const body = useMemo(() => {
@@ -344,7 +418,7 @@ export function ProviderPicker({
         {!(windowResult?.showTitle ?? true) && windowResult?.showRange && (
           <Box width="100%" overflow="hidden" flexShrink={0}>
             <Text color={theme.accent}>
-              Providers · {windowResult.selectedIndex + 1}/{providers.length}
+              {mode === "codexa-native-models" ? "Codexa Native Models" : "Providers"} · {windowResult.selectedIndex + 1}/{pickerProviders.length}
             </Text>
           </Box>
         )}
@@ -355,7 +429,7 @@ export function ProviderPicker({
           </Box>
         )}
 
-        {mode === "providers" && (windowResult?.showHeaders ?? true) && (
+        {(windowResult?.showHeaders ?? true) && (
           <Box width="100%" overflow="hidden" flexShrink={0}>
             <Text color={theme.textDim}>
               {"     "}
@@ -378,14 +452,14 @@ export function ProviderPicker({
         {showCurrent && (
           <Box height={1} overflow="hidden" flexShrink={0}>
             <Text color={theme.textDim}>
-              Current: <Text color={theme.text}>{clampVisualText(`${providers[activeRouteIndex]!.displayName} / ${providers[activeRouteIndex]!.currentModel}`, Math.max(1, innerWidth - 9))}</Text>
+              Current: <Text color={theme.text}>{clampVisualText(`${pickerProviders[activeRouteIndex]!.displayName} / ${pickerProviders[activeRouteIndex]!.currentModel}`, Math.max(1, innerWidth - 9))}</Text>
             </Text>
           </Box>
         )}
 
         {windowResult?.showBelow && (
           <Box height={1} overflow="hidden" flexShrink={0}>
-            <Text color={theme.accent}>{isCompactLayout ? "↓ more" : `↓ ${providers.length - windowResult.end} more`}</Text>
+            <Text color={theme.accent}>{isCompactLayout ? "↓ more" : `↓ ${pickerProviders.length - windowResult.end} more`}</Text>
           </Box>
         )}
       </Box>

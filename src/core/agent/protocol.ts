@@ -8,14 +8,39 @@ export type AgentToolName =
 
 export interface ParsedAgentToolCall {
   kind: "tool_call";
+  id?: string | null;
   name: AgentToolName;
   arguments: Record<string, unknown>;
+  rawArguments?: string;
   raw: string;
 }
 
 export interface NormalizedAgentToolCall {
+  id?: string | null;
   name: AgentToolName;
   arguments: Record<string, unknown>;
+  rawArguments?: string;
+}
+
+export interface MalformedOpenAiToolCall {
+  kind: "malformed";
+  id: string | null;
+  name: string | null;
+  rawArguments: string;
+  error: string;
+}
+
+export type OpenAiToolCallParseResult =
+  | { kind: "valid"; call: NormalizedAgentToolCall }
+  | MalformedOpenAiToolCall;
+
+export interface OpenAiToolDefinition {
+  type: "function";
+  function: {
+    name: AgentToolName;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
 }
 
 export interface MalformedAgentToolCall {
@@ -75,6 +100,16 @@ function parseArguments(value: unknown): Record<string, unknown> | null {
   return null;
 }
 
+function rawArguments(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === undefined || value === null) return "{}";
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
 export function normalizeAgentToolCall(value: unknown): NormalizedAgentToolCall | null {
   if (!isRecord(value)) return null;
 
@@ -88,16 +123,115 @@ export function normalizeAgentToolCall(value: unknown): NormalizedAgentToolCall 
   if (!args) return null;
 
   return {
+    id: typeof value.id === "string" && value.id.trim() ? value.id : null,
     name: rawName as AgentToolName,
     arguments: args,
+    rawArguments: rawArguments(functionCall?.arguments ?? value.arguments ?? value.args),
   };
 }
 
-export function parseOpenAiToolCalls(value: unknown): NormalizedAgentToolCall[] {
+export function parseOpenAiToolCallsDetailed(value: unknown): OpenAiToolCallParseResult[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => normalizeAgentToolCall(item))
-    .filter((item): item is NormalizedAgentToolCall => Boolean(item));
+  return value.map((item) => {
+    const normalized = normalizeAgentToolCall(item);
+    if (normalized) return { kind: "valid" as const, call: normalized };
+    const record = isRecord(item) ? item : {};
+    const functionCall = isRecord(record.function) ? record.function : null;
+    const rawName = functionCall?.name ?? record.name ?? record.tool;
+    const argsValue = functionCall?.arguments ?? record.arguments ?? record.args;
+    const raw = rawArguments(argsValue);
+    const parsedArgs = parseArguments(argsValue);
+    const name = typeof rawName === "string" && rawName.trim() ? rawName : null;
+    return {
+      kind: "malformed" as const,
+      id: typeof record.id === "string" && record.id.trim() ? record.id : null,
+      name,
+      rawArguments: raw,
+      error: !name
+        ? "Tool call did not contain a function name."
+        : !TOOL_NAMES.has(name as AgentToolName)
+          ? `Unsupported tool: ${name}`
+          : parsedArgs === null
+            ? "Tool call arguments were not valid JSON."
+            : "Tool call could not be normalized.",
+    };
+  });
+}
+
+export function parseOpenAiToolCalls(value: unknown): NormalizedAgentToolCall[] {
+  return parseOpenAiToolCallsDetailed(value)
+    .filter((item): item is { kind: "valid"; call: NormalizedAgentToolCall } => item.kind === "valid")
+    .map((item) => item.call);
+}
+
+const AGENT_TOOL_DEFINITIONS: readonly OpenAiToolDefinition[] = [
+  {
+    type: "function",
+    function: {
+      name: "list_files",
+      description: "List files and directories inside the workspace.",
+      parameters: { type: "object", properties: { path: { type: "string" } }, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_file",
+      description: "Read a UTF-8 text file inside the workspace.",
+      parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "write_file",
+      description: "Write complete UTF-8 content to a file inside the workspace.",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" }, content: { type: "string" } },
+        required: ["path", "content"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "apply_patch",
+      description: "Apply a Codex Begin Patch formatted patch inside the workspace.",
+      parameters: {
+        type: "object",
+        properties: { patch: { type: "string" }, path: { type: "string" } },
+        required: ["patch"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "run_shell",
+      description: "Run a safe shell command in the workspace.",
+      parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"], additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_workspace_info",
+      description: "Return workspace and runtime policy information.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+];
+
+export function agentToolDefinitions(runIntent: "normal" | "plan" | "approved-execution" = "normal"): readonly OpenAiToolDefinition[] {
+  if (runIntent !== "plan") return AGENT_TOOL_DEFINITIONS;
+  return AGENT_TOOL_DEFINITIONS.filter((definition) =>
+    definition.function.name === "list_files"
+    || definition.function.name === "read_file"
+    || definition.function.name === "get_workspace_info"
+  );
 }
 
 function extractJsonObjectAfterToolCall(text: string): string | null {

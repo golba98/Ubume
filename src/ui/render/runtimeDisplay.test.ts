@@ -249,5 +249,23 @@ test("Codexa Native displays the canonical 1B model name for legacy 900M routes"
     contextMetadata: context(route, null),
   });
 
-  assert.equal(display.footerModelDisplay, "codexa-PyTorch / codexa-1b-sft-v2-native (Low)");
+  assert.equal(display.footerModelDisplay, "Codexa Native / codexa-1b-sft-v2-native (Low)");
+});
+
+test("Codexa CuPy is presented as a Codexa Native model route", () => {
+  const route: ActiveProviderRoute = {
+    providerId: "codexa-cupy",
+    modelId: "codexa-250m-cupy",
+    backendKind: "codexa-cupy",
+  };
+  const display = buildActiveRuntimeDisplay({
+    route,
+    reasoningLevel: "low",
+    mode: "full-auto",
+    tokensUsed: 0,
+    contextMetadata: context(route, null),
+  });
+
+  assert.equal(display.providerLabel, "Codexa Native");
+  assert.equal(display.footerModelDisplay, "Codexa Native / codexa-250m-cupy (Low)");
 });

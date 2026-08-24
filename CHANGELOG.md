@@ -6,6 +6,28 @@ No changes yet.
 
 ---
 
+## [1.0.17] — 2026-08-24 — Native Local Tools and Provider Clarity
+
+### Added
+
+- **Local models can use native OpenAI-compatible tools** — verified model profiles receive structured tool definitions, assistant tool-call IDs are preserved, and matching tool results are returned across multi-step agent turns.
+- **DeepSeek-family Local models receive compatibility defaults** — family detection fills missing reasoning, system-prompt, streaming, and tool-call capabilities without inventing context or output-token limits.
+- **Codexa Native models have a focused child picker** — PyTorch and CuPy routes appear under one Codexa Native provider entry while retaining their distinct model identities.
+
+### Fixed
+
+- **Fragmented Local tool calls are reconstructed safely** — streamed IDs, function names, JSON arguments, reasoning content, malformed calls, and finish reasons are normalized before execution.
+- **Local agent loops preserve native protocol state** — multiple tool calls, duplicate-call protection, approval decisions, malformed-call feedback, and final-answer recovery now retain the correct call IDs and roles.
+- **Header rendering tests are stable across terminal redraw timing** — assertions inspect individual Ink writes instead of treating accumulated redraw history as one frame.
+
+### Maintenance
+
+- Added repository-level deterministic Bun test concurrency for reliable local and prepublish validation.
+- Configured the scoped npm package for publication to GitHub Packages.
+- Updated package, lockfile, generated build metadata, release documentation, architecture notes, and regression coverage for `1.0.17`.
+
+---
+
 ## [1.0.16] — 2026-08-16 — Resumable Conversations and Compact Imports
 
 ### Added

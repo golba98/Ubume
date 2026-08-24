@@ -2,8 +2,73 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   clearModelCapabilityProfileCache,
+  detectLocalModelFamily,
   resolveModelCapabilityProfileCached,
 } from "./capabilityProfile.js";
+
+test("detects DeepSeek family across local model naming variants", () => {
+  const variants = [
+    "deepseek-r1",
+    "DeepSeek-R1-Distill-Qwen-32B",
+    "deepseek-r1-distill-llama-70b",
+    "deepseek-v3",
+    "deepseek-v3.1",
+    "deepseek-v3.2",
+    "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B-GGUF",
+    "bartowski/deepseek-v3-q4_k_m:latest",
+  ];
+  for (const modelId of variants) {
+    assert.equal(detectLocalModelFamily(modelId), "deepseek", modelId);
+  }
+  assert.equal(detectLocalModelFamily("qwen/qwen3.6-27b"), null);
+  assert.equal(detectLocalModelFamily("vendor/notdeepseekish-model"), null);
+});
+
+test("detects DeepSeek family from server metadata names", () => {
+  assert.equal(detectLocalModelFamily("opaque-local-id", {
+    model_info: { display_name: "DeepSeek_R1 Distill Qwen" },
+  }), "deepseek");
+});
+
+test("DeepSeek family defaults fill only missing capability fields", () => {
+  clearModelCapabilityProfileCache();
+  const profile = resolveModelCapabilityProfileCached({
+    providerId: "local",
+    modelId: "deepseek-r1-distill-qwen-32b",
+    rawMetadata: { supports_streaming: false },
+    providerConfig: {
+      models: {
+        "deepseek-r1-distill-qwen-32b": {
+          supportsToolCalls: false,
+          supportsSystemPrompt: false,
+          maxOutputTokens: 4096,
+        },
+      },
+    },
+  });
+
+  assert.equal(profile.family, "deepseek");
+  assert.equal(profile.supportsStreaming, false, "authoritative API metadata wins");
+  assert.equal(profile.supportsToolCalls, false, "config fills a missing API field before family defaults");
+  assert.equal(profile.supportsSystemPrompt, false);
+  assert.equal(profile.maxOutputTokens, 4096);
+  assert.equal(profile.source, "api");
+});
+
+test("DeepSeek family supplies streaming and native tool defaults without token guesses", () => {
+  clearModelCapabilityProfileCache();
+  const profile = resolveModelCapabilityProfileCached({
+    providerId: "local",
+    modelId: "vendor/deepseek-v3.2-q4_k_m:latest",
+  });
+
+  assert.equal(profile.family, "deepseek");
+  assert.equal(profile.supportsStreaming, true);
+  assert.equal(profile.supportsToolCalls, true);
+  assert.equal(profile.supportsSystemPrompt, null);
+  assert.equal(profile.maxOutputTokens, null);
+  assert.equal(profile.source, "detected-family");
+});
 
 test("raw API supports_system_prompt: false sets supportsSystemPrompt false with api/verified", () => {
   clearModelCapabilityProfileCache();
