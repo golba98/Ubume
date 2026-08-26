@@ -43,7 +43,7 @@
   },
   "homepage": "https://github.com/golba98/Codexa#readme",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org"
   },
   "license": "MIT",
   "files": [
