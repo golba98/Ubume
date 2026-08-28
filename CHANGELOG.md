@@ -6,6 +6,30 @@ No changes yet.
 
 ---
 
+## [1.0.18] — 2026-08-28 — Unsloth Local Backend
+
+### Added
+
+- **Unsloth Studio is available as a Local backend** — Codexa can discover
+  loaded Unsloth models, select the Unsloth route, and use its OpenAI-compatible
+  inference endpoint alongside LM Studio.
+- **Local backend selection is persistent** — workspace routes retain whether
+  Local should use LM Studio or Unsloth, with independent status checks in the
+  provider picker.
+
+### Fixed
+
+- **Local backend diagnostics are explicit** — unavailable servers, missing
+  models, and authentication requirements are reported per backend without
+  changing the stable Local provider identity.
+
+### Maintenance
+
+- Added Unsloth routing, discovery, workspace configuration, provider-picker,
+  and regression coverage for the new backend.
+
+---
+
 ## [1.0.17] — 2026-08-24 — Native Local Tools and Provider Clarity
 
 ### Added
