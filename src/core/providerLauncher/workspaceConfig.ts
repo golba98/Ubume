@@ -71,6 +71,7 @@ function createFallbackActiveRoute(
     backendKind: getProviderRuntime(providerId).backendKind,
     ...(override?.currentReasoning ? { reasoning: override.currentReasoning } : {}),
     ...(providerId === "google" ? { modelSelection: { kind: "manual" as const, modelId } } : {}),
+    ...(providerId === "local" ? { localBackend: override?.localBackend ?? "lm-studio" } : {}),
   };
 }
 
@@ -132,6 +133,11 @@ function parseProviderOverride(value: unknown): ProviderWorkspaceOverride | unde
   const defaultModel = value.defaultModel ?? value.default_model;
   if (typeof defaultModel === "string" && defaultModel.trim()) {
     override.defaultModel = defaultModel.trim();
+  }
+
+  const localBackend = value.localBackend ?? value.local_backend;
+  if (localBackend === "lm-studio" || localBackend === "unsloth") {
+    override.localBackend = localBackend;
   }
 
   if (isRecord(value.models)) {
@@ -201,6 +207,7 @@ function parseActiveRoute(value: unknown): ProviderActiveRoute | undefined {
   const backendKind = value.backendKind ?? value.backend_kind;
   const reasoning = value.reasoning;
   const modelSelection = value.modelSelection ?? value.model_selection;
+  const localBackend = value.localBackend ?? value.local_backend;
 
   if (typeof providerId !== "string" || !isKnownProviderId(providerId) || !isProviderRoutableInCodexa(providerId)) return undefined;
   if (typeof modelId !== "string" || !modelId.trim()) return undefined;
@@ -218,6 +225,9 @@ function parseActiveRoute(value: unknown): ProviderActiveRoute | undefined {
     backendKind: getProviderRuntime(providerId).backendKind,
     ...(typeof reasoning === "string" && reasoning.trim() ? { reasoning: reasoning.trim() } : {}),
     ...(normalizedModelSelection ? { modelSelection: normalizedModelSelection } : {}),
+    ...(providerId === "local"
+      ? { localBackend: localBackend === "unsloth" ? "unsloth" as const : "lm-studio" as const }
+      : {}),
   };
 }
 
@@ -275,6 +285,13 @@ export function parseProviderWorkspaceConfig(data: unknown): ProviderWorkspaceCo
     const activeRoute = parseActiveRoute(rawActiveRoute);
     if (activeRoute) {
       config.activeRoute = activeRoute;
+      if (activeRoute.providerId === "local") {
+        providers.local = {
+          ...providers.local,
+          localBackend: activeRoute.localBackend ?? "lm-studio",
+        };
+        config.providers = providers;
+      }
     }
   }
 
@@ -314,6 +331,7 @@ export function serializeProviderWorkspaceConfig(config: ProviderWorkspaceConfig
         ...(override.apiKey !== undefined ? { api_key: override.apiKey } : {}),
         ...(override.pinnedModel !== undefined ? { pinned_model: override.pinnedModel } : {}),
         ...(override.defaultModel !== undefined ? { default_model: override.defaultModel } : {}),
+        ...(override.localBackend !== undefined ? { local_backend: override.localBackend } : {}),
         ...(override.models !== undefined ? { models: Object.fromEntries(
           Object.entries(override.models).map(([modelId, model]) => [
             modelId,
@@ -344,6 +362,9 @@ export function serializeProviderWorkspaceConfig(config: ProviderWorkspaceConfig
         backendKind: config.activeRoute.backendKind ?? getProviderRuntime(config.activeRoute.providerId).backendKind,
         ...(config.activeRoute.reasoning ? { reasoning: config.activeRoute.reasoning } : {}),
         ...(config.activeRoute.modelSelection ? { modelSelection: config.activeRoute.modelSelection } : {}),
+        ...(config.activeRoute.providerId === "local"
+          ? { localBackend: config.activeRoute.localBackend ?? config.providers?.local?.localBackend ?? "lm-studio" }
+          : {}),
       },
     } : {}),
     ...(Object.keys(providers).length > 0 ? { providers } : {}),
@@ -429,8 +450,36 @@ export function setProviderActiveRoute(
     return config;
   }
 
+  if (activeRoute.providerId !== "local") {
+    return { ...config, activeRoute };
+  }
+
+  const localBackend = activeRoute.localBackend ?? config.providers?.local?.localBackend ?? "lm-studio";
   return {
     ...config,
-    activeRoute,
+    activeRoute: { ...activeRoute, localBackend },
+    providers: {
+      ...config.providers,
+      local: {
+        ...config.providers?.local,
+        localBackend,
+      },
+    },
+  };
+}
+
+export function setLocalBackendPreference(
+  config: ProviderWorkspaceConfig,
+  localBackend: import("./types.js").LocalBackendId,
+): ProviderWorkspaceConfig {
+  return {
+    ...config,
+    providers: {
+      ...config.providers,
+      local: {
+        ...config.providers?.local,
+        localBackend,
+      },
+    },
   };
 }

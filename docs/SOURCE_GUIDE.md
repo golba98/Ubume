@@ -211,6 +211,7 @@ Each runtime must report truthful availability, validation, models, reasoning, a
 | `src/core/providerRuntime/gemini.ts` | Implements legacy Gemini configuration checks, diagnostics, model handling, and compatibility runtime behavior. |
 | `src/core/providerRuntime/lmstudio.test.ts` | Verifies lmstudio behavior and regression contracts in the core/providerRuntime area. |
 | `src/core/providerRuntime/lmstudio.ts` | Defines LM Studio/OpenAI-compatible request and response helpers used by the local runtime. |
+| `src/core/providerRuntime/unsloth.ts` | Verifies a local Unsloth Studio instance, resolves secure API authentication, and parses loaded models. |
 | `src/core/providerRuntime/local.test.ts` | Verifies local behavior and regression contracts in the core/providerRuntime area. |
 | `src/core/providerRuntime/local.ts` | Checks local-server readiness, discovers models, resolves configuration, runs chat requests, and reports diagnostics. |
 | `src/core/providerRuntime/mistralVibe.test.ts` | Verifies mistral Vibe behavior and regression contracts in the core/providerRuntime area. |

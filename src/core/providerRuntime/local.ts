@@ -2,7 +2,7 @@ import { sanitizeTerminalOutput } from "../terminal/terminalSanitize.js";
 import { runAgentLoop, type AgentChatMessage, type AgentChatResponse } from "../agent/loop.js";
 import { agentToolDefinitions, parseOpenAiToolCallsDetailed } from "../agent/protocol.js";
 import type { BackendRunHandlers } from "../providers/types.js";
-import type { ProviderWorkspaceOverride } from "../providerLauncher/types.js";
+import type { LocalBackendId, ProviderWorkspaceOverride } from "../providerLauncher/types.js";
 import type {
   ProviderChatRequest,
   ProviderModel,
@@ -13,6 +13,7 @@ import type {
 import { resolveModelCapabilityProfileCached, clearModelCapabilityProfileCache } from "./capabilityProfile.js";
 import { clearModelContextMetadataCache, resolveModelContextLengthCached } from "./contextMetadata.js";
 import { deriveLmStudioApiRoot, fetchLmStudioModels, type LmStudioModelInfo, type LmStudioModelList } from "./lmstudio.js";
+import { parseUnslothModels, resolveUnslothConnection } from "./unsloth.js";
 
 const DEFAULT_LOCAL_BASE_URL = "http://localhost:1234/v1";
 const DEFAULT_LOCAL_API_KEY = "lm-studio";
@@ -26,6 +27,7 @@ const LOCAL_ROUTE_SETUP_MESSAGE = [
 type FetchImpl = typeof fetch;
 
 interface LocalProviderConfig {
+  localBackend: LocalBackendId;
   enabled: boolean;
   type: "openai-compatible";
   baseUrl: string;
@@ -40,10 +42,11 @@ interface LocalDiscoveryCache {
   result: ProviderModelDiscoveryResult;
   selectedModel: string | null;
   checkedAt: number;
+  resolvedConfig: LocalProviderConfig;
 }
 
 let configuredOverride: ProviderWorkspaceOverride | null = null;
-let discoveryCache: LocalDiscoveryCache | null = null;
+const discoveryCaches = new Map<LocalBackendId, LocalDiscoveryCache>();
 
 function normalizeBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
@@ -63,7 +66,7 @@ export function setLocalProviderConfig(override: ProviderWorkspaceOverride | nul
 
 export function resetLocalProviderStateForTests(): void {
   configuredOverride = null;
-  discoveryCache = null;
+  discoveryCaches.clear();
   clearModelCapabilityProfileCache();
   clearModelContextMetadataCache();
 }
@@ -71,6 +74,7 @@ export function resetLocalProviderStateForTests(): void {
 export function resolveLocalProviderConfig(
   override: ProviderWorkspaceOverride | null | undefined = configuredOverride,
   env: NodeJS.ProcessEnv = process.env,
+  localBackend: LocalBackendId = override?.localBackend ?? "lm-studio",
 ): LocalProviderConfig {
   const baseUrl = nonEmpty(override?.baseUrl)
     ?? nonEmpty(env.CODEXA_LOCAL_BASE_URL)
@@ -87,6 +91,7 @@ export function resolveLocalProviderConfig(
   const pinnedModel = nonEmpty(override?.pinnedModel);
 
   return {
+    localBackend,
     enabled: override?.enabled !== false,
     type: override?.type ?? "openai-compatible",
     baseUrl: normalizeBaseUrl(baseUrl),
@@ -99,6 +104,7 @@ export function resolveLocalProviderConfig(
 
 function localConfigKey(config: LocalProviderConfig): string {
   return JSON.stringify({
+    localBackend: config.localBackend,
     enabled: config.enabled,
     type: config.type,
     baseUrl: config.baseUrl,
@@ -210,13 +216,14 @@ function diagnosticsFor(options: {
   models: readonly string[];
   selectedModel: string | null;
   lmStudioEndpoint?: string | null;
-  loadedModels?: readonly LmStudioModelInfo[];
+  loadedModels?: readonly { id: string }[];
   selectedModelPrevious?: string | null;
   selectionReason?: string | null;
   contextField?: string | null;
   error?: string | null;
 }): Record<string, string | number | boolean | null> {
   return {
+    localBackend: options.config.localBackend,
     enabled: options.config.enabled,
     type: options.config.type,
     baseUrl: options.config.baseUrl,
@@ -229,7 +236,9 @@ function diagnosticsFor(options: {
     modelCount: options.models.length,
     endpointCheckResult: options.status,
     selectionReason: options.selectionReason ?? null,
-    contextSource: options.contextField ? "lmstudio-api" : null,
+    contextSource: options.contextField
+      ? options.config.localBackend === "unsloth" ? "unsloth-api" : "lmstudio-api"
+      : null,
     contextRawField: options.contextField ?? null,
     errorMessage: options.error ?? null,
   };
@@ -244,6 +253,7 @@ function notConfiguredResult(
   return {
     status: "not-configured",
     providerId: "local",
+    localBackend: config.localBackend,
     backendKind: "unavailable",
     models: [],
     message,
@@ -253,29 +263,35 @@ function notConfiguredResult(
 
 export function discoverLocalModels(
   override: ProviderWorkspaceOverride | null | undefined = configuredOverride,
+  localBackend: LocalBackendId = override?.localBackend ?? "lm-studio",
 ): ProviderModelDiscoveryResult {
-  const config = resolveLocalProviderConfig(override);
+  const config = resolveLocalProviderConfig(override, process.env, localBackend);
   const key = localConfigKey(config);
-  if (discoveryCache?.configKey === key) {
-    return discoveryCache.result;
+  const cache = discoveryCaches.get(localBackend);
+  if (cache && (localBackend === "unsloth" || cache.configKey === key)) {
+    return cache.result;
   }
   return notConfiguredResult(config, LOCAL_ROUTE_SETUP_MESSAGE);
 }
 
 export async function checkLocalProvider(options: {
   override?: ProviderWorkspaceOverride | null;
+  localBackend?: LocalBackendId;
   fetchImpl?: FetchImpl;
   signal?: AbortSignal;
 } = {}): Promise<ProviderRouteValidationResult> {
-  const config = resolveLocalProviderConfig(options.override ?? configuredOverride);
+  const localBackend = options.localBackend ?? options.override?.localBackend ?? configuredOverride?.localBackend ?? "lm-studio";
+  if (localBackend === "unsloth") return checkUnslothProvider({ ...options, localBackend });
+  const config = resolveLocalProviderConfig(options.override ?? configuredOverride, process.env, localBackend);
   const key = localConfigKey(config);
-  const previousSelectedModel = discoveryCache?.configKey === key ? discoveryCache.selectedModel : null;
+  const previousCache = discoveryCaches.get(localBackend);
+  const previousSelectedModel = previousCache?.configKey === key ? previousCache.selectedModel : null;
   clearModelCapabilityProfileCache();
   clearModelContextMetadataCache();
 
   if (!config.enabled) {
     const result = notConfiguredResult(config, "Local provider is disabled in provider config.");
-    discoveryCache = { configKey: key, result, selectedModel: config.pinnedModel ?? config.defaultModel ?? config.currentModel, checkedAt: Date.now() };
+    discoveryCaches.set(localBackend, { configKey: key, result, selectedModel: config.pinnedModel ?? config.defaultModel ?? config.currentModel, checkedAt: Date.now(), resolvedConfig: config });
     return {
       status: "not-configured",
       providerId: "local",
@@ -288,7 +304,7 @@ export async function checkLocalProvider(options: {
   if (config.type !== "openai-compatible") {
     const message = `Local provider type "${config.type}" is not supported. Use openai-compatible.`;
     const result = notConfiguredResult(config, message);
-    discoveryCache = { configKey: key, result, selectedModel: config.pinnedModel ?? config.defaultModel ?? config.currentModel, checkedAt: Date.now() };
+    discoveryCaches.set(localBackend, { configKey: key, result, selectedModel: config.pinnedModel ?? config.defaultModel ?? config.currentModel, checkedAt: Date.now(), resolvedConfig: config });
     return {
       status: "not-configured",
       providerId: "local",
@@ -319,7 +335,7 @@ export async function checkLocalProvider(options: {
         sanitizeTerminalOutput(text).slice(0, 300) || `HTTP ${response.status}`,
       ].join("\n");
       const result = notConfiguredResult(config, message, "unavailable", `HTTP ${response.status}`);
-      discoveryCache = { configKey: key, result, selectedModel: config.pinnedModel ?? config.defaultModel ?? config.currentModel, checkedAt: Date.now() };
+      discoveryCaches.set(localBackend, { configKey: key, result, selectedModel: config.pinnedModel ?? config.defaultModel ?? config.currentModel, checkedAt: Date.now(), resolvedConfig: config });
       return { status: "not-configured", providerId: "local", backendKind: "unavailable", message, diagnostics: result.diagnostics };
     }
 
@@ -329,7 +345,7 @@ export async function checkLocalProvider(options: {
     } catch {
       const message = "Local provider unavailable\n/v1/models returned invalid JSON.";
       const result = notConfiguredResult(config, message, "unavailable", "invalid JSON");
-      discoveryCache = { configKey: key, result, selectedModel: config.pinnedModel ?? config.defaultModel ?? config.currentModel, checkedAt: Date.now() };
+      discoveryCaches.set(localBackend, { configKey: key, result, selectedModel: config.pinnedModel ?? config.defaultModel ?? config.currentModel, checkedAt: Date.now(), resolvedConfig: config });
       return { status: "not-configured", providerId: "local", backendKind: "unavailable", message, diagnostics: result.diagnostics };
     }
 
@@ -358,6 +374,7 @@ export async function checkLocalProvider(options: {
         const result: ProviderModelDiscoveryResult = {
           status: "not-configured",
           providerId: "local",
+          localBackend,
           backendKind: "unavailable",
           models,
           message,
@@ -373,7 +390,7 @@ export async function checkLocalProvider(options: {
             error: message,
           }),
         };
-        discoveryCache = { configKey: key, result, selectedModel: null, checkedAt: Date.now() };
+        discoveryCaches.set(localBackend, { configKey: key, result, selectedModel: null, checkedAt: Date.now(), resolvedConfig: config });
         return { status: "not-configured", providerId: "local", backendKind: "unavailable", message, diagnostics: result.diagnostics };
       }
 
@@ -392,7 +409,7 @@ export async function checkLocalProvider(options: {
     if (discoveredIds.length === 0) {
       const message = "Local endpoint is reachable, but no models were returned. Load a model in LM Studio.";
       const result = notConfiguredResult(config, message, "no-models");
-      discoveryCache = { configKey: key, result, selectedModel, checkedAt: Date.now() };
+      discoveryCaches.set(localBackend, { configKey: key, result, selectedModel, checkedAt: Date.now(), resolvedConfig: config });
       return { status: "not-configured", providerId: "local", backendKind: "unavailable", message, diagnostics: result.diagnostics };
     }
 
@@ -406,6 +423,7 @@ export async function checkLocalProvider(options: {
     const result: ProviderModelDiscoveryResult = {
       status: "ready",
       providerId: "local",
+      localBackend,
       backendKind: "local-openai-compatible",
       models,
       message: [
@@ -425,7 +443,7 @@ export async function checkLocalProvider(options: {
         contextField,
       }),
     };
-    discoveryCache = { configKey: key, result, selectedModel, checkedAt: Date.now() };
+    discoveryCaches.set(localBackend, { configKey: key, result, selectedModel, checkedAt: Date.now(), resolvedConfig: config });
     return {
       status: "ready",
       providerId: "local",
@@ -441,7 +459,82 @@ export async function checkLocalProvider(options: {
       "Start LM Studio, load a model, and enable the local server.",
     ].join("\n");
     const result = notConfiguredResult(config, message, "unavailable", errorMessage);
-    discoveryCache = { configKey: key, result, selectedModel: config.pinnedModel ?? config.defaultModel ?? config.currentModel, checkedAt: Date.now() };
+    discoveryCaches.set(localBackend, { configKey: key, result, selectedModel: config.pinnedModel ?? config.defaultModel ?? config.currentModel, checkedAt: Date.now(), resolvedConfig: config });
+    return { status: "not-configured", providerId: "local", backendKind: "unavailable", message, diagnostics: result.diagnostics };
+  } finally {
+    clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", abort);
+  }
+}
+
+async function checkUnslothProvider(options: {
+  override?: ProviderWorkspaceOverride | null;
+  localBackend: "unsloth";
+  fetchImpl?: FetchImpl;
+  signal?: AbortSignal;
+}): Promise<ProviderRouteValidationResult> {
+  const initialConfig = resolveLocalProviderConfig(options.override ?? configuredOverride, process.env, "unsloth");
+  clearModelCapabilityProfileCache();
+  clearModelContextMetadataCache();
+  if (!initialConfig.enabled) {
+    const result = notConfiguredResult(initialConfig, "Unsloth is disabled in provider config.");
+    discoveryCaches.set("unsloth", { configKey: localConfigKey(initialConfig), result, selectedModel: null, checkedAt: Date.now(), resolvedConfig: initialConfig });
+    return { status: "not-configured", providerId: "local", backendKind: "unavailable", message: result.message, diagnostics: result.diagnostics };
+  }
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LOCAL_TIMEOUT_MS);
+  const abort = () => controller.abort();
+  options.signal?.addEventListener("abort", abort, { once: true });
+  try {
+    const connection = await resolveUnslothConnection({ fetchImpl, signal: controller.signal });
+    const config: LocalProviderConfig = { ...initialConfig, baseUrl: connection.baseUrl, apiKey: connection.apiKey };
+    const key = localConfigKey(config);
+    const previous = discoveryCaches.get("unsloth");
+    const response = await fetchImpl(`${config.baseUrl}/models`, { headers: { Authorization: `Bearer ${config.apiKey}` }, redirect: "manual", signal: controller.signal });
+    const text = await response.text();
+    if (!response.ok) throw new Error(sanitizeTerminalOutput(text).slice(0, 300) || `HTTP ${response.status}`);
+    const unslothModels = parseUnslothModels(text.trim() ? JSON.parse(text) as unknown : {});
+    const loadedModels = unslothModels.filter((model) => model.loaded === true);
+    let status: Record<string, unknown> = {};
+    try {
+      const statusResponse = await fetchImpl(`${connection.rootUrl}/api/inference/status`, { headers: { Authorization: `Bearer ${config.apiKey}` }, redirect: "manual", signal: controller.signal });
+      if (statusResponse.ok) status = await statusResponse.json() as Record<string, unknown>;
+    } catch {}
+    const activeModel = typeof status.active_model === "string" ? status.active_model : null;
+    const loadedIds = loadedModels.map((model) => model.id);
+    const selectedModel = [config.pinnedModel, config.defaultModel, config.currentModel, activeModel, previous?.selectedModel, loadedIds[0]]
+      .find((candidate): candidate is string => Boolean(candidate && loadedIds.includes(candidate))) ?? null;
+    const models = loadedModels.map((model) => modelFromId(model.id, "discovered", {
+      ...(isRecord(model.raw) ? model.raw : {}),
+      ...(model.id === selectedModel ? status : {}),
+      state: "loaded",
+      supports_tool_calls: model.id === selectedModel ? status.supports_tools : undefined,
+      supports_streaming: true,
+      context_length: model.id === selectedModel ? status.context_length : undefined,
+      max_context_length: model.id === selectedModel ? status.max_context_length : undefined,
+    }));
+    if (!selectedModel) {
+      const message = "Unsloth Studio is running, but no model is loaded.";
+      const result: ProviderModelDiscoveryResult = {
+        status: "not-configured", providerId: "local", localBackend: "unsloth", backendKind: "unavailable", models, message,
+        diagnostics: diagnosticsFor({ config, status: "no-models", models: unslothModels.map((model) => model.id), selectedModel: null, loadedModels, error: message }),
+      };
+      discoveryCaches.set("unsloth", { configKey: key, result, selectedModel: null, checkedAt: Date.now(), resolvedConfig: config });
+      return { status: "not-configured", providerId: "local", backendKind: "unavailable", message, diagnostics: result.diagnostics };
+    }
+    const result: ProviderModelDiscoveryResult = {
+      status: "ready", providerId: "local", localBackend: "unsloth", backendKind: "local-openai-compatible", models,
+      message: ["Local provider found", "Unsloth Studio endpoint reachable", `Model: ${selectedModel}`].join("\n"),
+      diagnostics: diagnosticsFor({ config, status: "available", models: loadedIds, selectedModel, loadedModels, selectedModelPrevious: previous?.selectedModel ?? null, selectionReason: selectedModel === activeModel ? "active-loaded" : loadedIds.length === 1 ? "single-loaded" : "preferred-loaded", contextField: typeof status.context_length === "number" ? "context_length" : null }),
+    };
+    discoveryCaches.set("unsloth", { configKey: key, result, selectedModel, checkedAt: Date.now(), resolvedConfig: config });
+    return { status: "ready", providerId: "local", backendKind: "local-openai-compatible", message: result.message, diagnostics: result.diagnostics };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const message = ["Unsloth provider unavailable", "Start Unsloth Studio and load a model.", errorMessage].join("\n");
+    const result = notConfiguredResult(initialConfig, message, "unavailable", errorMessage);
+    discoveryCaches.set("unsloth", { configKey: localConfigKey(initialConfig), result, selectedModel: null, checkedAt: Date.now(), resolvedConfig: initialConfig });
     return { status: "not-configured", providerId: "local", backendKind: "unavailable", message, diagnostics: result.diagnostics };
   } finally {
     clearTimeout(timeout);
@@ -450,7 +543,8 @@ export async function checkLocalProvider(options: {
 }
 
 function getCachedSelectedModel(config: LocalProviderConfig, routeModel: string): string {
-  const cache = discoveryCache?.configKey === localConfigKey(config) ? discoveryCache : null;
+  const candidate = discoveryCaches.get(config.localBackend);
+  const cache = candidate?.configKey === localConfigKey(config) ? candidate : null;
   const discoveredIds = cache?.result.models.map((model) => model.modelId) ?? [];
   if (cache?.selectedModel && discoveredIds.includes(cache.selectedModel)) return cache.selectedModel;
   if (config.pinnedModel && discoveredIds.includes(config.pinnedModel)) return config.pinnedModel;
@@ -728,7 +822,7 @@ async function postLocalChatCompletion(options: {
     const body = await response.text();
     const sanitized = sanitizeTerminalOutput(body).slice(0, 500);
     if (isModelNotLoadedError(response.status, sanitized)) {
-      discoveryCache = null;
+      discoveryCaches.delete(options.config.localBackend);
       clearModelCapabilityProfileCache();
       clearModelContextMetadataCache();
     }
@@ -782,12 +876,19 @@ export async function runLocalOpenAiCompatible(
   handlers: BackendRunHandlers,
   options: { fetchImpl?: FetchImpl; signal?: AbortSignal } = {},
 ): Promise<string> {
-  const config = resolveLocalProviderConfig(request.localConfig ?? configuredOverride);
+  const localBackend = request.route.localBackend ?? request.localConfig?.localBackend ?? configuredOverride?.localBackend ?? "lm-studio";
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  if (localBackend === "unsloth") {
+    const validation = await checkLocalProvider({ override: request.localConfig ?? configuredOverride, localBackend, fetchImpl, signal: options.signal });
+    if (validation.status !== "ready") throw new Error(validation.message);
+  }
+  const config = discoveryCaches.get(localBackend)?.resolvedConfig
+    ?? resolveLocalProviderConfig(request.localConfig ?? configuredOverride, process.env, localBackend);
 
   const resolvedModel = getCachedSelectedModel(config, request.route.modelId);
-  const rawMeta = discoveryCache?.configKey === localConfigKey(config)
-    ? discoveryCache.result.models.find((m) => m.modelId === resolvedModel)?.raw
+  const cache = discoveryCaches.get(localBackend);
+  const rawMeta = cache?.configKey === localConfigKey(config)
+    ? cache.result.models.find((m) => m.modelId === resolvedModel)?.raw
     : undefined;
   const capProfile = resolveModelCapabilityProfileCached({
     providerId: "local",
@@ -830,10 +931,13 @@ export async function runLocalOpenAiCompatible(
 
 export async function runLocalDiagnostics(options: {
   localConfig?: ProviderWorkspaceOverride | null;
+  localBackend?: LocalBackendId;
   fetchImpl?: FetchImpl;
 } = {}): Promise<string> {
+  const localBackend = options.localBackend ?? options.localConfig?.localBackend ?? configuredOverride?.localBackend ?? "lm-studio";
   const validation = await checkLocalProvider({
     override: options.localConfig ?? configuredOverride,
+    localBackend,
     fetchImpl: options.fetchImpl,
   });
   const diagnostics = validation.diagnostics ?? {};
@@ -841,9 +945,10 @@ export async function runLocalDiagnostics(options: {
   const selectedModelId = String(diagnostics.selectedModel ?? "");
   const previousModelId = typeof diagnostics.previousModel === "string" ? diagnostics.previousModel : "";
   const lmStudioEndpoint = String(diagnostics.lmStudioModelsEndpoint ?? "");
-  const modelRaw = discoveryCache?.result.models.find((m) => m.modelId === selectedModelId)?.raw;
+  const cache = discoveryCaches.get(localBackend);
+  const modelRaw = cache?.result.models.find((m) => m.modelId === selectedModelId)?.raw;
   const lmLines: (string | null)[] = [];
-  const loadedModels = discoveryCache?.result.models.filter((model) => {
+  const loadedModels = cache?.result.models.filter((model) => {
     const raw = model.raw;
     return isRecord(raw) && raw.state === "loaded";
   }) ?? [];
@@ -879,7 +984,7 @@ export async function runLocalDiagnostics(options: {
     const contextMeta = resolveModelContextLengthCached({
       providerId: "local",
       modelId: selectedModelId,
-      rawMetadata: discoveryCache?.result.models.find((m) => m.modelId === selectedModelId)?.raw,
+      rawMetadata: cache?.result.models.find((m) => m.modelId === selectedModelId)?.raw,
     });
     if (contextMeta.contextLength !== null) {
       lmLines.push(`Active context: ${contextMeta.contextLength.toLocaleString()}`);
@@ -917,15 +1022,17 @@ export const localRuntime: ProviderRuntime = {
   routeSetupMessage: LOCAL_ROUTE_SETUP_MESSAGE,
   launchAvailable: false,
   isRouteConfigured: () => discoverLocalModels().status === "ready",
-  validateRoute: async ({ localConfig }) => checkLocalProvider({ override: localConfig ?? configuredOverride }),
+  validateRoute: async ({ route, localConfig, localBackend }) => checkLocalProvider({ override: localConfig ?? configuredOverride, localBackend: localBackend ?? route.localBackend }),
   discoverModels: discoverLocalModels,
-  refreshModels: async ({ localConfig }) => {
-    const validation = await checkLocalProvider({ override: localConfig ?? configuredOverride });
+  refreshModels: async ({ localConfig, localBackend }) => {
+    const backend = localBackend ?? localConfig?.localBackend ?? configuredOverride?.localBackend ?? "lm-studio";
+    const validation = await checkLocalProvider({ override: localConfig ?? configuredOverride, localBackend: backend });
     return {
       status: validation.status,
       providerId: "local",
+      localBackend: backend,
       backendKind: validation.backendKind,
-      models: validation.status === "ready" ? discoverLocalModels(localConfig).models : [],
+      models: validation.status === "ready" ? discoverLocalModels(localConfig, backend).models : [],
       message: validation.message,
       diagnostics: validation.diagnostics,
     };

@@ -36,6 +36,18 @@ test("ConversationStore creates and reloads a stable conversation", () => {
     assert.equal(loaded?.messages[0]?.content, "Help me debug this.");
 });
 
+test("ConversationStore preserves the selected Local backend", () => {
+  const conversations = store("2026-08-16T10:00:00.000Z", "unsloth-route");
+  const created = conversations.createConversation({
+    providerId: "local",
+    modelId: "qwen",
+    backendKind: "local-openai-compatible",
+    localBackend: "unsloth",
+  });
+  conversations.save(created);
+  assert.equal(conversations.load(created.metadata.id)?.metadata.localBackend, "unsloth");
+});
+
 test("ConversationStore lists newest activity first and ignores malformed conversations", () => {
     const conversations = store("2026-08-16T12:00:00.000Z", "first");
     const first = conversations.createConversation({ providerId: "local", modelId: "one", backendKind: "local-openai-compatible" });

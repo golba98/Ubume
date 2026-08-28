@@ -1,5 +1,7 @@
 export type ProviderId = "openai" | "anthropic" | "google" | "mistral" | "local" | "codexa-native" | "codexa-cupy" | "antigravity";
 
+export type LocalBackendId = "lm-studio" | "unsloth";
+
 export type ProviderBackendType =
   | "codex-cli-auth"
   | "gemini-cli-auth"
@@ -60,6 +62,7 @@ export interface ProviderActiveRoute {
   backendKind?: import("../providerRuntime/types.js").ProviderBackendKind;
   reasoning?: string;
   modelSelection?: import("../providerRuntime/types.js").GeminiModelSelection;
+  localBackend?: LocalBackendId;
 }
 
 export interface ProviderWorkspaceOverride {
@@ -71,6 +74,7 @@ export interface ProviderWorkspaceOverride {
   apiKey?: string;
   pinnedModel?: string;
   defaultModel?: string;
+  localBackend?: LocalBackendId;
   models?: Record<string, ProviderModelWorkspaceOverride>;
   command?: string | ProviderLaunchCommand | null;
   claudeCommandPath?: string;

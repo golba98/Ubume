@@ -197,8 +197,8 @@ function ProviderPickerHarness() {
         <ProviderPicker
           layout={createLayoutSnapshot(100, 22)}
           providers={providers}
-          onAction={(providerId: ProviderId, nextAction: ProviderPickerAction) => {
-            setAction(`${providerId}:${nextAction}`);
+          onAction={(providerId: ProviderId, nextAction: ProviderPickerAction, localBackend) => {
+            setAction(`${providerId}:${nextAction}${localBackend ? `:${localBackend}` : ""}`);
           }}
           onCancel={() => setAction("cancel")}
         />
@@ -356,7 +356,7 @@ test("provider picker reports Mistral Vibe in-Codexa route actions without launc
   }
 });
 
-test("provider picker Enter uses Local directly in Codexa", async () => {
+test("provider picker opens Local Backends and Enter selects LM Studio", async () => {
   const harness = createInkHarness(<ProviderPickerHarness />);
   const localIndex = buildProviderRegistry({ activeModel: "gpt-5.4" })
     .findIndex((provider) => provider.id === "local");
@@ -369,9 +369,72 @@ test("provider picker Enter uses Local directly in Codexa", async () => {
     }
     harness.stdin.write("\r");
     await sleep(80);
+    assert.match(harness.getOutput(), /Local Backends/);
+    assert.match(harness.getOutput(), /LM Studio/);
+    assert.match(harness.getOutput(), /Unsloth/);
+    harness.stdin.write("\r");
+    await sleep(80);
 
-    assert.match(harness.getOutput(), /action:local:use-in-codexa/);
+    assert.match(harness.getOutput(), /action:local:use-in-codexa:lm-studio/);
     assert.doesNotMatch(harness.getOutput(), /Provider action|diagnostics/);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("provider picker selects Unsloth from the Local Backends page", async () => {
+  const harness = createInkHarness(<ProviderPickerHarness />);
+  const localIndex = buildProviderRegistry({ activeModel: "gpt-5.4" }).findIndex((provider) => provider.id === "local");
+  try {
+    await sleep(80);
+    for (let index = 0; index < localIndex; index += 1) {
+      harness.stdin.write("\u001b[B");
+      await sleep(40);
+    }
+    harness.stdin.write("\r");
+    await sleep(60);
+    harness.stdin.write("\u001b[B");
+    await sleep(40);
+    harness.stdin.write("\r");
+    await sleep(60);
+    assert.match(harness.getOutput(), /action:local:use-in-codexa:unsloth/);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("Local Backends page shows independent inline statuses and probes on open", async () => {
+  let openCount = 0;
+  const providers = buildProviderRegistry({ activeModel: "gpt-5.4" });
+  const localIndex = providers.findIndex((provider) => provider.id === "local");
+  const harness = createInkHarness(
+    <ThemeProvider theme="purple">
+      <ProviderPicker
+        layout={createLayoutSnapshot(100, 22)}
+        providers={providers}
+        localBackendStatuses={{
+          "lm-studio": { state: "not-running", label: "Not running" },
+          unsloth: { state: "no-model", label: "No model loaded" },
+        }}
+        onLocalBackendsOpen={() => { openCount += 1; }}
+        onAction={() => {}}
+        onCancel={() => {}}
+      />
+    </ThemeProvider>,
+  );
+
+  try {
+    await sleep(80);
+    for (let index = 0; index < localIndex; index += 1) {
+      harness.stdin.write("\u001b[B");
+      await sleep(40);
+    }
+    harness.stdin.write("\r");
+    await sleep(80);
+    const frame = getLatestBoxFrame(harness.getOutput());
+    assert.match(frame, /LM Studio\s+— Not running/);
+    assert.match(frame, /Unsloth\s+— No model loaded/);
+    assert.equal(openCount, 1);
   } finally {
     await harness.cleanup();
   }

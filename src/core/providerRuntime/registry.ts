@@ -202,6 +202,9 @@ export function resolveActiveProviderRoute(options: {
       backendKind: configuredRoute.backendKind ?? getProviderRuntime(configuredRoute.providerId).backendKind,
       ...(configuredRoute.reasoning ? { reasoning: configuredRoute.reasoning } : {}),
       ...(configuredRoute.modelSelection ? { modelSelection: configuredRoute.modelSelection } : {}),
+      ...(configuredRoute.providerId === "local"
+        ? { localBackend: configuredRoute.localBackend ?? "lm-studio" }
+        : {}),
     };
 
     if (route.providerId === "google" && route.modelSelection) {
@@ -219,14 +222,6 @@ export function resolveActiveProviderRoute(options: {
       const isKnownShortAlias = ANTHROPIC_FALLBACK_MODELS.some((model) => model.modelId === route.modelId);
       if (discovery.status === "ready" && hasNonFallbackModels && discovery.models.length > 0 && !stillAvailable && isKnownShortAlias) {
         route.modelId = discovery.models[0]!.modelId;
-      }
-    } else if (route.providerId === "local") {
-      const discovery = discoverProviderModels("local");
-      const selectedModel = typeof discovery.diagnostics?.selectedModel === "string"
-        ? discovery.diagnostics.selectedModel.trim()
-        : "";
-      if (discovery.status === "ready" && selectedModel) {
-        route.modelId = selectedModel;
       }
     } else if (route.providerId === "antigravity") {
       const migrated = migrateAntigravityLegacyModelId(route.modelId);

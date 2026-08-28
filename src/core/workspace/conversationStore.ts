@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ProviderBackendKind } from "../providerRuntime/types.js";
 import type { ProviderId } from "../providerLauncher/types.js";
+import type { LocalBackendId } from "../providerLauncher/types.js";
 import { resolveCodexaConversationDir } from "./appData.js";
 
 export type ConversationMessageRole = "user" | "assistant";
@@ -29,6 +30,7 @@ export interface ConversationMetadata {
   modelId: string;
   backendKind: ProviderBackendKind | string | null;
   reasoning?: string;
+  localBackend?: LocalBackendId;
   messageCount: number;
 }
 
@@ -87,6 +89,7 @@ function parseMetadata(value: unknown, fallbackId: string): ConversationMetadata
     modelId,
     backendKind: typeof value.backendKind === "string" ? value.backendKind : null,
     ...(typeof value.reasoning === "string" && value.reasoning.trim() ? { reasoning: value.reasoning } : {}),
+    ...(value.localBackend === "lm-studio" || value.localBackend === "unsloth" ? { localBackend: value.localBackend } : {}),
     messageCount,
   };
 }
@@ -135,6 +138,7 @@ export class ConversationStore {
     modelId: string;
     backendKind: ProviderBackendKind | string | null;
     reasoning?: string;
+    localBackend?: LocalBackendId;
   }): ConversationRecord {
     this.ensureRoot();
     const id = `chat_${this.idFactory()}`;
@@ -149,6 +153,7 @@ export class ConversationStore {
       modelId: route.modelId,
       backendKind: route.backendKind,
       ...(route.reasoning ? { reasoning: route.reasoning } : {}),
+      ...(route.localBackend ? { localBackend: route.localBackend } : {}),
       messageCount: 0,
     };
     return { metadata, messages: [] };

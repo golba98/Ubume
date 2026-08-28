@@ -200,7 +200,7 @@ import type {
 } from "./core/providers/types.js";
 import { commandExistsOnPath, launchProviderCli } from "./core/providerLauncher/launcher.js";
 import { buildProviderRegistry, findProvider, getActiveRouteProviderId, isKnownProviderId } from "./core/providerLauncher/registry.js";
-import type { ProviderId, ProviderPickerAction, ProviderWorkspaceConfig } from "./core/providerLauncher/types.js";
+import type { LocalBackendId, ProviderId, ProviderPickerAction, ProviderWorkspaceConfig } from "./core/providerLauncher/types.js";
 import {
   discoverProviderModels,
   getProviderRouteSetupMessage,
@@ -227,6 +227,7 @@ import {
   setProviderActiveRoute,
   setProviderDefaultReasoning,
   setProviderDefaultModel,
+  setLocalBackendPreference,
   setProviderWorkspaceDefault,
 } from "./core/providerLauncher/workspaceConfig.js";
 import { sanitizeTerminalInput, sanitizeTerminalLines, sanitizeTerminalOutput } from "./core/terminal/terminalSanitize.js";
@@ -281,7 +282,7 @@ import { ModelPickerScreen } from "./ui/panels/ModelPickerScreen.js";
 import { ModePicker } from "./ui/panels/ModePicker.js";
 import { PlanActionPicker, type PlanActionValue, measurePlanActionPickerRows } from "./ui/panels/PlanActionPicker.js";
 import { PermissionsPanel, type PermissionsPanelAction } from "./ui/panels/PermissionsPanel.js";
-import { ProviderPicker } from "./ui/panels/ProviderPicker.js";
+import { ProviderPicker, type LocalBackendStatus } from "./ui/panels/ProviderPicker.js";
 import { ProviderSetupPrompt } from "./ui/panels/ProviderSetupPrompt.js";
 import { ReasoningPicker } from "./ui/panels/ReasoningPicker.js";
 import { AttachmentImportPanel, type PendingImportFile } from "./ui/panels/AttachmentImportPanel.js";
@@ -490,10 +491,14 @@ export function App({ launchArgs }: AppProps) {
   const [providerWorkspaceConfig, setProviderWorkspaceConfig] = useState<ProviderWorkspaceConfig>(
     initialProviderWorkspaceConfig.current,
   );
+  const [localBackendStatuses, setLocalBackendStatuses] = useState<Record<LocalBackendId, LocalBackendStatus>>({
+    "lm-studio": { state: "idle", label: "Not checked" },
+    unsloth: { state: "idle", label: "Not checked" },
+  });
   const [pendingRouteProviderId, setPendingRouteProviderId] = useState<ProviderId | null>(null);
   const [providerSetup, setProviderSetup] = useState<ProviderId | null>(null);
   const providerLaunchBypassRef = useRef(false);
-  const providerActionRef = useRef<((providerId: ProviderId, action: ProviderPickerAction) => void) | null>(null);
+  const providerActionRef = useRef<((providerId: ProviderId, action: ProviderPickerAction, localBackend?: LocalBackendId) => void) | null>(null);
   const [themeSelection, setThemeSelection] = useState<ThemeSelectionState>({
     committedTheme: initialSettings.current.ui.theme,
     previewTheme: null,
@@ -700,6 +705,7 @@ export function App({ launchArgs }: AppProps) {
   // should close. This ref is set only by explicit picker open/close actions.
   const modelPickerOpenRef = useRef(false);
   const providerModelRefreshesRef = useRef(new Map<ProviderId, Promise<unknown>>());
+  const localBackendCheckInFlightRef = useRef(new Map<LocalBackendId, ReturnType<typeof checkLocalProvider>>());
   const providerModelsLoadedRef = useRef(new Set<ProviderId>());
   const providerRouteErrorsRef = useRef<Record<string, string>>({});
   const providerDiagnosticsRef = useRef<Record<string, Record<string, string | number | boolean | null>>>({});
@@ -1558,6 +1564,7 @@ export function App({ launchArgs }: AppProps) {
         providerId: activeProviderRoute.providerId,
         modelId: activeProviderRoute.modelId,
         backendKind: activeProviderRoute.backendKind,
+        ...(activeProviderRoute.localBackend ? { localBackend: activeProviderRoute.localBackend } : {}),
         ...(activeProviderRoute.reasoning ? { reasoning: activeProviderRoute.reasoning } : {}),
       },
     };
@@ -1574,6 +1581,7 @@ export function App({ launchArgs }: AppProps) {
       providerId: activeProviderRoute.providerId,
       modelId: activeProviderRoute.modelId,
       backendKind: activeProviderRoute.backendKind,
+      localBackend: activeProviderRoute.localBackend,
       reasoning: activeProviderRoute.reasoning,
     });
     const next: ConversationRecord = { ...current, messages: [...current.messages, message] };
@@ -1993,6 +2001,7 @@ export function App({ launchArgs }: AppProps) {
     nextReasoning: string,
     backendKindOverride?: ReturnType<typeof getProviderRuntime>["backendKind"],
     modelSelection?: import("./core/providerRuntime/types.js").GeminiModelSelection,
+    localBackend?: LocalBackendId,
   ) => {
     try {
       setConversationRouteOverride(null);
@@ -2003,6 +2012,7 @@ export function App({ launchArgs }: AppProps) {
         backendKind: backendKindOverride ?? runtime.backendKind,
         reasoning: nextReasoning,
         modelSelection,
+        ...(providerId === "local" ? { localBackend: localBackend ?? providerWorkspaceConfig.providers?.local?.localBackend ?? "lm-studio" } : {}),
       });
       nextConfig = setProviderDefaultReasoning(
         setProviderDefaultModel(nextConfig, providerId, nextModel),
@@ -2284,6 +2294,7 @@ export function App({ launchArgs }: AppProps) {
     nextReasoning: ReasoningLevel,
     providerId: ProviderId = activeProviderRoute.providerId,
     geminiSelection?: import("./core/providerRuntime/types.js").GeminiModelSelection,
+    localBackend?: LocalBackendId,
   ) => {
     const gate = guardConfigMutation("model", busy);
     if (!gate.allowed) {
@@ -2339,11 +2350,14 @@ export function App({ launchArgs }: AppProps) {
             backendKind: getProviderRuntime(providerId).backendKind,
             reasoning: normalizedReasoning,
             modelSelection: geminiSelection,
+            ...(providerId === "local" ? { localBackend: localBackend ?? providerWorkspaceConfig.providers?.local?.localBackend ?? "lm-studio" } : {}),
           },
           workspaceRoot,
           geminiCommandPath: providerWorkspaceConfig.providers?.google?.geminiCommandPath ?? runtimeConfig.geminiCommandPath,
           claudeCommandPath: providerWorkspaceConfig.providers?.anthropic?.claudeCommandPath,
-          localConfig: providerWorkspaceConfig.providers?.local,
+          localConfig: providerId === "local"
+            ? { ...providerWorkspaceConfig.providers?.local, localBackend: localBackend ?? providerWorkspaceConfig.providers?.local?.localBackend ?? "lm-studio" }
+            : providerWorkspaceConfig.providers?.local,
         });
         if (validation.diagnostics) {
           providerDiagnosticsRef.current[providerId] = validation.diagnostics as Record<string, string | number | boolean | null>;
@@ -2392,7 +2406,7 @@ export function App({ launchArgs }: AppProps) {
         // Switching to Vibe starts a fresh CLI conversation instead of resuming a stale one.
         resetMistralVibeSession(workspaceRoot);
       }
-      persistActiveRoute(providerId, nextModel, normalizedReasoning, validation.backendKind, geminiSelection);
+      persistActiveRoute(providerId, nextModel, normalizedReasoning, validation.backendKind, geminiSelection, localBackend);
       if (!modelPickerOpenRef.current) setPendingRouteProviderId(null);
       traceInputDebug("model_selection_app_success", getInputDebugSnapshot({
         handler: "setModelAndReasoningWithNotice",
@@ -2577,6 +2591,59 @@ export function App({ launchArgs }: AppProps) {
     setScreen("backend-picker");
   }, [appendSystemEvent, busy]);
 
+  const probeLocalBackend = useCallback((localBackend: LocalBackendId) => {
+    const existing = localBackendCheckInFlightRef.current.get(localBackend);
+    if (existing) return existing;
+
+    setLocalBackendStatuses((current) => ({
+      ...current,
+      [localBackend]: { state: "checking", label: "Checking…" },
+    }));
+    const promise = checkLocalProvider({
+      override: { ...providerWorkspaceConfig.providers?.local, localBackend },
+      localBackend,
+    }).then((validation) => {
+      const selectedModel = typeof validation.diagnostics?.selectedModel === "string"
+        ? validation.diagnostics.selectedModel.trim()
+        : "";
+      const message = validation.message ?? "";
+      const endpointResult = validation.diagnostics?.endpointCheckResult;
+      const status: LocalBackendStatus = validation.status === "ready"
+        ? { state: "ready", label: selectedModel || "Model loaded" }
+        : endpointResult === "no-models" || /no model is loaded|no models were returned/i.test(message)
+          ? { state: "no-model", label: "No model loaded" }
+          : /api key|authentication|authenticate|identity/i.test(message)
+            ? { state: "auth-required", label: "Authentication required" }
+            : { state: "not-running", label: "Not running" };
+      if (isMountedRef.current) {
+        setLocalBackendStatuses((current) => ({ ...current, [localBackend]: status }));
+      }
+      return validation;
+    }).catch((error) => {
+      if (isMountedRef.current) {
+        const message = error instanceof Error ? error.message : String(error);
+        setLocalBackendStatuses((current) => ({
+          ...current,
+          [localBackend]: /api key|authentication|authenticate|identity/i.test(message)
+            ? { state: "auth-required", label: "Authentication required" }
+            : { state: "not-running", label: "Not running" },
+        }));
+      }
+      throw error;
+    }).finally(() => {
+      localBackendCheckInFlightRef.current.delete(localBackend);
+    });
+    localBackendCheckInFlightRef.current.set(localBackend, promise);
+    return promise;
+  }, [providerWorkspaceConfig.providers]);
+
+  const probeLocalBackends = useCallback(() => {
+    void Promise.allSettled([
+      probeLocalBackend("lm-studio"),
+      probeLocalBackend("unsloth"),
+    ]);
+  }, [probeLocalBackend]);
+
   const openProviderPicker = useCallback(() => {
     modelPickerOpenRef.current = false;
     // Mid route switch, keep the pending id so initialProviderId highlights
@@ -2616,20 +2683,7 @@ export function App({ launchArgs }: AppProps) {
       };
       setRegistryNonce((n) => n + 1);
     });
-    markProviderAvailability("local", "checking", "provider-picker-open");
-    void checkLocalProvider({ override: providerWorkspaceConfig.providers?.local }).then((result) => {
-      if (!isMountedRef.current) return;
-      if (result.diagnostics) {
-        providerDiagnosticsRef.current["local"] = result.diagnostics as Record<string, string | number | boolean | null>;
-      }
-      if (result.status === "ready") {
-        delete providerRouteErrorsRef.current["local"];
-      } else {
-        providerRouteErrorsRef.current["local"] = result.message ?? "Local provider unavailable.";
-      }
-      setRegistryNonce((n) => n + 1);
-    }).catch(() => undefined);
-  }, [appendSystemEvent, busy, markProviderAvailability, providerWorkspaceConfig.providers, workspaceRoot]);
+  }, [appendSystemEvent, busy, workspaceRoot]);
 
   const setWorkspaceDefaultProviderWithNotice = useCallback((providerId: ProviderId) => {
     const provider = findProvider(providerRegistry, providerId);
@@ -2658,7 +2712,7 @@ export function App({ launchArgs }: AppProps) {
     }
   }, [activeRouteProvider, appendErrorEvent, appendSystemEvent, model, providerRegistry, providerWorkspaceConfig, workspaceRoot]);
 
-  const handleProviderAction = useCallback((providerId: ProviderId, action: ProviderPickerAction) => {
+  const handleProviderAction = useCallback((providerId: ProviderId, action: ProviderPickerAction, selectedLocalBackend?: LocalBackendId) => {
     if (action === "cancel") {
       modelPickerOpenRef.current = false;
       setScreen("main");
@@ -2690,9 +2744,12 @@ export function App({ launchArgs }: AppProps) {
       }
 
       if (providerId === "local") {
-        appendSystemEvent("Model discovery", "Refreshing LM Studio metadata...");
-        markProviderAvailability("local", "checking", "use-in-codexa");
-        void checkLocalProvider({ override: providerWorkspaceConfig.providers?.local }).then((validation) => {
+        const localBackend = selectedLocalBackend ?? providerWorkspaceConfig.providers?.local?.localBackend ?? "lm-studio";
+        if (localBackendCheckInFlightRef.current.has(localBackend)) return;
+        const preferredConfig = setLocalBackendPreference(providerWorkspaceConfig, localBackend);
+        saveProviderWorkspaceConfig(workspaceRoot, preferredConfig);
+        setProviderWorkspaceConfig(preferredConfig);
+        void probeLocalBackend(localBackend).then((validation) => {
           if (!isMountedRef.current) return;
           if (validation.diagnostics) {
             providerDiagnosticsRef.current["local"] = validation.diagnostics as Record<string, string | number | boolean | null>;
@@ -2700,7 +2757,6 @@ export function App({ launchArgs }: AppProps) {
           if (validation.status !== "ready") {
             const message = validation.message ?? "Local provider unavailable.";
             providerRouteErrorsRef.current["local"] = message;
-            appendSystemEvent("Provider route unavailable", message);
             setRegistryNonce((n) => n + 1);
             return;
           }
@@ -2716,11 +2772,10 @@ export function App({ launchArgs }: AppProps) {
             selectedModel as AvailableModel,
             (providerWorkspaceConfig.providers?.local?.currentReasoning ?? activeProviderRoute.reasoning ?? reasoningLevel) as ReasoningLevel,
             "local",
+            undefined,
+            localBackend,
           );
-        }).catch((error) => {
-          if (!isMountedRef.current) return;
-          appendErrorEvent("Local refresh failed", error instanceof Error ? error.message : String(error));
-        });
+        }).catch(() => undefined);
         return;
       }
 
@@ -2963,6 +3018,7 @@ export function App({ launchArgs }: AppProps) {
     effectiveMouseCapture,
     ensureProviderModels,
     providerRegistry,
+    probeLocalBackend,
     providerWorkspaceConfig.providers,
     markProviderAvailability,
     modelCapabilities,
@@ -5196,6 +5252,11 @@ export function App({ launchArgs }: AppProps) {
                 layout={terminalLayout}
                 providers={providerRegistry}
                 onAction={handleProviderAction}
+                activeLocalBackend={providerWorkspaceConfig.activeRoute?.providerId === "local"
+                  ? providerWorkspaceConfig.activeRoute.localBackend ?? "lm-studio"
+                  : providerWorkspaceConfig.providers?.local?.localBackend ?? "lm-studio"}
+                localBackendStatuses={localBackendStatuses}
+                onLocalBackendsOpen={probeLocalBackends}
                 onCancel={() => {
                   modelPickerOpenRef.current = false;
                   setPendingRouteProviderId(null);
