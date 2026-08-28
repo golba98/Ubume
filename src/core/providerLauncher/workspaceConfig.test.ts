@@ -558,13 +558,56 @@ test("setProviderActiveRoute persists Local routes after endpoint discovery", as
       providerId: "local",
       modelId: "google/gemma-4-26b-a4b",
       backendKind: "local-openai-compatible",
+      localBackend: "lm-studio",
     });
 
     assert.deepEqual(config.activeRoute, {
       providerId: "local",
       modelId: "google/gemma-4-26b-a4b",
       backendKind: "local-openai-compatible",
+      localBackend: "lm-studio",
     });
+  } finally {
+    resetLocalProviderStateForTests();
+  }
+});
+
+test("Local active route backend overrides and repairs a stale provider preference", () => {
+  const parsed = parseProviderWorkspaceConfig({
+    activeRoute: {
+      providerId: "local",
+      modelId: "Qwen3.8-27B-UD-Q3_K_XL",
+      backendKind: "local-openai-compatible",
+      localBackend: "unsloth",
+    },
+    providers: {
+      local: { local_backend: "lm-studio" },
+    },
+  });
+
+  assert.equal(parsed.activeRoute?.localBackend, "unsloth");
+  assert.equal(parsed.providers?.local?.localBackend, "unsloth");
+});
+
+test("setProviderActiveRoute synchronizes the Local provider preference", async () => {
+  resetLocalProviderStateForTests();
+  try {
+    await checkLocalProvider({
+      fetchImpl: (async (input) => String(input).includes("/api/v0/")
+        ? new Response(null, { status: 404 })
+        : new Response(JSON.stringify({ data: [{ id: "Qwen3.8-27B-UD-Q3_K_XL" }] }), { status: 200 })) as typeof fetch,
+    });
+    const config = setProviderActiveRoute({
+      providers: { local: { localBackend: "lm-studio" } },
+    }, {
+      providerId: "local",
+      modelId: "Qwen3.8-27B-UD-Q3_K_XL",
+      backendKind: "local-openai-compatible",
+      localBackend: "unsloth",
+    });
+
+    assert.equal(config.activeRoute?.localBackend, "unsloth");
+    assert.equal(config.providers?.local?.localBackend, "unsloth");
   } finally {
     resetLocalProviderStateForTests();
   }

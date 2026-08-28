@@ -67,6 +67,8 @@ async function withLocalEnv<T>(
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
     OPENAI_API_BASE: process.env.OPENAI_API_BASE,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    UNSLOTH_STUDIO_URL: process.env.UNSLOTH_STUDIO_URL,
+    UNSLOTH_API_KEY: process.env.UNSLOTH_API_KEY,
   };
 
   try {
@@ -1137,5 +1139,80 @@ test("runLocalDiagnostics shows LM Studio metadata fields when available", async
     assert.match(diagnostics, /Active context limit: 64,000/);
     assert.match(diagnostics, /Source: lmstudio-api/);
     assert.match(diagnostics, /Field: loaded_context_length/);
+  });
+});
+
+test("Unsloth discovers only loaded models and merges inference status", async () => {
+  await withLocalEnv({
+    UNSLOTH_STUDIO_URL: "http://127.0.0.1:8888",
+    UNSLOTH_API_KEY: "test-unsloth-key",
+  }, async () => {
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer test-unsloth-key");
+      if (url.endsWith("/v1/models")) {
+        return jsonResponse({ data: [
+          { id: "loaded-qwen", loaded: true },
+          { id: "downloaded-only", loaded: false },
+        ] });
+      }
+      if (url.endsWith("/api/inference/status")) {
+        return jsonResponse({
+          active_model: "loaded-qwen",
+          context_length: 32768,
+          max_context_length: 131072,
+          supports_tools: true,
+        });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    const validation = await checkLocalProvider({ localBackend: "unsloth", fetchImpl });
+    assert.equal(validation.status, "ready");
+    assert.equal(validation.diagnostics?.selectedModel, "loaded-qwen");
+    const discovery = discoverLocalModels({ localBackend: "unsloth" }, "unsloth");
+    assert.deepEqual(discovery.models.map((model) => model.modelId), ["loaded-qwen"]);
+    assert.equal((discovery.models[0]?.raw as Record<string, unknown>).context_length, 32768);
+    assert.equal((discovery.models[0]?.raw as Record<string, unknown>).supports_tool_calls, true);
+  });
+});
+
+test("an explicit Unsloth route wins over a stale LM Studio workspace preference", async () => {
+  await withLocalEnv({
+    UNSLOTH_STUDIO_URL: "http://127.0.0.1:8888",
+    UNSLOTH_API_KEY: "test-unsloth-key",
+  }, async () => {
+    const requestedUrls: string[] = [];
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requestedUrls.push(url);
+      if (url.endsWith("/v1/models")) {
+        return jsonResponse({ data: [{ id: "loaded-qwen", loaded: true }] });
+      }
+      if (url.endsWith("/api/inference/status")) {
+        return jsonResponse({ active_model: "loaded-qwen", supports_tools: false });
+      }
+      if (url.endsWith("/v1/chat/completions")) {
+        return jsonResponse({ choices: [{ message: { content: "Unsloth route works" } }] });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    const response = await runLocalOpenAiCompatible(buildRequest({
+      route: {
+        providerId: "local",
+        modelId: "loaded-qwen",
+        backendKind: "local-openai-compatible",
+        localBackend: "unsloth",
+      },
+      localConfig: {
+        localBackend: "lm-studio",
+        baseUrl: "http://localhost:1234/v1",
+      },
+    }), { onResponse: () => undefined, onError: () => undefined }, { fetchImpl });
+
+    assert.equal(response, "Unsloth route works");
+    assert.ok(requestedUrls.some((url) => url === "http://127.0.0.1:8888/v1/chat/completions"));
+    assert.ok(requestedUrls.every((url) => !url.startsWith("http://localhost:1234")));
   });
 });

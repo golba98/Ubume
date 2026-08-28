@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Text, useFocus, useInput } from "ink";
-import type { ProviderConfig, ProviderId, ProviderPickerAction } from "../../core/providerLauncher/types.js";
+import type { LocalBackendId, ProviderConfig, ProviderId, ProviderPickerAction } from "../../core/providerLauncher/types.js";
 import { traceInputDebug } from "../../core/debug/inputDebug.js";
 import { FOCUS_IDS } from "../input/focus.js";
 import {
@@ -20,13 +20,21 @@ import { useTheme } from "../theme.js";
 
 // ─── Types & helpers ─────────────────────────────────────────────────────────
 
+export interface LocalBackendStatus {
+  state: "idle" | "checking" | "ready" | "no-model" | "not-running" | "auth-required";
+  label: string;
+}
+
 interface ProviderPickerProps {
   layout?: Layout;
   providers: readonly ProviderConfig[];
-  onAction: (providerId: ProviderId, action: ProviderPickerAction) => void;
+  onAction: (providerId: ProviderId, action: ProviderPickerAction, localBackend?: LocalBackendId) => void;
   onCancel: () => void;
   /** When set, the picker mounts directly at this provider's action panel. */
   initialProviderId?: ProviderId;
+  activeLocalBackend?: LocalBackendId;
+  localBackendStatuses?: Partial<Record<LocalBackendId, LocalBackendStatus>>;
+  onLocalBackendsOpen?: () => void;
   availableRows?: number;
   activePanelLayout?: ActivePanelLayout;
   panelLayout?: PanelLayout;
@@ -38,7 +46,7 @@ interface ProviderActionItem {
   disabledReason?: string | null;
 }
 
-type ProviderPickerMode = "providers" | "codexa-native-models";
+type ProviderPickerMode = "providers" | "codexa-native-models" | "local-backends";
 
 const CODEXA_NATIVE_PROVIDER_IDS = new Set<ProviderId>(["codexa-native", "codexa-cupy"]);
 
@@ -125,6 +133,9 @@ export function ProviderPicker({
   onAction,
   onCancel,
   initialProviderId,
+  activeLocalBackend = "lm-studio",
+  localBackendStatuses = {},
+  onLocalBackendsOpen = () => undefined,
   availableRows: propAvailableRows,
   activePanelLayout,
   panelLayout,
@@ -134,6 +145,14 @@ export function ProviderPicker({
   const { isFocused } = useFocus({ id: FOCUS_IDS.providerPicker, autoFocus: true });
   const groupedProviders = useMemo(() => groupCodexaNativeProviders(providers), [providers]);
   const codexaNativeModels = useMemo(() => getCodexaNativeModelProviders(providers), [providers]);
+  const localBackends = useMemo<ProviderConfig[]>(() => {
+    const local = providers.find((provider) => provider.id === "local");
+    if (!local) return [];
+    return [
+      { ...local, displayName: "LM Studio", currentModel: activeLocalBackend === "lm-studio" ? local.currentModel : "Local server" },
+      { ...local, displayName: "Unsloth", currentModel: activeLocalBackend === "unsloth" ? local.currentModel : "Studio server" },
+    ];
+  }, [activeLocalBackend, providers]);
   const initialIndex = initialProviderId
     ? Math.max(0, groupedProviders.findIndex((provider) =>
         initialProviderId === "codexa-cupy"
@@ -144,7 +163,10 @@ export function ProviderPicker({
   const [mode, setMode] = useState<ProviderPickerMode>("providers");
   const [scrollOffset, setScrollOffset] = useState(0);
 
-  const pickerProviders = mode === "codexa-native-models" ? codexaNativeModels : groupedProviders;
+  const pickerProviders = mode === "codexa-native-models"
+    ? codexaNativeModels
+    : mode === "local-backends" ? localBackends : groupedProviders;
+  const selectedLocalBackend: LocalBackendId = providerIndex === 1 ? "unsloth" : "lm-studio";
 
   const contextLayout = useActivePanelLayout();
   const activeLayout = (activePanelLayout ?? contextLayout) as ActivePanelLayout | undefined;
@@ -211,6 +233,7 @@ export function ProviderPicker({
 
   const helpText = mode === "codexa-native-models"
     ? "Enter use · Esc back"
+    : mode === "local-backends" ? "Enter use · Esc back"
     : "Enter use · Esc close";
 
   const openCodexaNativeModels = () => {
@@ -218,6 +241,13 @@ export function ProviderPicker({
     setMode("codexa-native-models");
     setProviderIndex(Math.max(0, selectedNativeIndex));
     setScrollOffset(0);
+  };
+
+  const openLocalBackends = () => {
+    setMode("local-backends");
+    setProviderIndex(activeLocalBackend === "unsloth" ? 1 : 0);
+    setScrollOffset(0);
+    onLocalBackendsOpen();
   };
 
   const actions = useMemo<ProviderActionItem[]>(() => {
@@ -258,8 +288,8 @@ export function ProviderPicker({
     }
 
     if (key.escape) {
-      if (mode === "codexa-native-models") {
-        const groupedIndex = groupedProviders.findIndex((provider) => provider.id === "codexa-native");
+      if (mode === "codexa-native-models" || mode === "local-backends") {
+        const groupedIndex = groupedProviders.findIndex((provider) => provider.id === (mode === "local-backends" ? "local" : "codexa-native"));
         setMode("providers");
         setProviderIndex(Math.max(0, groupedIndex));
         setScrollOffset(0);
@@ -269,7 +299,7 @@ export function ProviderPicker({
       return;
     }
 
-    if (mode === "providers" || mode === "codexa-native-models") {
+    if (mode === "providers" || mode === "codexa-native-models" || mode === "local-backends") {
       if (key.home) {
         setProviderIndex(0);
         return;
@@ -299,7 +329,11 @@ export function ProviderPicker({
           openCodexaNativeModels();
           return;
         }
-        onAction(selectedProvider.id, "use-in-codexa");
+        if (mode === "providers" && selectedProvider.id === "local" && localBackends.length > 0) {
+          openLocalBackends();
+          return;
+        }
+        onAction(selectedProvider.id, "use-in-codexa", mode === "local-backends" ? selectedLocalBackend : undefined);
         return;
       }
       if (input.toLowerCase() === "s" && selectedProvider) {
@@ -315,7 +349,11 @@ export function ProviderPicker({
           openCodexaNativeModels();
           return;
         }
-        onAction(selectedProvider.id, "use-in-codexa");
+        if (mode === "providers" && selectedProvider.id === "local" && localBackends.length > 0) {
+          openLocalBackends();
+          return;
+        }
+        onAction(selectedProvider.id, "use-in-codexa", mode === "local-backends" ? selectedLocalBackend : undefined);
       }
       return;
     }
@@ -379,20 +417,26 @@ export function ProviderPicker({
   }, [pickerProviders, windowResult]);
 
   const titleText = (windowResult?.showRange)
-      ? `${mode === "codexa-native-models" ? "Codexa Native Models" : "Providers"} · ${windowResult.selectedIndex + 1}/${pickerProviders.length}`
-      : mode === "codexa-native-models" ? "Codexa Native Models" : "Providers";
+      ? `${mode === "codexa-native-models" ? "Codexa Native Models" : mode === "local-backends" ? "Local Backends" : "Providers"} · ${windowResult.selectedIndex + 1}/${pickerProviders.length}`
+      : mode === "codexa-native-models" ? "Codexa Native Models" : mode === "local-backends" ? "Local Backends" : "Providers";
   const showCurrent = false;
 
   const body = useMemo(() => {
     return visibleProviders.map((provider, index) => (
       <ProviderRowSimple
-        key={provider.id}
+        key={`${mode}-${provider.id}-${provider.displayName}`}
         provider={provider}
         isHighlighted={(windowResult!.start + index) === providerIndex}
         width={innerWidth}
+        secondaryText={mode === "local-backends"
+          ? localBackendStatuses[windowResult!.start + index === 1 ? "unsloth" : "lm-studio"]?.label ?? "Checking…"
+          : undefined}
+        secondaryState={mode === "local-backends"
+          ? localBackendStatuses[windowResult!.start + index === 1 ? "unsloth" : "lm-studio"]?.state
+          : undefined}
       />
     ));
-  }, [innerWidth, providerIndex, visibleProviders, windowResult?.start]);
+  }, [innerWidth, localBackendStatuses, mode, providerIndex, visibleProviders, windowResult?.start]);
 
   const showBorder = windowResult?.showBorder ?? true;
 
@@ -418,7 +462,7 @@ export function ProviderPicker({
         {!(windowResult?.showTitle ?? true) && windowResult?.showRange && (
           <Box width="100%" overflow="hidden" flexShrink={0}>
             <Text color={theme.accent}>
-              {mode === "codexa-native-models" ? "Codexa Native Models" : "Providers"} · {windowResult.selectedIndex + 1}/{pickerProviders.length}
+              {mode === "codexa-native-models" ? "Codexa Native Models" : mode === "local-backends" ? "Local Backends" : "Providers"} · {windowResult.selectedIndex + 1}/{pickerProviders.length}
             </Text>
           </Box>
         )}
@@ -577,10 +621,14 @@ function ProviderRowCompact({
 function ProviderRowSimple({
   provider,
   isHighlighted,
+  secondaryText,
+  secondaryState,
 }: {
   provider: ProviderConfig;
   isHighlighted: boolean;
   width: number;
+  secondaryText?: string;
+  secondaryState?: LocalBackendStatus["state"];
 }) {
   const theme = useTheme();
   const markerWidth = 2;
@@ -594,6 +642,11 @@ function ProviderRowSimple({
         <Text color={isHighlighted ? theme.text : theme.textMuted} bold={isHighlighted}>
           {provider.displayName}
         </Text>
+        {secondaryText && (
+          <Text color={secondaryState === "ready" ? theme.success : secondaryState === "checking" ? theme.accent : theme.textDim}>
+            {` — ${secondaryText}`}
+          </Text>
+        )}
       </Box>
     </Box>
   );

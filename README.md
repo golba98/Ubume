@@ -29,7 +29,7 @@ Codexa can use these routes:
 | Anthropic / Claude | Install and authenticate the `claude` CLI. |
 | Mistral Vibe | Install and authenticate the `vibe` CLI. |
 | Antigravity | Install and authenticate the `agy` CLI. |
-| Local model | Start an OpenAI-compatible server, such as LM Studio. |
+| Local model | Open Local, choose LM Studio or Unsloth, and use a model loaded in that server. |
 | Codexa Native | Available only from the local `codexa-dev` channel. |
 
 Credentials remain with the provider CLI or local server.

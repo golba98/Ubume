@@ -193,7 +193,7 @@ Provider truthfulness is an invariant: selectable routes must match actual `rout
 
 ### Local OpenAI-compatible model profiles
 
-The `local` runtime owns compatibility for models served by LM Studio, Ollama, and similar OpenAI-compatible servers. Model-family detection is part of the capability profile rather than provider registration, so DeepSeek-family models remain Local routes and never become a separate provider.
+The `local` runtime owns compatibility for models served by LM Studio and Unsloth Studio through their OpenAI-compatible APIs. The provider picker keeps Local as one top-level route and opens a backend child page for LM Studio and Unsloth. The selected backend is stored per workspace and in conversation metadata. Unsloth discovery accepts only models marked as loaded and authenticates with `UNSLOTH_API_KEY` or a same-user agent key after verifying the loopback server identity. Model-family detection remains part of the capability profile rather than provider registration, so DeepSeek-family models remain Local routes and never become a separate provider.
 
 Local capability fields resolve independently: authoritative server metadata wins, explicit per-model configuration fills missing fields, detected-family defaults fill only remaining compatibility gaps, and unknown models retain the generic Local behavior. Context length remains owned by the separate context-metadata resolver, and detected families do not invent context or output-token limits.
 

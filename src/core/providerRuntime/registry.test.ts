@@ -131,8 +131,29 @@ test("active route resolution preserves routable local routes", async () => {
     providerId: "local",
     modelId: "llama-local",
     backendKind: "local-openai-compatible",
+    localBackend: "lm-studio",
   });
   resetLocalProviderStateForTests();
+});
+
+test("active route resolution preserves an explicit Unsloth backend", () => {
+  const route = resolveActiveProviderRoute({
+    workspaceConfigActiveRoute: {
+      providerId: "local",
+      modelId: "Qwen3.8-27B-UD-Q3_K_XL",
+      backendKind: "local-openai-compatible",
+      localBackend: "unsloth",
+    },
+    currentModel: "gpt-5.4",
+    currentReasoning: "low",
+  });
+
+  assert.deepEqual(route, {
+    providerId: "local",
+    modelId: "Qwen3.8-27B-UD-Q3_K_XL",
+    backendKind: "local-openai-compatible",
+    localBackend: "unsloth",
+  });
 });
 
 // ─── CLI --model override precedence ─────────────────────────────────────────

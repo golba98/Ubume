@@ -3,7 +3,7 @@ import type { ProjectInstructions } from "../workspace/projectInstructions.js";
 import type { BackendRunHandlers } from "../providers/types.js";
 import type { ResolvedRuntimeConfig } from "../../config/runtimeConfig.js";
 export type { ResolvedRuntimeConfig };
-import type { ProviderId } from "../providerLauncher/types.js";
+import type { LocalBackendId, ProviderId } from "../providerLauncher/types.js";
 import type { ProviderWorkspaceOverride } from "../providerLauncher/types.js";
 import type { ConversationMessage } from "../workspace/conversationStore.js";
 
@@ -46,6 +46,7 @@ export interface ProviderModelDiscoveryResult {
   models: readonly ProviderModel[];
   message?: string;
   diagnostics?: Record<string, string | number | boolean | null>;
+  localBackend?: LocalBackendId;
 }
 
 export type GeminiModelFamily = "gemini-3" | "gemini-2.5";
@@ -60,6 +61,7 @@ export interface ProviderRoute {
   backendKind: ProviderBackendKind;
   reasoning?: string;
   modelSelection?: GeminiModelSelection;
+  localBackend?: LocalBackendId;
 }
 
 export type ActiveProviderRoute = ProviderRoute;
@@ -71,6 +73,7 @@ export interface ProviderRouteValidationRequest {
   claudeCommandPath?: string | null;
   antigravityCommandPath?: string | null;
   localConfig?: ProviderWorkspaceOverride | null;
+  localBackend?: LocalBackendId;
 }
 
 export interface ProviderRouteValidationResult {
@@ -109,6 +112,6 @@ export interface ProviderRuntime {
   isRouteConfigured?: () => boolean;
   validateRoute?: (request: ProviderRouteValidationRequest) => Promise<ProviderRouteValidationResult>;
   discoverModels: () => ProviderModelDiscoveryResult;
-  refreshModels?: (options: { cwd: string; localConfig?: ProviderWorkspaceOverride | null }) => Promise<ProviderModelDiscoveryResult>;
+  refreshModels?: (options: { cwd: string; localConfig?: ProviderWorkspaceOverride | null; localBackend?: LocalBackendId }) => Promise<ProviderModelDiscoveryResult>;
   run?: (request: ProviderChatRequest, handlers: BackendRunHandlers) => () => void;
 }
