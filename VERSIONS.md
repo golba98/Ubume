@@ -3,6 +3,13 @@
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
 
+## v1.0.18 — 2026-08-28
+
+Codexa now supports Unsloth Studio as a selectable Local backend. It discovers
+loaded Unsloth models, routes inference through the OpenAI-compatible Studio
+endpoint, persists the selected Local backend per workspace, and shows
+independent backend diagnostics in the provider picker.
+
 ## v1.0.17 — 2026-08-24
 
 Codexa now supports native OpenAI-compatible tool calls for verified Local
