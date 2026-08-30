@@ -20,6 +20,18 @@ export interface ConversationMessage {
   content: string;
 }
 
+export interface ConversationContextCheckpoint {
+  version: 1;
+  modelId: string;
+  contextLength: number | null;
+  throughMessageCount: number;
+  transcriptHash: string;
+  summary: string;
+  activeWindowChars?: number;
+  responseCharsCovered?: number;
+  updatedAt: string;
+}
+
 export interface ConversationMetadata {
   version: 1;
   id: string;
@@ -31,6 +43,7 @@ export interface ConversationMetadata {
   backendKind: ProviderBackendKind | string | null;
   reasoning?: string;
   localBackend?: LocalBackendId;
+  localContextCheckpoint?: ConversationContextCheckpoint;
   messageCount: number;
 }
 
@@ -56,6 +69,45 @@ function safeString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function parseContextCheckpoint(value: unknown): ConversationContextCheckpoint | null {
+  if (!isRecord(value) || value.version !== 1) return null;
+  const modelId = safeString(value.modelId);
+  const transcriptHash = safeString(value.transcriptHash);
+  const summary = safeString(value.summary);
+  const updatedAt = safeString(value.updatedAt);
+  const contextLength = value.contextLength === null
+    ? null
+    : isNonNegativeInteger(value.contextLength) && value.contextLength > 0
+      ? value.contextLength
+      : undefined;
+  if (
+    !modelId
+    || contextLength === undefined
+    || !isNonNegativeInteger(value.throughMessageCount)
+    || !transcriptHash
+    || !summary
+    || !updatedAt
+    || (value.activeWindowChars !== undefined && !isNonNegativeInteger(value.activeWindowChars))
+    || (value.responseCharsCovered !== undefined && !isNonNegativeInteger(value.responseCharsCovered))
+  ) return null;
+
+  return {
+    version: 1,
+    modelId,
+    contextLength,
+    throughMessageCount: value.throughMessageCount,
+    transcriptHash,
+    summary,
+    ...(value.activeWindowChars === undefined ? {} : { activeWindowChars: value.activeWindowChars }),
+    ...(value.responseCharsCovered === undefined ? {} : { responseCharsCovered: value.responseCharsCovered }),
+    updatedAt,
+  };
+}
+
 function parseMessages(value: unknown): ConversationMessage[] | null {
   if (!Array.isArray(value)) return null;
   const messages: ConversationMessage[] = [];
@@ -79,6 +131,7 @@ function parseMetadata(value: unknown, fallbackId: string): ConversationMetadata
   const messageCount = typeof value.messageCount === "number" && Number.isInteger(value.messageCount)
     ? Math.max(0, value.messageCount)
     : 0;
+  const localContextCheckpoint = parseContextCheckpoint(value.localContextCheckpoint);
   return {
     version: 1,
     id,
@@ -90,6 +143,7 @@ function parseMetadata(value: unknown, fallbackId: string): ConversationMetadata
     backendKind: typeof value.backendKind === "string" ? value.backendKind : null,
     ...(typeof value.reasoning === "string" && value.reasoning.trim() ? { reasoning: value.reasoning } : {}),
     ...(value.localBackend === "lm-studio" || value.localBackend === "unsloth" ? { localBackend: value.localBackend } : {}),
+    ...(localContextCheckpoint ? { localContextCheckpoint } : {}),
     messageCount,
   };
 }

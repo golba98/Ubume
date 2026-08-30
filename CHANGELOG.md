@@ -6,6 +6,41 @@ No changes yet.
 
 ---
 
+## [1.0.19] — 2026-08-30 — Reliable Local Workflows
+
+### Added
+
+- **Local conversations roll over context without losing task continuity** —
+  long-running sessions create a persisted semantic checkpoint before moving
+  older transcript content out of the active request window.
+- **Local streaming diagnostics are available on demand** — privacy-aware,
+  environment-gated traces help diagnose LM Studio, Unsloth, and Codexa Native
+  response streams without recording response text by default.
+
+### Fixed
+
+- **Local agents can finish workflows longer than ten tool calls** — progress
+  is bounded by completion, cancellation, or repeated unchanged results instead
+  of an arbitrary total-call limit, so explicitly requested commits, pushes,
+  and pull requests are not handed back as unfinished user commands.
+- **Restored Local models show their discovered context size** — startup model
+  discovery now refreshes the active route metadata even when the persisted
+  model ID did not change, replacing the temporary `Unknown` context label.
+- **Failed context rollovers cannot affect later token accounting** — transient
+  response coverage resets at each run boundary and stored checkpoints receive
+  strict validation when conversations are reopened.
+- **Runtime mode persistence is failure-tolerant** — filesystem errors no longer
+  escape into the terminal UI.
+
+### Maintenance
+
+- Simplified transcript rendering around native terminal scrollback and removed
+  obsolete mouse-capture, plan-review, and timeline-navigation code.
+- Added focused Local streaming, context rollover, agent-loop, persistence, and
+  terminal-render regression coverage.
+
+---
+
 ## [1.0.18] — 2026-08-28 — Unsloth Local Backend
 
 ### Added

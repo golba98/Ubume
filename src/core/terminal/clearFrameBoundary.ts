@@ -69,7 +69,6 @@ export interface ClearFrameBoundaryController {
     renderGeneration: number;
     transcriptCleared: boolean;
     lastFrameWasAuthoritative: boolean;
-    widthRepaintPending: boolean;
     overlayActive: boolean;
     logShadow: LogShadowState;
   };
@@ -90,34 +89,6 @@ interface CreateClearFrameBoundaryOptions {
    * (app.tsx passes a ref assigned during render).
    */
   isOverlayActive?: () => boolean;
-  /**
-   * Called synchronously whenever a width change requires the home/transcript
-   * content to be rebuilt. The physical clear is DEFERRED until the caller has
-   * re-rendered with a fresh <Static> instance: Ink's <Static> never re-emits
-   * items once flushed, so the boundary suppresses frames until a frame
-   * arrives that carries the re-flushed static content, then clears and writes
-   * that frame atomically. The caller must use this to force a fresh render
-   * with a new <Static> key so its content gets reflushed at the new width.
-   */
-  onWidthResizeRefresh?: () => void;
-  /**
-   * Reports the repaint generation of the committing render tree (the counter
-   * onWidthResizeRefresh bumps), read at frame-write time like isOverlayActive.
-   * Lets the boundary tell the genuine post-bump <Static> re-flush apart from
-   * an incremental pre-resize static chunk that happens to land while the
-   * repaint is pending — committing the latter would clear the scrollback and
-   * then write only that chunk, losing the rest of the transcript.
-   */
-  getRenderedRepaintGeneration?: () => number;
-  /**
-   * Reports the raw terminal column count the committing render tree was laid
-   * out against, read at frame-write time. The viewport hook commits new
-   * dimensions on a trailing settle (~100ms after the resize event), so the
-   * <Static> re-flush must not be requested until a commit whose layout
-   * already matches stdout.columns — remounting earlier would re-flush the
-   * transcript at the pre-resize width.
-   */
-  getRenderedLayoutCols?: () => number | undefined;
 }
 
 interface FrameMarkerCounts {
@@ -134,14 +105,6 @@ const LAUNCH_MODE = /Launch mode/g;
 const COMPOSER = /│ ❯/g;
 const FOOTER_CONTEXT = /Context:/g;
 const ANSI_SEQUENCE = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
-
-/**
- * Safety valve for the deferred width repaint: if the re-flushed static frame
- * never arrives (unexpected render stall), stop suppressing and commit the
- * next frame with whatever static content Ink has accumulated, so the UI can
- * never freeze behind the gate.
- */
-const WIDTH_REPAINT_MAX_SUPPRESSED_FRAMES = 8;
 
 function stableFrameHash(text: string): string {
   return createHash("sha1").update(text, "utf8").digest("hex").slice(0, 12);
@@ -304,9 +267,6 @@ export function createClearFrameBoundaryController({
   stdout,
   source = "src/core/terminal/clearFrameBoundary.ts",
   isOverlayActive,
-  onWidthResizeRefresh,
-  getRenderedRepaintGeneration,
-  getRenderedLayoutCols,
 }: CreateClearFrameBoundaryOptions): ClearFrameBoundaryController | null {
   const originalRenderInteractiveFrame = instance?.renderInteractiveFrame;
   if (!instance || typeof originalRenderInteractiveFrame !== "function") {
@@ -329,12 +289,6 @@ export function createClearFrameBoundaryController({
   let uiStateKind = "IDLE";
   let lastFrameWasAuthoritative = false;
   let suppressedPostClearStaticOutput = "";
-  // Deferred width repaint: armed when the terminal width changes under a
-  // main-screen frame, resolved when the re-flushed static frame arrives.
-  let widthRepaintPending = false;
-  let widthRepaintSuppressedFrames = 0;
-  let widthRepaintTargetGeneration: number | null = null;
-  let widthRepaintReflushRequested = false;
   // Alternate-screen overlay state. While an overlay is active, the normal
   // buffer's Ink caches are parked here so diffing can resume against the
   // buffer's true contents when the overlay exits (DECSET 1049 restores the
@@ -370,22 +324,6 @@ export function createClearFrameBoundaryController({
     if (fullStatic.endsWith(staticOutput)) {
       instance.fullStaticOutput = fullStatic.slice(0, fullStatic.length - staticOutput.length);
     }
-  };
-
-  const armWidthRepaint = (reason: string): void => {
-    widthRepaintPending = true;
-    widthRepaintSuppressedFrames = 0;
-    widthRepaintTargetGeneration = null;
-    // The <Static> re-flush is requested later, from the first suppressed
-    // frame whose committed layout already matches the new terminal width —
-    // requesting it here would remount <Static> against the pre-resize layout
-    // (the viewport hook commits dimensions on a trailing settle).
-    widthRepaintReflushRequested = false;
-    renderDebug.traceEvent("terminal", "widthRepaintArmed", {
-      source,
-      reason,
-      currentCols: stdout.columns,
-    });
   };
 
   const commitAuthoritativeFrame = (
@@ -435,7 +373,6 @@ export function createClearFrameBoundaryController({
         currentRows,
         widthChanged,
         clearPending,
-        widthRepaintPending,
         overlayActive,
         overlayNow,
       });
@@ -509,15 +446,6 @@ export function createClearFrameBoundaryController({
           pendingStaticLength: pendingStatic.length,
         });
 
-        if (saved && saved.cols !== currentCols) {
-          // The terminal was resized while the overlay was open; the restored
-          // normal buffer reflowed and is stale. Repaint it from scratch. The
-          // remounted <Static> re-emits everything held in React state, so the
-          // pending chunks are covered by the re-flush.
-          armWidthRepaint("overlayExitWidthChanged");
-          return;
-        }
-
         instance.fullStaticOutput = `${instance.fullStaticOutput ?? ""}${pendingStatic}`;
         boundOriginal(output, outputHeight, pendingStatic);
         return;
@@ -547,95 +475,6 @@ export function createClearFrameBoundaryController({
     const postClearReady = isPostClearFrameReady();
     const isFirstPostClearCommit = clearPending && postClearReady;
     const staleFrameSuppressed = clearPending && !postClearReady;
-
-    // ── Main screen: deferred width repaint ───────────────────────────────
-    // A width change reflows the previously-rendered frame; a diffed write
-    // would leave that reflowed frame stacked behind the new one — GNOME
-    // Terminal keeps it in scrollback on a grow and re-exposes it. But this
-    // frame was still built from React state that may predate the resize, and
-    // <Static> never re-emits flushed content on its own. So: suppress frames
-    // until the caller has re-rendered with a fresh <Static> (its re-flushed
-    // content arrives as staticOutput), then clear scrollback and write that
-    // frame atomically. Skip while a clear is pending: that path owns the next
-    // authoritative frame and already repaints from a clean baseline.
-    if (widthChanged && !clearPending && !widthRepaintPending) {
-      armWidthRepaint("widthChanged");
-    }
-
-    if (widthRepaintPending && !clearPending) {
-      widthRepaintSuppressedFrames += 1;
-
-      // Phase 1: wait for a commit whose layout matches the new terminal
-      // width (the viewport hook commits dimensions on a trailing settle),
-      // then request the <Static> re-flush exactly once.
-      const renderedLayoutCols = getRenderedLayoutCols?.();
-      const layoutReady = getRenderedLayoutCols === undefined
-        || renderedLayoutCols === currentCols;
-      if (!widthRepaintReflushRequested) {
-        if (layoutReady && widthRepaintSuppressedFrames <= WIDTH_REPAINT_MAX_SUPPRESSED_FRAMES) {
-          widthRepaintReflushRequested = true;
-          widthRepaintTargetGeneration = getRenderedRepaintGeneration
-            ? getRenderedRepaintGeneration() + 1
-            : null;
-          renderDebug.traceEvent("terminal", "widthRepaintReflushRequested", {
-            source,
-            currentCols,
-            suppressedFrames: widthRepaintSuppressedFrames,
-            targetGeneration: widthRepaintTargetGeneration,
-          });
-          onWidthResizeRefresh?.();
-          // This frame still carries the pre-remount static state; suppress it
-          // and commit the re-flushed frame the bump produces.
-          if (getRenderedRepaintGeneration !== undefined) {
-            return;
-          }
-        }
-      }
-
-      // Phase 2: commit the first frame that carries the re-flushed static
-      // content from the post-bump render.
-      const repaintGenerationRendered = widthRepaintTargetGeneration === null
-        || (getRenderedRepaintGeneration?.() ?? 0) >= widthRepaintTargetGeneration;
-      const repaintFrameReady = staticOutput !== ""
-        && repaintGenerationRendered
-        && widthRepaintReflushRequested;
-      if (repaintFrameReady) {
-        widthRepaintPending = false;
-        widthRepaintTargetGeneration = null;
-        widthRepaintReflushRequested = false;
-        commitAuthoritativeFrame(output, outputHeight, staticOutput, "transcript", "resizeRefresh");
-        renderDebug.traceEvent("terminal", "resizeRefreshCommitted", {
-          committedGeneration,
-          currentCols,
-          resizeRefreshConsumed: true,
-          ...countFrameMarkers(`${staticOutput}${output}`),
-        });
-        return;
-      }
-      if (widthRepaintSuppressedFrames <= WIDTH_REPAINT_MAX_SUPPRESSED_FRAMES) {
-        renderDebug.traceEvent("terminal", "widthRepaintFrameSuppressed", {
-          source,
-          suppressedFrames: widthRepaintSuppressedFrames,
-          currentCols,
-          layoutReady,
-          reflushRequested: widthRepaintReflushRequested,
-        });
-        return;
-      }
-      // Safety valve: never freeze the UI behind the gate. Repaint with the
-      // static content Ink has accumulated, even if it predates the resize.
-      widthRepaintPending = false;
-      widthRepaintTargetGeneration = null;
-      widthRepaintReflushRequested = false;
-      commitAuthoritativeFrame(
-        output,
-        outputHeight,
-        staticOutput || (instance.fullStaticOutput ?? ""),
-        "transcript",
-        "resizeRefreshFallback",
-      );
-      return;
-    }
 
     const frameClassification = isFirstPostClearCommit
       ? "post-clear"
@@ -746,9 +585,6 @@ export function createClearFrameBoundaryController({
       clearPending = true;
       pendingGeneration = generation;
       suppressedPostClearStaticOutput = "";
-      // The post-clear frame repaints from a physically cleared baseline, which
-      // supersedes any in-flight width repaint.
-      widthRepaintPending = false;
       renderDebug.traceEvent("terminal", "clearBoundaryBegin", {
         clearGeneration: generation,
         clearPending,
@@ -797,7 +633,6 @@ export function createClearFrameBoundaryController({
         renderGeneration,
         transcriptCleared,
         lastFrameWasAuthoritative,
-        widthRepaintPending,
         overlayActive,
         logShadow: { ...logShadow },
       };

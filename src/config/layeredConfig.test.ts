@@ -37,6 +37,7 @@ test("resolves user config, trusted project config, profiles, and CLI overrides 
       "profile = \"review\"",
       "[codexa]",
       "mode = \"suggest\"",
+      "plan_mode = true",
       "",
       "[profiles.review]",
       "approval_policy = \"never\"",
@@ -78,6 +79,7 @@ test("resolves user config, trusted project config, profiles, and CLI overrides 
     assert.equal(result.runtime.model, "gpt-5.4-mini");
     assert.equal(result.runtime.reasoningLevel, "high");
     assert.equal(result.runtime.mode, "full-auto");
+    assert.equal(result.runtime.planMode, true);
     assert.equal(result.runtime.policy.approvalPolicy, "never");
     assert.equal(result.runtime.policy.networkAccess, "enabled");
     assert.equal(result.runtime.policy.serviceTier, "fast");

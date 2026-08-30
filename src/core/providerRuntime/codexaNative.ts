@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { createHash } from "node:crypto";
 
 import { isLocalDevChannel } from "../version/channel.js";
 import type { BackendRunHandlers } from "../providers/types.js";
@@ -27,17 +28,20 @@ export interface CodexaNativeConfig {
   device: string;
 }
 
-interface BridgeResponse {
+export interface BridgeResponse {
   type: string;
   id?: string;
   text?: string;
   message?: string;
   device?: string;
   context_length?: number;
+  finish_reason?: string;
+  termination_cause?: string;
+  generated_tokens?: number;
 }
 
 interface PendingRequest {
-  resolve: (text: string) => void;
+  resolve: (response: BridgeResponse) => void;
   reject: (error: Error) => void;
 }
 
@@ -198,7 +202,7 @@ function startBridge(config: CodexaNativeConfig, handlers: BackendRunHandlers): 
     if (!request) return;
     pending.delete(response.id);
     if (response.type === "response" && typeof response.text === "string") {
-      request.resolve(response.text);
+      request.resolve(response);
     } else {
       request.reject(new Error(response.message || "Codexa Native returned an invalid response."));
     }
@@ -224,23 +228,144 @@ function startBridge(config: CodexaNativeConfig, handlers: BackendRunHandlers): 
   return nativeBridge;
 }
 
-async function sendPrompt(prompt: string, handlers: BackendRunHandlers): Promise<string> {
+async function sendPrompt(
+  prompt: string,
+  handlers: BackendRunHandlers,
+  announceReady = true,
+): Promise<BridgeResponse> {
   const config = resolveCodexaNativeConfig();
   const missing = missingNativePaths(config);
   if (missing.length > 0) throw new Error(`Codexa Native is missing required files:\n${missing.join("\n")}`);
   const nativeBridge = startBridge(config, handlers);
   const ready = await nativeBridge.ready;
-  handlers.onProgress?.({
-    id: "codexa-native-ready",
-    source: "stdout",
-    text: `Codexa Native loaded on ${ready.device ?? config.device}`,
-  });
+  if (announceReady) {
+    handlers.onProgress?.({
+      id: "codexa-native-ready",
+      source: "stdout",
+      text: `Codexa Native loaded on ${ready.device ?? config.device}`,
+    });
+  }
   const id = `native-${Date.now()}-${++requestSequence}`;
-  const response = new Promise<string>((resolve, reject) => {
+  const response = new Promise<BridgeResponse>((resolve, reject) => {
     nativeBridge.pending.set(id, { resolve, reject });
   });
   nativeBridge.child.stdin.write(`${JSON.stringify({ type: "chat", id, prompt: buildCodexaNativePrompt(prompt) })}\n`);
   return response;
+}
+
+const NATIVE_CONTEXT_LENGTH = 2048;
+const NATIVE_TRANSCRIPT_BUDGET_CHARS = 5_800;
+const NATIVE_EXACT_TAIL_CHARS = 1_200;
+
+function hashNativeTranscript(messages: readonly { role: string; content: string }[]): string {
+  return createHash("sha256").update(JSON.stringify(messages)).digest("hex");
+}
+
+export function stitchNativeContinuation(accumulated: string, next: string): string {
+  if (!accumulated) return next;
+  if (!next) return accumulated;
+  const maximum = Math.min(accumulated.length, next.length);
+  for (let overlap = maximum; overlap >= 4; overlap -= 1) {
+    if (accumulated.endsWith(next.slice(0, overlap))) return accumulated + next.slice(overlap);
+  }
+  return accumulated + next;
+}
+
+function nativeCheckpointPrompt(source: string): string {
+  return [
+    "Create a compact continuation checkpoint for another model window.",
+    "Preserve the user's goal, decisions, constraints, files, commands, results, errors, and unfinished work.",
+    "Do not answer the user. Return only a concise factual checkpoint.",
+    "",
+    source.slice(-NATIVE_TRANSCRIPT_BUDGET_CHARS),
+  ].join("\n");
+}
+
+function nativeContinuationPrompt(checkpoint: string, exactTail: string): string {
+  return [
+    "Continue the same assistant answer seamlessly in a fresh context window.",
+    "Do not mention context limits, checkpoints, continuation, or restate completed text.",
+    "",
+    "Conversation checkpoint:",
+    checkpoint,
+    "",
+    "Exact end of the answer already shown to the user:",
+    exactTail,
+    "",
+    "Continue immediately after that exact text:",
+  ].join("\n");
+}
+
+export async function runCodexaNativeRollover(options: {
+  request: ProviderChatRequest;
+  handlers: BackendRunHandlers;
+  send: (prompt: string, announceReady: boolean) => Promise<BridgeResponse>;
+}): Promise<string> {
+  const history = options.request.conversationHistory?.length
+    ? formatConversationHistory(options.request.conversationHistory)
+    : "";
+  const fullPrompt = history
+    ? `Previous conversation:\n${history}\n\nCurrent request:\n${options.request.prompt}`
+    : options.request.prompt;
+  const conversationHistory = options.request.conversationHistory ?? [];
+  const coveredMessages = [...conversationHistory, { role: "user", content: options.request.prompt }];
+  const transcriptHash = hashNativeTranscript(coveredMessages);
+  let checkpoint = options.request.localContextCheckpoint?.modelId === CODEXA_NATIVE_MODEL_ID
+    && options.request.localContextCheckpoint.throughMessageCount <= conversationHistory.length
+    && hashNativeTranscript(conversationHistory.slice(0, options.request.localContextCheckpoint.throughMessageCount))
+      === options.request.localContextCheckpoint.transcriptHash
+    ? options.request.localContextCheckpoint.summary
+    : "";
+  let prompt = fullPrompt;
+
+  if (fullPrompt.length > NATIVE_TRANSCRIPT_BUDGET_CHARS) {
+    if (!checkpoint) {
+      const summaryResponse = await options.send(nativeCheckpointPrompt(fullPrompt), false);
+      checkpoint = summaryResponse.text?.trim() || fullPrompt.slice(-NATIVE_EXACT_TAIL_CHARS);
+    }
+    options.handlers.onLocalContextCheckpoint?.({
+      version: 1,
+      modelId: CODEXA_NATIVE_MODEL_ID,
+      contextLength: NATIVE_CONTEXT_LENGTH,
+      throughMessageCount: coveredMessages.length,
+      transcriptHash,
+      summary: checkpoint,
+      activeWindowChars: checkpoint.length + Math.min(NATIVE_EXACT_TAIL_CHARS, fullPrompt.length),
+      responseCharsCovered: 0,
+      updatedAt: new Date().toISOString(),
+    });
+    prompt = nativeContinuationPrompt(checkpoint, fullPrompt.slice(-NATIVE_EXACT_TAIL_CHARS));
+  }
+
+  let accumulated = "";
+  let announceReady = true;
+  let emptyWindows = 0;
+  while (true) {
+    const response = await options.send(prompt, announceReady);
+    announceReady = false;
+    const text = response.text ?? "";
+    const previousLength = accumulated.length;
+    accumulated = stitchNativeContinuation(accumulated, text);
+    emptyWindows = accumulated.length === previousLength ? emptyWindows + 1 : 0;
+    if (response.finish_reason !== "length") return accumulated;
+    if (emptyWindows >= 2) return accumulated;
+
+    const summarySource = [checkpoint, fullPrompt, accumulated].filter(Boolean).join("\n\n");
+    const summaryResponse = await options.send(nativeCheckpointPrompt(summarySource), false);
+    checkpoint = summaryResponse.text?.trim() || summarySource.slice(-NATIVE_EXACT_TAIL_CHARS);
+    options.handlers.onLocalContextCheckpoint?.({
+      version: 1,
+      modelId: CODEXA_NATIVE_MODEL_ID,
+      contextLength: NATIVE_CONTEXT_LENGTH,
+      throughMessageCount: coveredMessages.length,
+      transcriptHash,
+      summary: checkpoint,
+      activeWindowChars: checkpoint.length + Math.min(NATIVE_EXACT_TAIL_CHARS, accumulated.length),
+      responseCharsCovered: accumulated.length,
+      updatedAt: new Date().toISOString(),
+    });
+    prompt = nativeContinuationPrompt(checkpoint, accumulated.slice(-NATIVE_EXACT_TAIL_CHARS));
+  }
 }
 
 export function resetCodexaNativeRuntimeForTests(): void {
@@ -277,10 +402,11 @@ export const codexaNativeRuntime: ProviderRuntime = {
       source: "stdout",
       text: bridge ? "Using loaded Codexa Native model" : "Loading Codexa Native checkpoint",
     });
-    const prompt = request.conversationHistory?.length
-      ? `Previous conversation:\n${formatConversationHistory(request.conversationHistory)}\n\nCurrent request:\n${request.prompt}`
-      : request.prompt;
-    sendPrompt(prompt, handlers)
+    runCodexaNativeRollover({
+      request,
+      handlers,
+      send: (prompt, announceReady) => sendPrompt(prompt, handlers, announceReady),
+    })
       .then((text) => {
         if (canceled) return;
         handlers.onAssistantDelta?.(text);

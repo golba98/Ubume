@@ -28,7 +28,6 @@ import * as renderDebug from "../../core/perf/renderDebug.js";
 import { AnimatedStatusText } from "./AnimatedStatusText.js";
 import { isAnimatedBusyState } from "./busyStatusAnimation.js";
 import { Spinner } from "./Spinner.js";
-import type { TerminalSelectionProfile } from "../../core/terminal/terminalSelection.js";
 import { getSlashCommandSuggestions, type CommandSuggestion } from "../input/slashCommands.js";
 import {
   createPastedContentToken,
@@ -138,7 +137,6 @@ interface BottomComposerProps {
   onQuit: () => void;
   activeProviderId?: string;
   externalCliStatus?: ExternalCliStatus;
-  selectionProfile?: TerminalSelectionProfile;
 }
 
 export interface BottomComposerMeasureParams {
@@ -429,7 +427,6 @@ export function BottomComposer({
   onQuit,
   activeProviderId = "",
   externalCliStatus,
-  selectionProfile,
 }: BottomComposerProps) {
   renderDebug.useRenderDebug("Composer", {
     cols: layout.cols,
@@ -594,7 +591,7 @@ export function BottomComposer({
 
   const rawStatusLine = getVisibleComposerStatusLine({ uiState, value, allowCommands, activeProviderId, runElapsedSeconds, externalCliStatus });
   const showStatusLine = rawStatusLine.length > 0;
-  const showTransientStatusRow = showStatusLine || inputLocked || !!selectionProfile;
+  const showTransientStatusRow = showStatusLine || inputLocked;
   const footerGapRows = getComposerToFooterGapRows(layout);
 
   const promptViewport = useMemo(
@@ -1033,11 +1030,6 @@ export function BottomComposer({
                 <Text color={theme.textDim}>Esc cancel  Ctrl+C quit</Text>
               </Box>
             )}
-            {!inputLocked && selectionProfile && (
-              <Box flexShrink={0}>
-                <Text color={theme.textDim}>{selectionProfile.shortHint}</Text>
-              </Box>
-            )}
           </>
         </Box>
       )}
@@ -1130,9 +1122,6 @@ export const MemoizedBottomComposer = memo(BottomComposer, (prev, next) => {
   if (prev.modelSpec?.status !== next.modelSpec?.status) return false;
   if (prev.modelSpec?.contextWindow !== next.modelSpec?.contextWindow) return false;
   
-  // Re-render if selection profile changes
-  if (prev.selectionProfile?.id !== next.selectionProfile?.id) return false;
-
   // Re-render if active provider changes (affects status line text)
   if (prev.activeProviderId !== next.activeProviderId) return false;
 

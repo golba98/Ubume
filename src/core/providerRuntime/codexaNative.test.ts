@@ -11,6 +11,8 @@ import {
   DEFAULT_CODEXA_NATIVE_MODEL_ROOT,
   discoverCodexaNativeModels,
   resolveCodexaNativeConfig,
+  runCodexaNativeRollover,
+  stitchNativeContinuation,
 } from "./codexaNative.js";
 
 test("Codexa Native prompt establishes Codexa identity", () => {
@@ -81,4 +83,51 @@ test("Codexa Native discovery exposes the direct PyTorch model in local-dev chan
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("Codexa Native stitches overlapping context-window continuations", () => {
+  assert.equal(stitchNativeContinuation("The answer is partly", "partly complete."), "The answer is partly complete.");
+});
+
+test("Codexa Native silently rolls over finish_reason=length", async () => {
+  const sent: boolean[] = [];
+  const checkpoints: string[] = [];
+  const responses = [
+    { type: "response", text: "The answer is partly", finish_reason: "length" },
+    { type: "response", text: "goal and unfinished answer", finish_reason: "stop" },
+    { type: "response", text: "partly complete.", finish_reason: "stop" },
+  ];
+  const result = await runCodexaNativeRollover({
+    request: { prompt: "Explain it" } as never,
+    handlers: {
+      onResponse: () => {},
+      onError: () => {},
+      onLocalContextCheckpoint: (checkpoint) => { checkpoints.push(checkpoint.summary); },
+    },
+    send: async (_prompt, announceReady) => {
+      sent.push(announceReady);
+      return responses.shift()!;
+    },
+  });
+  assert.equal(result, "The answer is partly complete.");
+  assert.deepEqual(sent, [true, false, false]);
+  assert.deepEqual(checkpoints, ["goal and unfinished answer"]);
+});
+
+test("Codexa Native crosses 20 length windows without a fixed rollover cap", async () => {
+  let answerCalls = 0;
+  const result = await runCodexaNativeRollover({
+    request: { prompt: "Long answer" } as never,
+    handlers: { onResponse: () => {}, onError: () => {} },
+    send: async (prompt) => {
+      if (prompt.includes("compact continuation checkpoint")) {
+        return { type: "response", text: `checkpoint ${answerCalls}`, finish_reason: "stop" };
+      }
+      answerCalls += 1;
+      return { type: "response", text: `window-${answerCalls} `, finish_reason: answerCalls <= 22 ? "length" : "stop" };
+    },
+  });
+  assert.equal(answerCalls, 23);
+  assert.match(result, /window-1/);
+  assert.match(result, /window-23/);
 });

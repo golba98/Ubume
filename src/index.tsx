@@ -159,6 +159,7 @@ export function startApp({
     reason: "startup-title",
     write: (chunk) => writeStdout(chunk, "src/index.tsx:startup.title"),
   });
+  terminal.setMouseReporting(false, "src/index.tsx:startup.nativeScroll");
   terminal.setBracketedPaste(true, "src/index.tsx:startup.bracketedPaste");
 
   let cleanupDone = false;

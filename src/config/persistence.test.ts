@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { mergeRuntimeIntoTomlConfig } from "./layeredConfig.js";
 import { DEFAULT_RUNTIME_CONFIG } from "./runtimeConfig.js";
@@ -7,7 +10,9 @@ import {
   getDefaultSettings,
   parseSettingsData,
   serializeSettings,
+  saveRuntimeModePreference,
 } from "./persistence.js";
+import { parseTomlDocument } from "./layeredConfig.js";
 
 test("extracts legacy flat runtime settings for migration", () => {
   const runtime = extractLegacyRuntime({
@@ -30,7 +35,6 @@ test("keeps UI and auth settings separate from runtime persistence", () => {
       workspaceDisplayMode: "simple" as const,
       terminalTitleMode: "name" as const,
       showBusyLoader: false,
-      terminalMouseMode: "selection" as const,
       customTheme: { text: "#fff" },
     },
     auth: {
@@ -59,7 +63,6 @@ test("keeps UI and auth settings separate from runtime persistence", () => {
   assert.equal(parsed.ui.workspaceDisplayMode, "simple");
   assert.equal(parsed.ui.terminalTitleMode, "name");
   assert.equal(parsed.ui.showBusyLoader, false);
-  assert.equal(parsed.ui.terminalMouseMode, "selection");
   assert.equal(parsed.auth.preference, "runner-managed");
 });
 
@@ -111,4 +114,40 @@ test("merges legacy runtime fields into TOML without overwriting existing values
     writable_roots: ["C:\\safe"],
   });
   assert.equal(merged.personality, "pragmatic");
+});
+
+test("persists Auto and Plan choices while preserving unrelated Codex config", () => {
+  const root = mkdtempSync(join(tmpdir(), "codexa-mode-"));
+  const previous = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = root;
+  try {
+    writeFileSync(join(root, "config.toml"), "model = \"kept-model\"\n[codexa]\nbackend = \"openai-native\"\n", "utf-8");
+    saveRuntimeModePreference("auto-edit", false);
+    let parsed = parseTomlDocument(readFileSync(join(root, "config.toml"), "utf-8"));
+    assert.equal(parsed.model, "kept-model");
+    assert.deepEqual(parsed.codexa, { backend: "openai-native", mode: "auto-edit", plan_mode: false });
+
+    saveRuntimeModePreference("auto-edit", true);
+    parsed = parseTomlDocument(readFileSync(join(root, "config.toml"), "utf-8"));
+    assert.equal((parsed.codexa as Record<string, unknown>).plan_mode, true);
+  } finally {
+    if (previous === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = previous;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("runtime mode persistence failures do not escape into the TUI", () => {
+  const root = mkdtempSync(join(tmpdir(), "codexa-mode-failure-"));
+  const previous = process.env.CODEX_HOME;
+  const blockedHome = join(root, "not-a-directory");
+  writeFileSync(blockedHome, "blocked", "utf-8");
+  process.env.CODEX_HOME = blockedHome;
+  try {
+    assert.doesNotThrow(() => saveRuntimeModePreference("full-auto", false));
+  } finally {
+    if (previous === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = previous;
+    rmSync(root, { recursive: true, force: true });
+  }
 });

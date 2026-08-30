@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { sanitizeTerminalOutput } from "../terminal/terminalSanitize.js";
 import { runAgentLoop, type AgentChatMessage, type AgentChatResponse } from "../agent/loop.js";
 import { agentToolDefinitions, parseOpenAiToolCallsDetailed } from "../agent/protocol.js";
@@ -14,6 +15,7 @@ import { resolveModelCapabilityProfileCached, clearModelCapabilityProfileCache }
 import { clearModelContextMetadataCache, resolveModelContextLengthCached } from "./contextMetadata.js";
 import { deriveLmStudioApiRoot, fetchLmStudioModels, type LmStudioModelInfo, type LmStudioModelList } from "./lmstudio.js";
 import { parseUnslothModels, resolveUnslothConnection } from "./unsloth.js";
+import { traceLocalStream } from "../debug/localStreamDebug.js";
 
 const DEFAULT_LOCAL_BASE_URL = "http://localhost:1234/v1";
 const DEFAULT_LOCAL_API_KEY = "lm-studio";
@@ -503,7 +505,10 @@ async function checkUnslothProvider(options: {
     } catch {}
     const activeModel = typeof status.active_model === "string" ? status.active_model : null;
     const loadedIds = loadedModels.map((model) => model.id);
-    const selectedModel = [config.pinnedModel, config.defaultModel, config.currentModel, activeModel, previous?.selectedModel, loadedIds[0]]
+    // A pin is an explicit user override. Otherwise Unsloth's active model is
+    // authoritative: persisted defaults describe the previous session and must
+    // not pull the route back after the user loads a different model in Studio.
+    const selectedModel = [config.pinnedModel, activeModel, config.currentModel, config.defaultModel, previous?.selectedModel, loadedIds[0]]
       .find((candidate): candidate is string => Boolean(candidate && loadedIds.includes(candidate))) ?? null;
     const models = loadedModels.map((model) => modelFromId(model.id, "discovered", {
       ...(isRecord(model.raw) ? model.raw : {}),
@@ -675,6 +680,12 @@ interface StreamingCompletionAccumulator {
   toolCalls: Map<number, StreamingToolCallAccumulator>;
   finishReasons: string[];
   malformedEventCount: number;
+  eventCount: number;
+  byteChunkCount: number;
+  receivedDone: boolean;
+  streamClosedNormally: boolean;
+  usage: unknown;
+  recognizedFields: Set<string>;
 }
 
 function appendStreamFragment(current: string, fragment: string): string {
@@ -693,50 +704,118 @@ function streamFragmentsCompatible(current: string | undefined, fragment: string
   return true;
 }
 
-function applyStreamDelta(line: string, accumulator: StreamingCompletionAccumulator): void {
-  const trimmed = line.trim();
-  if (!trimmed || !trimmed.startsWith("data:")) return;
-  const data = trimmed.slice("data:".length).trim();
-  if (!data || data === "[DONE]") return;
-  try {
-    const parsed = JSON.parse(data) as { choices?: unknown[] };
-    for (const rawChoice of parsed.choices ?? []) {
-      if (!isRecord(rawChoice)) continue;
-      if (typeof rawChoice.finish_reason === "string") accumulator.finishReasons.push(rawChoice.finish_reason);
-      const delta = isRecord(rawChoice.delta) ? rawChoice.delta : rawChoice;
-      accumulator.content += textFromContent(delta.content) || textFromContent(rawChoice.text);
-      accumulator.reasoningContent += textFromContent(delta.reasoning_content);
-      accumulator.reasoning += textFromContent(delta.reasoning);
-      accumulator.analysis += textFromContent(delta.analysis);
-      if (!Array.isArray(delta.tool_calls)) continue;
-      for (let position = 0; position < delta.tool_calls.length; position += 1) {
-        const rawCall = delta.tool_calls[position];
-        if (!isRecord(rawCall)) continue;
-        const explicitIndex = typeof rawCall.index === "number" ? rawCall.index : null;
-        const index = explicitIndex ?? position;
-        if (explicitIndex !== null && explicitIndex !== position && !accumulator.toolCalls.has(explicitIndex)) {
-          const provisional = accumulator.toolCalls.get(position);
-          if (provisional && streamFragmentsCompatible(provisional.id, typeof rawCall.id === "string" ? rawCall.id : undefined)) {
-            accumulator.toolCalls.delete(position);
-            accumulator.toolCalls.set(explicitIndex, provisional);
-          }
-        }
-        const current = accumulator.toolCalls.get(index) ?? { name: "", arguments: "" };
-        const fn = isRecord(rawCall.function) ? rawCall.function : null;
-        if (typeof rawCall.id === "string") current.id = appendStreamFragment(current.id ?? "", rawCall.id);
-        if (fn && typeof fn.name === "string") current.name = appendStreamFragment(current.name, fn.name);
-        if (fn && typeof fn.arguments === "string") current.arguments = appendStreamFragment(current.arguments, fn.arguments);
-        accumulator.toolCalls.set(index, current);
+function mergeStreamSnapshot(current: string, snapshot: string): string {
+  if (!snapshot || snapshot === current) return current;
+  if (!current || snapshot.startsWith(current)) return snapshot;
+  return `${current}${snapshot}`;
+}
+
+function applyToolCallFragments(
+  value: unknown,
+  accumulator: StreamingCompletionAccumulator,
+  mode: "delta" | "message",
+): void {
+  if (!Array.isArray(value)) return;
+  accumulator.recognizedFields.add(`${mode}.tool_calls`);
+  for (let position = 0; position < value.length; position += 1) {
+    const rawCall = value[position];
+    if (!isRecord(rawCall)) continue;
+    const explicitIndex = typeof rawCall.index === "number" ? rawCall.index : null;
+    const index = explicitIndex ?? position;
+    if (explicitIndex !== null && explicitIndex !== position && !accumulator.toolCalls.has(explicitIndex)) {
+      const provisional = accumulator.toolCalls.get(position);
+      if (provisional && streamFragmentsCompatible(provisional.id, typeof rawCall.id === "string" ? rawCall.id : undefined)) {
+        accumulator.toolCalls.delete(position);
+        accumulator.toolCalls.set(explicitIndex, provisional);
       }
     }
-  } catch {
-    accumulator.malformedEventCount += 1;
+    const current = accumulator.toolCalls.get(index) ?? { name: "", arguments: "" };
+    const fn = isRecord(rawCall.function) ? rawCall.function : null;
+    const merge = mode === "message" ? mergeStreamSnapshot : appendStreamFragment;
+    if (typeof rawCall.id === "string") current.id = merge(current.id ?? "", rawCall.id);
+    if (fn && typeof fn.name === "string") current.name = merge(current.name, fn.name);
+    if (fn && typeof fn.arguments === "string") current.arguments = merge(current.arguments, fn.arguments);
+    accumulator.toolCalls.set(index, current);
   }
 }
 
-async function readStreamingResponse(response: Response): Promise<AgentChatResponse> {
-  if (!response.body) return { text: "" };
-  const reader = response.body.getReader();
+function applyStreamPayload(data: string, accumulator: StreamingCompletionAccumulator): void {
+  if (!data) return;
+  if (data === "[DONE]") {
+    accumulator.receivedDone = true;
+    traceLocalStream("raw-local-stream-chunk", { raw: data });
+    return;
+  }
+  accumulator.eventCount += 1;
+  traceLocalStream("raw-local-stream-chunk", { raw: data });
+  try {
+    const parsed = JSON.parse(data) as { choices?: unknown[]; usage?: unknown };
+    if (parsed.usage !== undefined) accumulator.usage = parsed.usage;
+    const parsedSummary: Record<string, unknown>[] = [];
+    for (const rawChoice of parsed.choices ?? []) {
+      if (!isRecord(rawChoice)) continue;
+      if (typeof rawChoice.finish_reason === "string") accumulator.finishReasons.push(rawChoice.finish_reason);
+      const delta = isRecord(rawChoice.delta) ? rawChoice.delta : null;
+      const message = isRecord(rawChoice.message) ? rawChoice.message : null;
+      const contentSource = delta && delta.content !== undefined
+        ? { field: "delta.content", value: delta.content, mode: "delta" as const }
+        : message && message.content !== undefined
+          ? { field: "message.content", value: message.content, mode: "message" as const }
+          : { field: "choice.text", value: rawChoice.text, mode: "delta" as const };
+      const content = textFromContent(contentSource.value);
+      if (contentSource.value !== undefined) accumulator.recognizedFields.add(contentSource.field);
+      accumulator.content = contentSource.mode === "message"
+        ? mergeStreamSnapshot(accumulator.content, content)
+        : `${accumulator.content}${content}`;
+
+      const reasoningSource = [
+        ["delta.reasoning_content", delta?.reasoning_content],
+        ["delta.reasoning", delta?.reasoning],
+        ["delta.analysis", delta?.analysis],
+        ["message.reasoning_content", message?.reasoning_content],
+        ["message.reasoning", message?.reasoning],
+        ["message.analysis", message?.analysis],
+      ].find(([, value]) => value !== undefined);
+      if (reasoningSource) {
+        const [field, value] = reasoningSource;
+        accumulator.recognizedFields.add(String(field));
+        const text = textFromContent(value);
+        if (String(field).endsWith("reasoning_content")) accumulator.reasoningContent += text;
+        else if (String(field).endsWith("reasoning")) accumulator.reasoning += text;
+        else accumulator.analysis += text;
+      }
+      applyToolCallFragments(delta?.tool_calls, accumulator, "delta");
+      if (!Array.isArray(delta?.tool_calls)) applyToolCallFragments(message?.tool_calls, accumulator, "message");
+      parsedSummary.push({
+        content,
+        reasoning_content: textFromContent(delta?.reasoning_content ?? message?.reasoning_content),
+        reasoning: textFromContent(delta?.reasoning ?? message?.reasoning),
+        tool_calls: delta?.tool_calls ?? message?.tool_calls ?? null,
+        finish_reason: rawChoice.finish_reason ?? null,
+      });
+    }
+    traceLocalStream("parsed-local-stream-chunk", { choices: parsedSummary, usage: parsed.usage ?? null });
+  } catch {
+    accumulator.malformedEventCount += 1;
+    traceLocalStream("malformed-local-stream-chunk", { raw: data });
+  }
+}
+
+function applySseEvent(event: string, accumulator: StreamingCompletionAccumulator): void {
+  const data = event.split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice("data:".length).replace(/^ /, ""))
+    .join("\n")
+    .trim();
+  applyStreamPayload(data, accumulator);
+}
+
+interface StreamingLocalResponse extends AgentChatResponse {
+  diagnostics: StreamingCompletionAccumulator;
+  rawText: string;
+}
+
+async function readStreamingResponse(response: Response): Promise<StreamingLocalResponse> {
   const decoder = new TextDecoder();
   let buffer = "";
   const accumulated: StreamingCompletionAccumulator = {
@@ -747,18 +826,34 @@ async function readStreamingResponse(response: Response): Promise<AgentChatRespo
     toolCalls: new Map(),
     finishReasons: [],
     malformedEventCount: 0,
+    eventCount: 0,
+    byteChunkCount: 0,
+    receivedDone: false,
+    streamClosedNormally: false,
+    usage: null,
+    recognizedFields: new Set(),
   };
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      applyStreamDelta(line, accumulated);
+  if (!response.body) return { text: "", rawText: "", diagnostics: accumulated };
+  const reader = response.body.getReader();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        accumulated.streamClosedNormally = true;
+        break;
+      }
+      accumulated.byteChunkCount += 1;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split(/\r?\n\r?\n/);
+      buffer = events.pop() ?? "";
+      for (const event of events) applySseEvent(event, accumulated);
     }
+    buffer += decoder.decode();
+    if (buffer.trim()) applySseEvent(buffer, accumulated);
+  } catch (error) {
+    traceLocalStream("local-stream-read-error", { error: error instanceof Error ? error.message : String(error) });
+    throw error;
   }
-  applyStreamDelta(buffer, accumulated);
   const parsedToolCalls = [...accumulated.toolCalls.entries()]
     .sort(([left], [right]) => left - right)
     .flatMap(([, call]) => parseOpenAiToolCallsDetailed([{ id: call.id, type: "function", function: {
@@ -772,14 +867,53 @@ async function readStreamingResponse(response: Response): Promise<AgentChatRespo
   const reasoning = accumulated.reasoningContent || accumulated.reasoning || accumulated.analysis;
   return {
     text: accumulated.content.trim(),
+    rawText: accumulated.content,
     ...(reasoning.trim() ? { reasoning: reasoning.trim() } : {}),
     ...(toolCalls.length > 0 ? { toolCalls } : {}),
     ...(malformedToolCalls.length > 0 ? { malformedToolCalls } : {}),
     finishReason: accumulated.finishReasons[0] ?? null,
+    diagnostics: accumulated,
   };
 }
 
-async function postLocalChatCompletion(options: {
+function validateStreamingResponse(config: LocalProviderConfig, model: string, response: StreamingLocalResponse): void {
+  const { diagnostics } = response;
+  const visibleChars = response.text.length;
+  const reasoningChars = response.reasoning?.length ?? 0;
+  const toolCallCount = response.toolCalls?.length ?? 0;
+  const malformedToolCallCount = response.malformedToolCalls?.length ?? 0;
+  const finishReason = response.finishReason;
+  const context = `\nEndpoint: ${config.baseUrl}/chat/completions\nModel: ${model}`;
+  traceLocalStream("local-stream-complete", {
+    visible_content_chars: visibleChars,
+    reasoning_chars: reasoningChars,
+    tool_call_count: toolCallCount,
+    malformed_tool_call_count: malformedToolCallCount,
+    finish_reason: finishReason,
+    chunk_count: diagnostics.eventCount,
+    byte_chunk_count: diagnostics.byteChunkCount,
+    received_done: diagnostics.receivedDone,
+    stream_closed_normally: diagnostics.streamClosedNormally,
+    malformed_event_count: diagnostics.malformedEventCount,
+    usage: diagnostics.usage,
+  });
+  // length is a valid partial completion. The Local continuation layer carries
+  // it into a fresh request window instead of exposing a failed turn.
+  if (finishReason === "length") return;
+  if (visibleChars > 0 || toolCallCount > 0 || malformedToolCallCount > 0) return;
+  if (finishReason === "tool_calls") {
+    throw new Error(`Local OpenAI-compatible API finished with finish_reason=tool_calls, but no tool call was present in the stream.${context}`);
+  }
+  if (reasoningChars > 0) {
+    throw new Error(`Local OpenAI-compatible API returned ${reasoningChars} reasoning characters but no visible assistant text or tool call after streaming completion (finish_reason=${finishReason ?? "none"}).${context}`);
+  }
+  if (!diagnostics.streamClosedNormally || (!diagnostics.receivedDone && !finishReason)) {
+    throw new Error(`Local OpenAI-compatible API stream closed without a finish_reason or [DONE] marker and produced no assistant text or tool call.${context}`);
+  }
+  throw new Error(`Local OpenAI-compatible API returned no visible assistant text or tool call after streaming completion.${context}`);
+}
+
+interface PostLocalChatCompletionOptions {
   request: ProviderChatRequest;
   config: LocalProviderConfig;
   stream: boolean;
@@ -790,7 +924,10 @@ async function postLocalChatCompletion(options: {
   capProfile: import("./capabilityProfile.js").ModelCapabilityProfile;
   toolProtocol: "none" | "text" | "openai";
   turnIndex: number;
-}): Promise<AgentChatResponse> {
+  contextLength: number | null;
+}
+
+async function postLocalChatCompletionOnce(options: PostLocalChatCompletionOptions): Promise<AgentChatResponse> {
   const model = getCachedSelectedModel(options.config, options.request.route.modelId);
   const includeSystemPrompt = options.capProfile.supportsSystemPrompt !== false;
   const messages: readonly AgentChatMessage[] = options.messages ?? [
@@ -802,24 +939,48 @@ async function postLocalChatCompletion(options: {
   const tools = options.toolProtocol === "openai"
     ? agentToolDefinitions(options.request.runIntent ?? "normal")
     : [];
-  const response = await options.fetchImpl(`${options.config.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${options.config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      stream: options.stream,
-      ...(options.capProfile.maxOutputTokens !== null ? { max_tokens: options.capProfile.maxOutputTokens } : {}),
-      ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
-    }),
-    signal: options.signal,
+  const requestBody = {
+    model,
+    messages,
+    stream: options.stream,
+    ...(options.stream ? { stream_options: { include_usage: true } } : {}),
+    ...(options.capProfile.maxOutputTokens !== null ? { max_tokens: options.capProfile.maxOutputTokens } : {}),
+    ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
+  };
+  traceLocalStream("local-stream-request", {
+    model,
+    stream: options.stream,
+    max_tokens: "max_tokens" in requestBody ? requestBody.max_tokens : null,
+    max_completion_tokens: null,
+    stop: null,
+    temperature: null,
+    top_p: null,
+    tools: tools.length,
+    tool_choice: tools.length > 0 ? "auto" : null,
   });
+  const sendRequest = (body: Record<string, unknown>) => options.fetchImpl(`${options.config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${options.config.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: options.signal,
+    });
+  let response = await sendRequest(requestBody);
+  let rejectedBody: string | null = null;
+  if (!response.ok && options.stream && (response.status === 400 || response.status === 422)) {
+    rejectedBody = await response.text();
+    if (/stream[_ -]?options|include[_ -]?usage|unknown.+(?:field|parameter)/i.test(rejectedBody)) {
+      const { stream_options: _streamOptions, ...compatibleBody } = requestBody;
+      traceLocalStream("local-stream-usage-option-rejected", { status: response.status });
+      response = await sendRequest(compatibleBody);
+      rejectedBody = null;
+    }
+  }
 
   if (!response.ok) {
-    const body = await response.text();
+    const body = rejectedBody ?? await response.text();
     const sanitized = sanitizeTerminalOutput(body).slice(0, 500);
     if (isModelNotLoadedError(response.status, sanitized)) {
       discoveryCaches.delete(options.config.localBackend);
@@ -838,13 +999,7 @@ async function postLocalChatCompletion(options: {
         text: streamed.reasoning,
       });
     }
-    if (
-      !streamed.text.trim()
-      && (streamed.toolCalls?.length ?? 0) === 0
-      && (streamed.malformedToolCalls?.length ?? 0) === 0
-    ) {
-      throw new Error("Local OpenAI-compatible API returned no visible assistant text or tool call after streaming completed.");
-    }
+    validateStreamingResponse(options.config, model, streamed);
     return streamed;
   }
 
@@ -865,6 +1020,265 @@ async function postLocalChatCompletion(options: {
     throw emptyResponseError(options.config, model, extracted.diagnostics);
   }
   return extracted;
+}
+
+function estimateLocalTokens(value: unknown): number {
+  return Math.max(1, Math.ceil(JSON.stringify(value).length / 4));
+}
+
+function checkpointTranscriptHash(messages: readonly { role: string; content: string }[]): string {
+  return createHash("sha256").update(JSON.stringify(messages)).digest("hex");
+}
+
+function persistLocalCheckpoint(options: PostLocalChatCompletionOptions, summary: string, responseCharsCovered = 0): void {
+  const coveredMessages = [
+    ...(options.request.conversationHistory ?? []),
+    { role: "user" as const, content: options.request.prompt },
+  ];
+  options.handlers.onLocalContextCheckpoint?.({
+    version: 1,
+    modelId: options.request.route.modelId,
+    contextLength: options.contextLength,
+    throughMessageCount: coveredMessages.length,
+    transcriptHash: checkpointTranscriptHash(coveredMessages),
+    summary,
+    activeWindowChars: summary.length + Math.min(1_200, responseCharsCovered),
+    responseCharsCovered,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+function appendContinuationSegment(current: string, next: string): { text: string; overlap: number } {
+  if (!next) return { text: current, overlap: 0 };
+  if (!current) return { text: next, overlap: 0 };
+  const limit = Math.min(current.length, next.length, 2_000);
+  // Tiny one-character matches are common at natural sentence boundaries and
+  // are not reliable evidence that the model replayed the supplied tail.
+  for (let size = limit; size >= 4; size -= 1) {
+    if (current.slice(-size) === next.slice(0, size)) {
+      return { text: `${current}${next.slice(size)}`, overlap: size };
+    }
+  }
+  return { text: `${current}${next}`, overlap: 0 };
+}
+
+function renderCheckpointSource(messages: readonly AgentChatMessage[]): string {
+  return messages.map((message) => {
+    if (message.role === "tool") return `TOOL RESULT (${message.tool_call_id}):\n${message.content}`;
+    if (message.role === "assistant" && message.tool_calls?.length) {
+      return `ASSISTANT TOOL CALLS:\n${JSON.stringify(message.tool_calls)}`;
+    }
+    return `${message.role.toUpperCase()}:\n${message.content ?? ""}`;
+  }).join("\n\n");
+}
+
+function boundedCheckpointSource(source: string, maxCharacters: number): string {
+  if (source.length <= maxCharacters) return source;
+  const headSize = Math.floor(maxCharacters * 0.3);
+  const tailSize = maxCharacters - headSize;
+  return `${source.slice(0, headSize)}\n\n[older verbatim material omitted]\n\n${source.slice(-tailSize)}`;
+}
+
+function fallbackCheckpoint(source: string, maxCharacters: number): string {
+  const compact = source.replace(/\s+/g, " ").trim();
+  if (compact.length <= maxCharacters) return compact;
+  const half = Math.floor((maxCharacters - 32) / 2);
+  return `${compact.slice(0, half)} … ${compact.slice(-half)}`;
+}
+
+async function createLocalCheckpoint(options: PostLocalChatCompletionOptions & {
+  messages: readonly AgentChatMessage[];
+  accumulatedText: string;
+  accumulatedReasoning: string;
+  interruptedToolState: string;
+  previousCheckpoint?: string;
+}): Promise<string> {
+  const contextLength = options.contextLength ?? 8_192;
+  const checkpointTokens = Math.max(128, Math.min(1_024, Math.floor(contextLength * 0.12)));
+  const checkpointCharacters = checkpointTokens * 4;
+  const sourceLimit = Math.max(1_024, Math.floor(contextLength * 4 * 0.55));
+  const exactTail = options.accumulatedText.slice(-1_200);
+  const source = boundedCheckpointSource([
+    options.previousCheckpoint ? `PREVIOUS ROLLING CHECKPOINT:\n${options.previousCheckpoint}` : "",
+    renderCheckpointSource(options.messages),
+    options.accumulatedText ? `VISIBLE RESPONSE WRITTEN SO FAR:\n${options.accumulatedText}` : "",
+    options.accumulatedReasoning ? `PRIVATE REASONING TAIL:\n${options.accumulatedReasoning.slice(-800)}` : "",
+    options.interruptedToolState ? `INTERRUPTED TOOL STATE:\n${options.interruptedToolState}` : "",
+  ].filter(Boolean).join("\n\n"), sourceLimit);
+  const summaryMessages: AgentChatMessage[] = [{
+    role: "user",
+    content: [
+      "Create a compact continuation checkpoint for another instance of the same coding model.",
+      "Return only the checkpoint, with these headings: Objective, Constraints, Established facts, Completed work, Unresolved work, Next response position.",
+      "Preserve concrete paths, commands, errors, decisions, and tool outcomes. Do not invent facts.",
+      `The next response must continue after this exact visible tail without repeating it: ${JSON.stringify(exactTail)}`,
+      "SOURCE:",
+      source,
+    ].join("\n\n"),
+  }];
+  try {
+    const response = await postLocalChatCompletionOnce({
+      ...options,
+      stream: false,
+      messages: summaryMessages,
+      handlers: { onResponse: () => undefined, onError: () => undefined },
+      toolProtocol: "none",
+      capProfile: { ...options.capProfile, maxOutputTokens: checkpointTokens },
+    });
+    const checkpoint = response.text.trim();
+    if (checkpoint) return checkpoint.slice(0, checkpointCharacters);
+  } catch (error) {
+    traceLocalStream("local-context-checkpoint-fallback", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return fallbackCheckpoint(source, checkpointCharacters);
+}
+
+function systemMessages(messages: readonly AgentChatMessage[]): AgentChatMessage[] {
+  return messages.filter((message): message is Extract<AgentChatMessage, { role: "system" }> => message.role === "system");
+}
+
+function buildContinuationMessages(
+  originalMessages: readonly AgentChatMessage[],
+  checkpoint: string,
+  accumulatedText: string,
+  contextLength: number | null,
+): AgentChatMessage[] {
+  const contextCharacters = (contextLength ?? 8_192) * 4;
+  const systems = systemMessages(originalMessages);
+  const systemCost = JSON.stringify(systems).length;
+  const available = Math.max(384, Math.floor(contextCharacters * 0.55) - systemCost - checkpoint.length);
+  const exactTail = accumulatedText.slice(-Math.min(1_200, available));
+  return [
+    ...systems,
+    {
+      role: "user",
+      content: [
+        "Internal continuation checkpoint for the same user turn:",
+        checkpoint,
+        "Continue the response directly. Do not mention context windows, checkpoints, summaries, or continuation.",
+        "Do not repeat completed material. If an interrupted tool call is described, emit one complete replacement tool call from scratch.",
+      ].join("\n\n"),
+    },
+    ...(exactTail ? [{ role: "assistant" as const, content: exactTail }] : []),
+    { role: "user", content: "Continue exactly where the assistant text ends." },
+  ];
+}
+
+async function fitInitialLocalWindow(options: PostLocalChatCompletionOptions): Promise<readonly AgentChatMessage[] | undefined> {
+  if (!options.messages || !options.contextLength) return options.messages;
+  const tools = options.toolProtocol === "openai" ? agentToolDefinitions(options.request.runIntent ?? "normal") : [];
+  const promptBudget = Math.max(256, Math.floor(options.contextLength * 0.72));
+  let candidateMessages = options.messages;
+  const saved = options.request.localContextCheckpoint;
+  const history = options.request.conversationHistory ?? [];
+  if (
+    saved
+    && saved.modelId === options.request.route.modelId
+    && saved.throughMessageCount <= history.length
+    && checkpointTranscriptHash(history.slice(0, saved.throughMessageCount)) === saved.transcriptHash
+  ) {
+    const systems = systemMessages(options.messages);
+    const baseMessageCount = systems.length + history.length + 1;
+    const ephemeralMessages = options.messages.slice(baseMessageCount);
+    candidateMessages = [
+      ...systems,
+      { role: "user", content: `Earlier conversation checkpoint:\n${saved.summary}` },
+      ...history.slice(saved.throughMessageCount).map((message) => ({ role: message.role, content: message.content })),
+      { role: "user", content: options.request.prompt },
+      ...ephemeralMessages,
+    ];
+  }
+  const estimated = estimateLocalTokens({ messages: candidateMessages, tools });
+  if (estimated <= promptBudget) return candidateMessages;
+  const checkpoint = await createLocalCheckpoint({
+    ...options,
+    messages: candidateMessages,
+    accumulatedText: "",
+    accumulatedReasoning: "",
+    interruptedToolState: "",
+  });
+  persistLocalCheckpoint(options, checkpoint);
+  const latestUser = [...options.messages].reverse().find((message) => message.role === "user");
+  return [
+    ...systemMessages(options.messages),
+    { role: "user", content: `Earlier conversation checkpoint:\n${checkpoint}` },
+    ...(latestUser ? [latestUser] : []),
+  ];
+}
+
+async function postLocalChatCompletion(options: PostLocalChatCompletionOptions): Promise<AgentChatResponse> {
+  const originalMessages = options.messages ?? [];
+  let requestMessages = await fitInitialLocalWindow(options) ?? originalMessages;
+  let accumulatedText = "";
+  let accumulatedReasoning = "";
+  let interruptedToolState = "";
+  let rollingCheckpoint = "";
+  let windowIndex = 0;
+  let consecutiveNoProgress = 0;
+
+  while (true) {
+    windowIndex += 1;
+    const response = await postLocalChatCompletionOnce({ ...options, messages: requestMessages });
+    const responseSegment = "rawText" in response && typeof response.rawText === "string"
+      ? response.rawText
+      : response.text;
+    const stitched = appendContinuationSegment(accumulatedText, responseSegment);
+    const reasoningStitched = appendContinuationSegment(accumulatedReasoning, response.reasoning ?? "");
+    const toolState = JSON.stringify({
+      toolCalls: response.toolCalls ?? [],
+      malformedToolCalls: response.malformedToolCalls ?? [],
+    });
+    const madeProgress = stitched.text.length > accumulatedText.length
+      || reasoningStitched.text.length > accumulatedReasoning.length
+      || toolState !== interruptedToolState;
+    accumulatedText = stitched.text;
+    accumulatedReasoning = reasoningStitched.text;
+
+    traceLocalStream("local-context-window-complete", {
+      window: windowIndex,
+      finish_reason: response.finishReason ?? null,
+      accumulated_visible_chars: accumulatedText.length,
+      accumulated_reasoning_chars: accumulatedReasoning.length,
+      overlap_removed: stitched.overlap,
+      made_progress: madeProgress,
+    });
+
+    if (response.finishReason !== "length") {
+      return {
+        ...response,
+        text: accumulatedText.trim(),
+        ...(accumulatedReasoning ? { reasoning: accumulatedReasoning } : {}),
+      };
+    }
+
+    consecutiveNoProgress = madeProgress ? 0 : consecutiveNoProgress + 1;
+    if (consecutiveNoProgress >= 2) {
+      return {
+        text: accumulatedText || "The local model could not advance the response after refreshing its context.",
+        ...(accumulatedReasoning ? { reasoning: accumulatedReasoning } : {}),
+        finishReason: "stop",
+      };
+    }
+
+    interruptedToolState = toolState;
+    rollingCheckpoint = await createLocalCheckpoint({
+      ...options,
+      messages: originalMessages,
+      accumulatedText,
+      accumulatedReasoning,
+      interruptedToolState,
+      previousCheckpoint: rollingCheckpoint,
+    });
+    persistLocalCheckpoint(options, rollingCheckpoint, accumulatedText.length);
+    requestMessages = buildContinuationMessages(
+      originalMessages,
+      rollingCheckpoint,
+      accumulatedText,
+      options.contextLength,
+    );
+  }
 }
 
 function isModelNotLoadedError(status: number, body: string): boolean {
@@ -896,6 +1310,12 @@ export async function runLocalOpenAiCompatible(
     providerConfig: request.localConfig ?? configuredOverride,
     rawMetadata: rawMeta,
   });
+  const contextMetadata = resolveModelContextLengthCached({
+    providerId: "local",
+    modelId: resolvedModel,
+    providerConfig: request.localConfig ?? configuredOverride,
+    rawMetadata: rawMeta,
+  });
   const toolProtocol = capProfile.supportsToolCalls === true
     ? "openai"
     : capProfile.supportsToolCalls === false
@@ -922,6 +1342,7 @@ export async function runLocalOpenAiCompatible(
         capProfile,
         toolProtocol,
         turnIndex,
+        contextLength: contextMetadata.contextLength,
       }),
   });
   if (!text) throw new Error("Local OpenAI-compatible API returned no assistant text after tool execution.");

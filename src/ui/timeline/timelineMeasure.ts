@@ -2860,12 +2860,17 @@ function appendNativeTurnParts(
     verbose,
     run.status !== "running",
   );
+  const firstMutableEventIndex = run.status === "running"
+    ? events.findIndex((event) => isNativeLiveStreamEvent(event, run))
+    : -1;
 
   events.forEach((event, eventIndex) => {
-    // Placement: keep ALL events in liveRows while the run is active so Ink's
-    // <Static> does not grow mid-generation (which shifts the viewport).
-    // Only after run.status flips away from "running" do events go to staticItems.
-    const placeAsLive = run.status === "running";
+    // Ink <Static> is append-only. Commit only the stable chronological prefix;
+    // the first mutable event and everything after it remain interactive so a
+    // later update can never need to insert above already-committed output.
+    const placeAsLive = run.status === "running"
+      && firstMutableEventIndex >= 0
+      && eventIndex >= firstMutableEventIndex;
     // Rendering: only the event that is currently active gets a live indicator
     // (spinner / streaming cursor). Completed events render in stable form even
     // while their parent run is still running.

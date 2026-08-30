@@ -120,6 +120,8 @@ Diagnostics must default to no-op, avoid user-visible output, redact sensitive v
 | File | Purpose |
 | --- | --- |
 | `src/core/debug/inputDebug.ts` | Emits environment-gated stdin, focus, paste, and terminal-input diagnostics. |
+| `src/core/debug/localStreamDebug.test.ts` | Verifies Local streaming diagnostics redact content unless explicitly enabled. |
+| `src/core/debug/localStreamDebug.ts` | Emits privacy-aware Local streaming diagnostics when explicitly enabled. |
 | `src/core/debug/modelStateDebug.ts` | Emits environment-gated model/provider state snapshots for picker and routing diagnosis. |
 
 ### `src/core/executables/` — External executable discovery
@@ -275,8 +277,6 @@ Maintain single ownership of terminal modes, paired cleanup, sanitized output, r
 | `src/core/terminal/terminalControl.ts` | Provides the single controller for terminal writes, mouse, paste, cursor, alternate-screen, and reset sequences. |
 | `src/core/terminal/terminalSanitize.test.ts` | Verifies terminal Sanitize behavior and regression contracts in the core/terminal area. |
 | `src/core/terminal/terminalSanitize.ts` | Removes unsafe terminal control characters while preserving explicitly allowed text layout. |
-| `src/core/terminal/terminalSelection.test.ts` | Verifies terminal Selection behavior and regression contracts in the core/terminal area. |
-| `src/core/terminal/terminalSelection.ts` | Detects terminal selection/mouse profiles so native selection and Codexa capture can coexist. |
 | `src/core/terminal/terminalTitle.test.ts` | Verifies terminal Title behavior and regression contracts in the core/terminal area. |
 | `src/core/terminal/terminalTitle.ts` | Tracks intended terminal titles and applies/restores title sequences across lifecycle changes. |
 
@@ -444,8 +444,6 @@ Use shared selection/panel primitives, inject available-row budgets, preserve ke
 | `src/ui/panels/Panel.tsx` | Provides common bordered panel layout and hint treatment. |
 | `src/ui/panels/PermissionsPanel.tsx` | Displays and edits approval, sandbox, network, writable-root, service-tier, and personality settings. |
 | `src/ui/panels/PlanActionPicker.tsx` | Offers execute, revise, or cancel actions after a plan is produced. |
-| `src/ui/panels/PlanReviewPanel.test.tsx` | Verifies Plan Review Panel behavior and regression contracts in the ui/panels area. |
-| `src/ui/panels/PlanReviewPanel.tsx` | Normalizes and displays a completed plan for review within terminal row limits. |
 | `src/ui/panels/ProviderPicker.test.tsx` | Verifies Provider Picker behavior and regression contracts in the ui/panels area. |
 | `src/ui/panels/ProviderPicker.tsx` | Displays provider availability, current/default route state, models, and provider actions. |
 | `src/ui/panels/ResumePicker.tsx` | Lists workspace conversations by metadata and handles keyboard resume/cancel navigation. |
@@ -494,7 +492,6 @@ Preserve semantic row identity, stream order, scroll anchors, follow-tail behavi
 | `src/ui/timeline/ThinkingBlock.tsx` | Renders structured reasoning/progress blocks with active/completed styling. |
 | `src/ui/timeline/Timeline.test.ts` | Verifies Timeline behavior and regression contracts in the ui/timeline area. |
 | `src/ui/timeline/Timeline.tsx` | Builds turn/event items, manages scroll/follow-tail navigation, and renders the measured transcript viewport. |
-| `src/ui/timeline/TimelineNavigation.test.tsx` | Verifies Timeline Navigation behavior and regression contracts in the ui/timeline area. |
 | `src/ui/timeline/TranscriptShell.test.tsx` | Verifies Transcript Shell behavior and regression contracts in the ui/timeline area. |
 | `src/ui/timeline/TranscriptShell.tsx` | Commits static transcript rows and live-tail rows while preserving native terminal scrollback behavior. |
 | `src/ui/timeline/TurnGroup.test.tsx` | Verifies Turn Group behavior and regression contracts in the ui/timeline area. |

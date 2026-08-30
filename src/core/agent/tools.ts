@@ -35,7 +35,7 @@ export interface AgentToolResult {
 const MAX_FILE_BYTES = 128 * 1024;
 const MAX_OUTPUT_CHARS = 4_000;
 const MAX_OUTPUT_LINES = 80;
-const SHELL_TIMEOUT_MS = 30_000;
+const SHELL_TIMEOUT_MS = 120_000;
 
 const DANGEROUS_SHELL_PATTERNS: RegExp[] = [
   /\brm\s+-[^\n;|&]*r[f]?\b/i,

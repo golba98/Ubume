@@ -282,6 +282,15 @@ function extractRuntimePatch(
           ignoredEntries.push("codexa.mode");
         }
       }
+
+      if ("plan_mode" in codexaTable) {
+        if (typeof codexaTable.plan_mode === "boolean") {
+          patch.planMode = codexaTable.plan_mode;
+          addTouchedField(touchedFields, "planMode");
+        } else {
+          ignoredEntries.push("codexa.plan_mode");
+        }
+      }
     }
   }
 
@@ -817,6 +826,11 @@ export function mergeRuntimeIntoTomlConfig(
       path: ["codexa", "mode"],
       value: runtime.mode,
       shouldWrite: runtime.mode !== defaultRuntime.mode,
+    },
+    {
+      path: ["codexa", "plan_mode"],
+      value: runtime.planMode,
+      shouldWrite: runtime.planMode !== defaultRuntime.planMode,
     },
   ];
 

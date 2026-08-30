@@ -358,7 +358,7 @@ function makeActionSequenceRenderItem(
   };
 }
 
-function makeCompletedPlanRenderItem(planText: string): RenderTimelineItem {
+function makeCompletedPlanRenderItem(planText: string, status: "running" | "completed" = "completed"): RenderTimelineItem {
   const user: UserPromptEvent = {
     id: 30,
     type: "user",
@@ -371,14 +371,14 @@ function makeCompletedPlanRenderItem(planText: string): RenderTimelineItem {
     type: "run",
     createdAt: 1,
     startedAt: 1,
-    durationMs: 100,
+    durationMs: status === "completed" ? 100 : null,
     backendId: "codex-subprocess",
     backendLabel: "Codexa",
     runtime: TEST_RUNTIME,
     prompt: user.prompt,
     progressEntries: [],
-    status: "completed",
-    summary: "completed",
+    status,
+    summary: status,
     truncatedOutput: false,
     toolActivities: [],
     activity: [],
@@ -393,7 +393,7 @@ function makeCompletedPlanRenderItem(planText: string): RenderTimelineItem {
       id: "plan-31",
       streamSeq: 1,
       chunks: planText ? [planText] : [],
-      status: "completed",
+      status: status === "completed" ? "completed" : "active",
       startedAt: 1,
     },
   };
@@ -413,7 +413,7 @@ function makeCompletedPlanRenderItem(planText: string): RenderTimelineItem {
     renderState: {
       opacity: "active",
       question: null,
-      runPhase: "none",
+      runPhase: status === "completed" ? "none" : "streaming",
     },
   };
 }
@@ -618,6 +618,25 @@ test("buildStableTimelineSnapshot re-renders final plan text under the same turn
   assert.match(snapshotText(final.snapshot.rows), /Update the file tree renderer/);
 });
 
+test("native plan moves from one live block to one committed block at finalize", () => {
+  __clearTimelineMeasureCachesForTests();
+  const planText = "## Final architecture plan\n1. Keep native terminal scrollback.";
+  const running = buildNativeTranscriptParts(
+    [makeCompletedPlanRenderItem(planText, "running")],
+    { totalWidth: 90, debugLabel: "native-plan-running" },
+  );
+  const completed = buildNativeTranscriptParts(
+    [makeCompletedPlanRenderItem(planText, "completed")],
+    { totalWidth: 90, debugLabel: "native-plan-completed" },
+  );
+
+  assert.doesNotMatch(snapshotText(running.staticItems.flatMap((item) => item.rows)), /Final architecture plan/);
+  assert.match(snapshotText(running.liveRows), /Final architecture plan/);
+  assert.match(snapshotText(completed.staticItems.flatMap((item) => item.rows)), /Final architecture plan/);
+  assert.doesNotMatch(snapshotText(completed.liveRows), /Final architecture plan/);
+  assert.equal(completed.staticItems.filter((item) => item.key.includes("-stream-")).length, 1);
+});
+
 test("unchanged active response rows keep references while streaming text grows", () => {
   __clearTimelineMeasureCachesForTests();
 
@@ -640,7 +659,7 @@ test("unchanged active response rows keep references while streaming text grows"
   assert.strictEqual(secondStableLine, firstStableLine);
 });
 
-test("native transcript parts keep all actions in liveRows during active run", () => {
+test("native transcript commits the stable prefix before the active action", () => {
   __clearTimelineMeasureCachesForTests();
 
   const parts = buildNativeTranscriptParts(
@@ -663,11 +682,9 @@ test("native transcript parts keep all actions in liveRows during active run", (
 
   // User prompt is always committed to staticItems immediately.
   assert.ok(staticKeys.some((key) => key.includes("-user-")));
-  // During an active run both completed and running actions stay in liveRows —
-  // no stream events go to staticItems, which prevents <Static> growth and viewport jumps.
-  assert.equal(staticKeys.some((key) => key.includes("-action-1-")), false);
+  assert.equal(staticKeys.some((key) => key.includes("-action-1-")), true);
   assert.equal(staticKeys.some((key) => key.includes("-action-2-")), false);
-  assert.ok(liveKeys.some((key) => key.includes("-action-1-")));
+  assert.equal(liveKeys.some((key) => key.includes("-action-1-")), false);
   assert.ok(liveKeys.some((key) => key.includes("-action-2-")));
 });
 
@@ -689,7 +706,7 @@ test("native transcript parts keep streaming response out of static rows", () =>
 
 // ── Placement fix: running runs keep all events in liveRows ──────────────────
 
-test("running run keeps append-only stream events in liveRows and defers reasoning — no <Static> growth mid-generation", () => {
+test("running run commits only the chronological stable prefix", () => {
   __clearTimelineMeasureCachesForTests();
 
   const completedTool = makeTool({
@@ -741,20 +758,16 @@ test("running run keeps append-only stream events in liveRows and defers reasoni
   const staticKeys = parts.staticItems.flatMap((si) => si.rows.map((r) => r.key));
   assert.ok(staticKeys.some((k) => k.includes("-user-")), "user row should be in staticItems");
 
-  // Append-only stream events (actions, responses) must be in liveRows — not in
-  // staticItems — while the run is active, so <Static> doesn't grow and shift the
-  // viewport mid-generation. Reasoning is the exception: it is DEFERRED while
-  // running (revealing a completed reasoning block at its early streamSeq would
-  // insert it above already-streamed blocks, reordering the live turn) and reflows
-  // in atomically at finalize — so here it is in neither liveRows nor staticItems.
+  // The completed action is a stable prefix and can enter native scrollback;
+  // the running action and everything after it remain live.
   assert.equal(
     parts.staticItems.filter((si) => si.key.includes("-stream-")).length,
-    0,
-    "no stream events should be in staticItems during an active run",
+    1,
+    "one stable stream event should be committed during the active run",
   );
 
   const liveKeys = parts.liveRows.map((r) => r.key);
-  assert.ok(liveKeys.some((k) => k.includes("-action-1-")), "completed action should be in liveRows");
+  assert.equal(liveKeys.some((k) => k.includes("-action-1-")), false, "completed prefix action should be static");
   assert.ok(liveKeys.some((k) => k.includes("-action-2-")), "running action should be in liveRows");
   assert.ok(
     !liveKeys.some((k) => k.includes("-codex-thinking-")),

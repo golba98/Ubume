@@ -213,6 +213,8 @@ test("broad workspace prompts receive a bounded automatic project summary", asyn
     assert.match(system, /Top-level entries: .*README\.md.*package\.json/);
     assert.match(system, /Package: sample-workspace - A focused local agent fixture/);
     assert.match(system, /get_workspace_info or list_files/);
+    assert.match(system, /commit, push, or open a pull request/);
+    assert.match(system, /Do not replace unfinished authorized work with commands for the user/);
   });
 });
 
@@ -280,51 +282,46 @@ test("native tool-call IDs are preserved and replayed IDs are not executed twice
   });
 });
 
-test("loop synthesizes a useful final answer after max tool calls", async () => {
+test("Local agent completes more than ten tool calls without an artificial cutoff", async () => {
   await withTempWorkspace(async (workspaceRoot) => {
+    const toolCount = 12;
     const text = await runAgentLoop({
-      request: request(workspaceRoot, "keep listing"),
+      request: request(workspaceRoot, "create every requested file"),
       handlers: handlers().handlers,
       includeSystemPrompt: true,
-      maxToolCalls: 1,
       sendMessages: async (_messages: readonly AgentChatMessage[], index) => ({
-        text: index <= 1
-          ? '<tool_call>{"name":"list_files","arguments":{"path":"."}}</tool_call>'
-          : "",
+        text: index < toolCount
+          ? `<tool_call>{"name":"write_file","arguments":{"path":"file-${index}.txt","content":"${index}"}}</tool_call>`
+          : "Created all requested files.",
       }),
     });
 
-    assert.match(text, /repeated the same list_files tool call|reached 1 tool calls/i);
-    assert.match(text, /Files changed:/);
-    assert.match(text, /Commands run:/);
-    assert.match(text, /Next command:/);
+    assert.equal(text, "Created all requested files.");
+    assert.equal(await readFile(path.join(workspaceRoot, "file-11.txt"), "utf8"), "11");
+    assert.doesNotMatch(text, /tool limit|tool calls without a final answer/i);
   });
 });
 
-test("duplicate identical tool call asks for final answer instead of executing again", async () => {
+test("unchanged repeated tool results trigger a bounded blocker response", async () => {
   await withTempWorkspace(async (workspaceRoot) => {
-    let chatCalls = 0;
-    const bodies: AgentChatMessage[][] = [];
     const text = await runAgentLoop({
-      request: request(workspaceRoot, "write main"),
+      request: request(workspaceRoot, "keep listing forever"),
       handlers: handlers().handlers,
       includeSystemPrompt: true,
-      sendMessages: async (messages: readonly AgentChatMessage[]) => {
-        bodies.push([...messages]);
-        chatCalls += 1;
-        if (chatCalls === 1) {
-          return { text: '<tool_call>{"name":"write_file","arguments":{"path":"main.rs","content":"fn main() {}\\n"}}</tool_call>' };
-        }
-        if (chatCalls === 2) {
-          return { text: '<tool_call>{"name":"write_file","arguments":{"path":"main.rs","content":"fn main() {}\\n"}}</tool_call>' };
-        }
-        return { text: "Finalized after the write." };
+      maxConsecutiveNoProgressCalls: 1,
+      sendMessages: async (messages: readonly AgentChatMessage[], index) => {
+        const lastContent = messages.at(-1)?.content;
+        const recoveryRequested = typeof lastContent === "string"
+          && lastContent.includes("Repeated tool calls are no longer changing");
+        if (recoveryRequested) return { text: "I could not make further progress because the workspace listing stayed unchanged." };
+        return {
+          text: `<tool_call>{"name":"list_files","arguments":{"path":"."}}</tool_call>`,
+          finishReason: index < 2 ? "tool_calls" : "stop",
+        };
       },
     });
 
-    assert.equal(text, "Finalized after the write.");
-    assert.equal(chatCalls, 3);
-    assert.match(bodies.at(-1)?.at(-1)?.content ?? "", /repeated the same write_file tool call/i);
-    assert.equal(await readFile(path.join(workspaceRoot, "main.rs"), "utf8"), "fn main() {}\n");
+    assert.match(text, /workspace listing stayed unchanged/);
+    assert.doesNotMatch(text, /\b10[- ]tool|tool limit|Next command:/i);
   });
 });
