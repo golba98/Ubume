@@ -46,6 +46,9 @@ implemented as `providerRuntime/` runtimes.
 These are intentional, env-gated diagnostics (not dead code) — keep them named clearly:
 
 - `debug/inputDebug.ts` — stdin state tracing (`CODEXA_DEBUG_INPUT=1`).
+- `debug/localStreamDebug.ts` — privacy-aware Local streaming diagnostics
+  (`CODEXA_DEBUG_LOCAL_STREAM=1`; add `CODEXA_DEBUG_LOCAL_STREAM_CONTENT=1`
+  only when response text is safe to record).
 - `perf/renderDebug.ts` — Ink render/flicker tracing (`CODEXA_RENDER_DEBUG=1`). Kept in
   `perf/` rather than `debug/` because it is imported widely across the UI.
 - `providerRuntime/claudeCodeDiscoveryDebug.ts` — entry point for the

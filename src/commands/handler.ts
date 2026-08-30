@@ -82,7 +82,6 @@ export type CommandAction =
   | "open_theme_picker"
   | "open_permissions_panel"
   | "themes"
-  | "mouse_toggle"
   | "verbose_toggle"
   | "status"
   | "permissions_status"
@@ -381,7 +380,6 @@ function buildHelpMessage(context: CommandContext): string {
     "  /theme [name]      Switch theme directly (no arg opens picker)",
     "  /themes            Open visual theme picker (Up/Down + Enter)",
     "  /verbose           Toggle verbose mode (shows detailed processing info)",
-    "  /mouse             Toggle SGR mouse capture for in-app wheel scroll (off by default). On: wheel scrolls the Codexa timeline; drag-select requires Shift. Off: native drag-select and native wheel scroll work without modifiers.",
     "  /auth [option]     Open auth panel or set auth preference",
     "  /auth status       Probe Codexa auth status",
     "  /login             Show guided ChatGPT subscription login steps",
@@ -823,8 +821,6 @@ export function handleCommand(text: string, context: CommandContext): CommandRes
       case "themes":
         return { action: "open_theme_picker" };
 
-      case "mouse":
-        return { action: "mouse_toggle" };
 
       case "verbose":
         return { action: "verbose_toggle" };

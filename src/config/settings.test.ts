@@ -95,20 +95,6 @@ test("defines user settings through reusable schemas", () => {
         { value: "false", label: "False" },
       ],
     },
-    {
-      key: "terminalMouseMode",
-      label: "Mouse mode",
-      description:
-        "Selection (default): no mouse tracking — native drag-select and native wheel scroll work unmodified. "
-        + "Scroll history via native terminal scrollback. "
-        + "Wheel: enables SGR mouse tracking so the Codexa timeline captures wheel events for in-app scroll. "
-        + "Native drag-select then requires Shift (Windows Terminal) or equivalent modifier. "
-        + "Run /mouse to toggle for the current session.",
-      options: [
-        { value: "selection", label: "Native selection" },
-        { value: "wheel", label: "Wheel scroll" },
-      ],
-    },
   ]);
 });
 

@@ -1895,7 +1895,6 @@ function makeNativeShellInstance(uiState: UIState, activeEvents: TimelineEvent[]
         activeEvents={activeEvents}
         uiState={uiState}
         panel={null}
-        mouseCapture={false}
         composer={
           <BottomComposer
             layout={layout}
@@ -1947,7 +1946,7 @@ function makeNativeShellInstance(uiState: UIState, activeEvents: TimelineEvent[]
   };
 }
 
-test("native mode: Page Up during streaming shows pause indicator", async () => {
+test("native mode: Page Up is not intercepted by an in-app pause indicator", async () => {
   const { stdin, instance, getOutput, getRawLength } = makeNativeShellInstance({ kind: "RESPONDING", turnId: 1 });
 
   try {
@@ -1960,14 +1959,14 @@ test("native mode: Page Up during streaming shows pause indicator", async () => 
 
     const frame = stripAnsi(getOutput().slice(stripAnsi(getOutput().slice(0, beforePageUp)).length - 1));
     const output = getOutput();
-    assert.match(output, /End to follow/, "pause indicator should appear after Page Up");
+    assert.doesNotMatch(output, /End to follow|History \d+%/, "native terminal owns history navigation");
   } finally {
     instance.cleanup();
     await sleep(20);
   }
 });
 
-test("native mode: End key after Page Up removes pause indicator", async () => {
+test("native mode: End does not activate application history UI", async () => {
   const { stdin, instance, getOutput } = makeNativeShellInstance({ kind: "RESPONDING", turnId: 1 });
 
   try {
@@ -1975,7 +1974,7 @@ test("native mode: End key after Page Up removes pause indicator", async () => {
     stdin.write("[5~");
     await sleep(100);
 
-    assert.match(getOutput(), /End to follow/, "pause indicator should appear after Page Up");
+    assert.doesNotMatch(getOutput(), /End to follow|History \d+%/);
 
     stdin.write("[F");
     await sleep(100);
@@ -1992,7 +1991,7 @@ test("native mode: End key after Page Up removes pause indicator", async () => {
   }
 });
 
-test("native mode: nativePaused auto-clears when streaming ends (uiState becomes IDLE)", async () => {
+test("native mode: busy streaming never mounts a nativePaused notice", async () => {
   const { stdin, instance, getOutput } = makeNativeShellInstance({ kind: "RESPONDING", turnId: 1 });
 
   try {
@@ -2000,7 +1999,7 @@ test("native mode: nativePaused auto-clears when streaming ends (uiState becomes
     stdin.write("[5~");
     await sleep(100);
 
-    assert.match(getOutput(), /End to follow/, "pause indicator should appear while busy");
+    assert.doesNotMatch(getOutput(), /End to follow|History \d+%/);
 
     // Simulate streaming ending — we can't re-render the same instance with new props here,
     // so we verify the auto-clear logic by checking that when busy state would end,
@@ -2008,7 +2007,7 @@ test("native mode: nativePaused auto-clears when streaming ends (uiState becomes
     // The manual Page Up → End cycle (test above) covers the user-driven resume path.
     // This test verifies the indicator appears only when isBusy(uiState) is true.
     const output = getOutput();
-    assert.match(output, /End to follow/, "indicator appears while RESPONDING");
+    assert.doesNotMatch(output, /End to follow|History \d+%/);
   } finally {
     instance.cleanup();
     await sleep(20);

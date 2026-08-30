@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -46,6 +46,57 @@ test("ConversationStore preserves the selected Local backend", () => {
   });
   conversations.save(created);
   assert.equal(conversations.load(created.metadata.id)?.metadata.localBackend, "unsloth");
+});
+
+test("ConversationStore persists invisible Local context checkpoints", () => {
+  const conversations = store("2026-08-16T10:00:00.000Z", "local-checkpoint");
+  const created = conversations.createConversation({
+    providerId: "local",
+    modelId: "ornith",
+    backendKind: "local-openai-compatible",
+  });
+  created.messages.push({ role: "user", content: "Continue this task." });
+  created.metadata.localContextCheckpoint = {
+    version: 1,
+    modelId: "ornith",
+    contextLength: 2_024,
+    throughMessageCount: 1,
+    transcriptHash: "abc123",
+    summary: "Objective: continue the task.",
+    updatedAt: "2026-08-16T10:00:00.000Z",
+  };
+  conversations.save(created);
+
+  assert.deepEqual(
+    conversations.load(created.metadata.id)?.metadata.localContextCheckpoint,
+    created.metadata.localContextCheckpoint,
+  );
+});
+
+test("ConversationStore ignores malformed Local context checkpoints", () => {
+  const conversations = store("2026-08-16T10:00:00.000Z", "invalid-checkpoint");
+  const created = conversations.createConversation({
+    providerId: "local",
+    modelId: "ornith",
+    backendKind: "local-openai-compatible",
+  });
+  conversations.save(created);
+
+  const rootDir = (conversations as unknown as { rootDir: string }).rootDir;
+  const metadataPath = join(rootDir, created.metadata.id, "metadata.json");
+  const metadata = JSON.parse(readFileSync(metadataPath, "utf8")) as Record<string, unknown>;
+  metadata.localContextCheckpoint = {
+    version: 1,
+    modelId: "ornith",
+    contextLength: -1,
+    throughMessageCount: -1,
+    transcriptHash: "abc123",
+    summary: "Invalid checkpoint",
+    updatedAt: "2026-08-16T10:00:00.000Z",
+  };
+  writeFileSync(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
+
+  assert.equal(conversations.load(created.metadata.id)?.metadata.localContextCheckpoint, undefined);
 });
 
 test("ConversationStore lists newest activity first and ignores malformed conversations", () => {

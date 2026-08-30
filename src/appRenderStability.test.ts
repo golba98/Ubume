@@ -31,10 +31,10 @@ test("App root does not own the busy status animation frame", () => {
   assert.doesNotMatch(composerSource, /busyStatusFrame/);
 });
 
-test("App leaves mouse reporting disabled so transcript scrolling stays terminal-native", () => {
-  assert.match(appSource, /const effectiveMouseCapture = false;/);
-  assert.match(appSource, /native terminal scrollback/);
-  assert.doesNotMatch(appSource, /screen === "main" \? mouseCapture : false/);
+test("App leaves mouse and history navigation to the native terminal", () => {
+  assert.doesNotMatch(appSource, /effectiveMouseCapture|setMouseReporting\(true/);
+  assert.match(transcriptShellSource, /<Static/);
+  assert.doesNotMatch(transcriptShellSource, /mouseCapture|History |PageUp\/PageDown/);
 });
 
 test("Workspace display changes do not force AppShell remounts or viewport clears", () => {
@@ -43,20 +43,14 @@ test("Workspace display changes do not force AppShell remounts or viewport clear
   assert.doesNotMatch(appSource, /key=\{`app-shell-\$\{sessionState\.clearCount\}-/);
 });
 
-test("TranscriptShell owns one-time transcript output while AppShell remains the overlay renderer", () => {
-  assert.match(transcriptShellSource, /import \{ Box, Static(?:, Text)? \} from "ink"/);
-  assert.match(transcriptShellSource, /buildIntroRenderItem/);
+test("TranscriptShell owns native static history while AppShell remains the overlay renderer", () => {
+  assert.match(transcriptShellSource, /\bStatic\b/);
+  assert.doesNotMatch(transcriptShellSource, /<Timeline\s/);
   assert.match(transcriptShellSource, /resolveStartupHeaderMode/);
   assert.match(transcriptShellSource, /providerLabel: runtimeSummary\?\.providerLabel/);
   assert.doesNotMatch(transcriptShellSource, /staticOffsetRef/);
   assert.doesNotMatch(transcriptShellSource, /clear-offset-\$\{clearCount\}/);
-  assert.match(transcriptShellSource, /<Static key=\{`static-\$\{clearCount\}`\} items=\{staticRenderItems\}>/);
-  // repaintGeneration must fold into the outer remount key (not just <Static>'s
-  // own key) — Ink only reliably re-flushes already-printed <Static> content on
-  // a genuine fresh mount of the whole subtree, confirmed empirically: keying
-  // away only the inner <Static> node did not trigger Ink's isStaticDirty/
-  // onImmediateRender escape hatch the same way a full remount does.
-  assert.match(transcriptShellSource, /key=\{`clear-\$\{props\.clearCount \?\? 0\}-repaint-\$\{props\.repaintGeneration \?\? 0\}`\}/);
+  assert.match(transcriptShellSource, /key=\{`clear-\$\{props\.clearCount \?\? 0\}`\}/);
   assert.match(appShellSource, /MemoizedTopHeader/);
   assert.doesNotMatch(appShellSource, /import \{[^}]*Static[^}]*\} from "ink"/);
   assert.doesNotMatch(appShellSource, /<Static\b/);
@@ -68,6 +62,15 @@ test("App routes main chat to TranscriptShell and gates AppShell to overlays", (
   assert.match(appSource, /panel=\{\s*<>\s*\{screen === "backend-picker"/);
   assert.match(appSource, /screen === "provider-picker"/);
   assert.match(appSource, /screen === "model-picker"/);
+});
+
+test("Local startup discovery refreshes active context metadata without a model switch", () => {
+  const capabilitiesMemo = appSource.match(
+    /const activeRouteModelCapabilities = useMemo\(\(\) => \{([\s\S]*?)\n  \}, \[([^\]]+)\]\);/,
+  );
+  assert.ok(capabilitiesMemo, "active route capabilities memo should exist");
+  assert.match(capabilitiesMemo[2] ?? "", /registryNonce/);
+  assert.match(appSource, /currentModelRawMetadataKey/);
 });
 
 test("Update prompt owns the visible update notice so the header card is not duplicated", () => {
@@ -86,8 +89,8 @@ test("startup update checks run before the composer can accept input", () => {
   assert.doesNotMatch(appSource, /startupUpdateDismissed \|\| busy \|\| screen !== "main"/);
   assert.match(appSource, /handleSkipUpdateForSession[\s\S]*?setScreen\("main"\)/);
   assert.match(appSource, /isCacheForRunningVersion\(cache, APP_VERSION\)/);
-  assert.match(appSource, /returnFromUpdateOverlay[\s\S]*?clearViewport\("src\/app\.tsx:updateOverlay:viewportClear"\)/);
-  assert.match(appSource, /returnFromUpdateOverlay[\s\S]*?bumpStaticRepaintGeneration/);
+  assert.doesNotMatch(appSource, /updateOverlay:viewportClear/);
+  assert.doesNotMatch(appSource, /bumpStaticRepaintGeneration/);
 });
 
 test("Startup provider migration notice is seeded before the first composer frame", () => {
@@ -114,11 +117,11 @@ test("TranscriptShell never keeps its composer mounted while hidden behind an ov
   assert.doesNotMatch(transcriptShellSource, /\n\s*\{composer\}\s*\n/);
 });
 
-test("TranscriptShell appends transcript rows without viewport slicing or clears", () => {
+test("TranscriptShell commits history natively and keeps only mutable rows live", () => {
   assert.match(transcriptShellSource, /buildNativeTranscriptParts/);
   assert.match(transcriptShellSource, /<Static\b/);
-  assert.doesNotMatch(transcriptShellSource, /selectTimelineRows|scrollTimelineViewport|viewportRows/);
-  assert.doesNotMatch(transcriptShellSource, /overflow="hidden"|height=\{/);
+  assert.match(transcriptShellSource, /nativeTranscript\.liveRows/);
+  assert.doesNotMatch(transcriptShellSource, /<Timeline\s|mouseCapture|History /);
   assert.doesNotMatch(transcriptShellSource, /clearTranscript|clearViewport|resetInkOutputForFreshFrame/);
 });
 
@@ -217,32 +220,22 @@ test("/clear arms a fresh render generation before transcript reset", () => {
   assert.match(appSource, /focusManager\.focus\(FOCUS_IDS\.composer\)/, "clear should return focus to the prompt");
 });
 
-test("Ink render-cache reset is owned by repaint paths, never wired into out-of-band resize handlers", () => {
+test("Ink render-cache reset is reserved for explicit transcript clear", () => {
   // The repaint authority is clearFrameBoundary's wrapped renderInteractiveFrame:
   // it resets caches both on the /clear boundary AND on width-changing resizes,
   // atomically with the very frame it writes (no transient blank). It must NOT be
   // called from the out-of-band resize paths (index.tsx onResize / ui/layout.ts),
   // where a clear/reset would blank the screen until the next React commit.
   assert.match(clearBoundarySource, /resetInkOutputForFreshFrame/, "render-path wrapper owns the cache reset");
-  // app.tsx references it in the /clear fallback, explicit theme repaint, and
-  // the update-overlay return boundary that remounts the flushed static header.
   const appResetCalls = appSource.match(/resetInkOutputForFreshFrame\(/g) ?? [];
-  assert.equal(appResetCalls.length, 3, "app.tsx resets only at explicit repaint boundaries");
-  assert.match(appSource, /clearViewport\("src\/app\.tsx:theme:viewportClear"\)/);
-  assert.match(appSource, /clearViewport\("src\/app\.tsx:updateOverlay:viewportClear"\)/);
+  assert.equal(appResetCalls.length, 1, "app.tsx resets only for the /clear fallback");
+  assert.doesNotMatch(appSource, /theme:viewportClear|updateOverlay:viewportClear/);
   assert.doesNotMatch(indexSource, /resetInkOutputForFreshFrame/);
   assert.doesNotMatch(layoutSource, /resetInkOutputForFreshFrame/);
 });
 
-test("Resize repaint uses the scrollback-inclusive transcript clear, not a viewport-only clear", () => {
-  // A width grow re-exposes the pre-resize frame from scrollback; the resize repaint
-  // must erase scrollback too (transcriptClear / \x1b[3J), matching the /clear path.
-  // Otherwise the old frame stacks behind the new one on GNOME Terminal.
-  assert.match(
-    clearBoundarySource,
-    /commitAuthoritativeFrame\(output, outputHeight, staticOutput, "transcript", "resizeRefresh"\)/,
-    "resize repaint clears the transcript (scrollback-inclusive)",
-  );
+test("Resize leaves native transcript scrollback intact", () => {
+  assert.doesNotMatch(clearBoundarySource, /resizeRefresh|widthRepaintArmed/);
   // Viewport-only clears are reserved for the alternate screen buffer, which has
   // no scrollback (overlay enter / overlay resize) — never for the transcript.
   const viewportClearReasons = [...clearBoundarySource.matchAll(/clearViewport\(`\$\{source\}:([a-zA-Z]+)`\)/g)]

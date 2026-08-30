@@ -76,7 +76,7 @@ import {
   type LayeredConfigResult,
 } from "./config/layeredConfig.js";
 import type { LaunchArgs } from "./config/launchArgs.js";
-import { loadSettings, saveSettings } from "./config/persistence.js";
+import { loadSettings, saveRuntimeModePreference, saveSettings } from "./config/persistence.js";
 import {
   APP_VERSION,
   type AuthPreference,
@@ -85,7 +85,6 @@ import {
   type AvailableModel,
   parseBusyLoaderSettingValue,
   type ReasoningLevel,
-  type TerminalMouseMode,
   USER_SETTING_DEFINITIONS,
   type WorkspaceDisplayMode,
   type UserSettingValues,
@@ -137,7 +136,6 @@ import {
   isLikelyAuthFailure,
   probeCodexAuthStatus,
 } from "./core/auth/codexAuth.js";
-import { getTerminalSelectionProfile } from "./core/terminal/terminalSelection.js";
 import { copyToClipboard } from "./core/shared/clipboard.js";
 import { normalizePlanReviewMarkdown, savePlan, readPlan } from "./core/workspace/planStorage.js";
 import { getBlockedCleanupFailure } from "./core/shared/cleanupFastFail.js";
@@ -455,8 +453,6 @@ export function App({ launchArgs }: AppProps) {
   // tell, at frame-write time, whether the committing tree was laid out
   // against the current terminal width (the viewport hook commits dimensions
   // on a trailing settle, so frames can lag stdout.columns).
-  const terminalLayoutColsRef = useRef<number | undefined>(terminalLayout.rawCols ?? terminalLayout.cols);
-  terminalLayoutColsRef.current = terminalLayout.rawCols ?? terminalLayout.cols;
 
   // ─── State & Refs ────────────────────────────────────────────────────────────
 
@@ -484,9 +480,6 @@ export function App({ launchArgs }: AppProps) {
   );
   const [showBusyLoader, setShowBusyLoader] = useState(
     initialSettings.current.ui.showBusyLoader,
-  );
-  const [terminalMouseMode, setTerminalMouseMode] = useState<TerminalMouseMode>(
-    initialSettings.current.ui.terminalMouseMode,
   );
   const [providerWorkspaceConfig, setProviderWorkspaceConfig] = useState<ProviderWorkspaceConfig>(
     initialProviderWorkspaceConfig.current,
@@ -528,17 +521,6 @@ export function App({ launchArgs }: AppProps) {
   // Bumped purely to force one extra React commit when the /clear boundary needs
   // the authoritative post-clear frame flushed (see the syncRenderState effect).
   const [, bumpPostClearRepaint] = useState(0);
-  // Bumped whenever a width-changing resize forces a physical terminal clear
-  // (see clearFrameBoundaryController below). TranscriptShell folds this into
-  // its <Static> key so already-flushed content (logo, past turns) reprints
-  // at the new width instead of staying erased — Ink's <Static> never
-  // re-emits items on its own once flushed.
-  const [staticRepaintGeneration, bumpStaticRepaintGeneration] = useState(0);
-  // Assigned during render (like screenRef) so the clear-frame boundary can
-  // tell, at frame-write time, whether the committing tree already contains
-  // the re-flushed <Static> content for a pending width repaint.
-  const staticRepaintGenerationRef = useRef(0);
-  staticRepaintGenerationRef.current = staticRepaintGeneration;
   const { state: sessionState, dispatch: dispatchSession } = useAppSessionState(() => {
     return createStartupStaticEvents({
       providerWorkspaceConfig: initialProviderWorkspaceConfig.current,
@@ -557,6 +539,7 @@ export function App({ launchArgs }: AppProps) {
   const [authStatusBusy, setAuthStatusBusy] = useState(false);
   // Running character total across the conversation — used to estimate token usage
   const [conversationChars, setConversationChars] = useState(0);
+  const rolloverResponseCharsRef = useRef(0);
   // Seeded synchronously from local caches (codex's models_cache.json or the
   // persisted last-good discovery) so the model picker opens instantly with
   // real models; live discovery replaces this in the background.
@@ -583,46 +566,15 @@ export function App({ launchArgs }: AppProps) {
       // Read at frame-write time; screenRef is assigned during render, so it
       // always reflects the render that produced the frame being written.
       isOverlayActive: () => screenRef.current !== "main",
-      onWidthResizeRefresh: () => bumpStaticRepaintGeneration((tick) => tick + 1),
-      getRenderedRepaintGeneration: () => staticRepaintGenerationRef.current,
-      getRenderedLayoutCols: () => terminalLayoutColsRef.current,
     }),
     [inkInstance, stdout, terminalControl],
   );
-  const [mouseOverride, setMouseOverride] = useState<boolean | null>(null);
-  const [isMouseIdle, setIsMouseIdle] = useState(false);
-  const mouseIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const resetMouseIdle = useCallback(() => {
-    setIsMouseIdle(false);
-    if (mouseIdleTimerRef.current) {
-      clearTimeout(mouseIdleTimerRef.current);
-    }
-    // We disable the idle timeout to ensure reliable trackpad/mouse-wheel scrolling
-    // in the pop-out window. Otherwise, after 1.5 seconds of inactivity, mouse capture
-    // turns off, and scrolling stops working entirely.
-    /*
-    mouseIdleTimerRef.current = setTimeout(() => {
-      setIsMouseIdle(true);
-    }, 1500);
-    */
-  }, []);
-
-  useInput(() => {
-    // Any keyboard activity re-enables mouse tracking if it was idle.
-    resetMouseIdle();
-  });
-
   const [verboseMode, setVerboseMode] = useState(false);
   const [planFlow, setPlanFlow] = useState<PlanFlowState>(createInitialPlanFlowState);
   const [initialRevisionText, setInitialRevisionText] = useState("");
   const [updateCheckResult, setUpdateCheckResult] = useState<UpdateCheckResult | null>(initialUpdateCheckResult.current);
   // Launcher path is fixed for the process lifetime, so detect once.
   const globalPackageManager = useMemo(() => detectGlobalPackageManager(), []);
-  // Transcript mode leaves mouse reporting off so wheel/trackpad input scrolls
-  // the terminal emulator's native scrollback instead of an in-app viewport.
-  const mouseCapture = (mouseOverride ?? (terminalMouseMode === "wheel")) && !isMouseIdle;
-  const effectiveMouseCapture = false;
   const overlayMode = screen !== "main";
 
   // ─── Effects & Handlers ──────────────────────────────────────────────────────
@@ -653,16 +605,6 @@ export function App({ launchArgs }: AppProps) {
       bumpPostClearRepaint((tick) => tick + 1);
     }
   }, [clearFrameBoundaryController, sessionState]);
-
-  useEffect(() => {
-    // Main transcript mode keeps native terminal scrollback and selection in
-    // control. Keep writing the disable sequence defensively in case a previous
-    // version or overlay left mouse reporting enabled.
-    terminalControl.setMouseReporting(effectiveMouseCapture, effectiveMouseCapture ? "src/app.tsx:mouseCapture.enable" : "src/app.tsx:mouseCapture.disable");
-    return () => {
-      terminalControl.setMouseReporting(false, "src/app.tsx:mouseCapture.cleanup");
-    };
-  }, [effectiveMouseCapture, terminalControl]);
 
   useLayoutEffect(() => {
     // The clear-frame boundary owns alternate-screen switching so the buffer
@@ -821,7 +763,10 @@ export function App({ launchArgs }: AppProps) {
     if (activeProviderRoute.providerId === "openai") return modelCapabilities;
     const discovery = discoverProviderModels(activeProviderRoute.providerId);
     return providerModelsToCodexCapabilities(discovery.models, activeProviderRoute.modelId);
-  }, [activeProviderRoute.modelId, activeProviderRoute.providerId, modelCapabilities]);
+  // Local startup discovery mutates the runtime cache without necessarily
+  // changing the restored model id. Re-read it when the registry nonce moves
+  // so discovered context metadata can replace the initial Unknown value.
+  }, [activeProviderRoute.modelId, activeProviderRoute.providerId, modelCapabilities, registryNonce]);
   const modelPickerModels = useMemo(
     () => {
       if (providerModelCapabilities) {
@@ -964,10 +909,6 @@ export function App({ launchArgs }: AppProps) {
       ...(providerLines.length > 0 ? providerLines : []),
     ].join("\n");
   }, [activeContextMetadata, activeProviderRoute.backendKind, activeProviderRoute.modelId, activeProviderRoute.modelSelection, activeProviderRoute.providerId, activeProviderRoute.reasoning, activeProviderRuntime.routeAvailable, activeRouteModelCapabilities, activeRouteProvider, providerRegistry, reasoningLevel, workspaceDefaultProvider]);
-  const selectionProfile = useMemo(
-    () => getTerminalSelectionProfile(process.env),
-    [],
-  );
   const selectableModelCapabilities = useMemo(
     () => activeRouteModelCapabilities ? getSelectableModelCapabilities(activeRouteModelCapabilities) : [],
     [activeRouteModelCapabilities],
@@ -1036,8 +977,7 @@ export function App({ launchArgs }: AppProps) {
     workspaceDisplayMode,
     terminalTitleMode,
     showBusyLoader: formatBusyLoaderSettingValue(showBusyLoader),
-    terminalMouseMode,
-  }), [showBusyLoader, terminalMouseMode, terminalTitleMode, workspaceDisplayMode]);
+  }), [showBusyLoader, terminalTitleMode, workspaceDisplayMode]);
 
   const allowedWritableRoots = useMemo(
     () => resolvedRuntimeConfig.policy.writableRoots,
@@ -1368,6 +1308,7 @@ export function App({ launchArgs }: AppProps) {
               : undefined,
             runIntent: options.runIntent,
             conversationHistory: options.conversationHistory,
+            localContextCheckpoint: options.localContextCheckpoint,
           }, handlers) ?? (() => undefined);
         }
         : undefined,
@@ -1406,7 +1347,6 @@ export function App({ launchArgs }: AppProps) {
         workspaceDisplayMode,
         terminalTitleMode,
         showBusyLoader,
-        terminalMouseMode,
         customTheme,
       },
       auth: {
@@ -1415,7 +1355,7 @@ export function App({ launchArgs }: AppProps) {
       header: headerConfig,
       updateCheck: initialSettings.current.updateCheck,
     });
-  }, [authPreference, customTheme, showBusyLoader, terminalMouseMode, terminalTitleMode, themeSelection.committedTheme, workspaceDisplayMode]);
+  }, [authPreference, customTheme, showBusyLoader, terminalTitleMode, themeSelection.committedTheme, workspaceDisplayMode]);
 
   useEffect(() => {
     return () => {
@@ -1518,13 +1458,7 @@ export function App({ launchArgs }: AppProps) {
   const returnFromUpdateOverlay = useCallback(() => {
     setScreen("main");
     focusManager.focus(FOCUS_IDS.composer);
-    // The update overlay owns a separate non-static tree. Reset Ink's output
-    // cache and remount the transcript static subtree so returning to chat
-    // cannot leave only the composer/footer visible with a blank header.
-    terminalControl.clearViewport("src/app.tsx:updateOverlay:viewportClear");
-    resetInkOutputForFreshFrame({ instance: inkInstance, columns: stdout.columns });
-    bumpStaticRepaintGeneration((tick) => tick + 1);
-  }, [focusManager, inkInstance, stdout.columns, terminalControl]);
+  }, [focusManager]);
 
   const appendStaticEvent = useCallback((event: TimelineEvent) => {
     dispatchSession({ type: "APPEND_STATIC_EVENT", event });
@@ -1872,6 +1806,26 @@ export function App({ launchArgs }: AppProps) {
           providerRouteErrorsRef.current["local"] = result.message ?? "Local provider unavailable.";
         } else {
           delete providerRouteErrorsRef.current["local"];
+          const detectedModel = typeof result.diagnostics?.selectedModel === "string"
+            ? result.diagnostics.selectedModel.trim()
+            : "";
+          if (detectedModel && detectedModel !== activeProviderRoute.modelId) {
+            const localBackend = activeProviderRoute.localBackend
+              ?? providerWorkspaceConfig.providers?.local?.localBackend
+              ?? "lm-studio";
+            const nextReasoning = activeProviderRoute.reasoning ?? reasoningLevel;
+            let nextConfig = setProviderActiveRoute(providerWorkspaceConfig, {
+              providerId: "local",
+              modelId: detectedModel,
+              backendKind: result.backendKind,
+              reasoning: nextReasoning,
+              localBackend,
+            });
+            nextConfig = setProviderDefaultModel(nextConfig, "local", detectedModel);
+            saveProviderWorkspaceConfig(workspaceRoot, nextConfig);
+            setProviderWorkspaceConfig(nextConfig);
+            updateRuntimeConfig((current) => ({ ...current, model: detectedModel }));
+          }
         }
       } catch {
         // Best-effort probe — failures are surfaced only when the user activates the route.
@@ -1939,7 +1893,6 @@ export function App({ launchArgs }: AppProps) {
         workspaceDisplayMode,
         terminalTitleMode,
         showBusyLoader,
-        terminalMouseMode,
         customTheme,
       },
       auth: { preference: authPreference },
@@ -1954,14 +1907,7 @@ export function App({ launchArgs }: AppProps) {
       themeNoticeTimerRef.current = null;
     }, 1800);
 
-    // Ink's <Static> output has already been flushed with the previous colour
-    // tokens. Clear only the visible viewport, reset Ink's frame cache, and
-    // remount the static subtree so the complete current UI is repainted using
-    // the newly committed theme without adding anything to scrollback.
-    terminalControl.clearViewport("src/app.tsx:theme:viewportClear");
-    resetInkOutputForFreshFrame({ instance: inkInstance, columns: stdout.columns });
-    bumpStaticRepaintGeneration((tick) => tick + 1);
-  }, [authPreference, customTheme, headerConfig, inkInstance, showBusyLoader, stdout.columns, terminalControl, terminalMouseMode, terminalTitleMode, workspaceDisplayMode]);
+  }, [authPreference, customTheme, headerConfig, showBusyLoader, terminalTitleMode, workspaceDisplayMode]);
 
   // Track clear epoch to suppress stale command result events
   useEffect(() => {
@@ -2121,6 +2067,7 @@ export function App({ launchArgs }: AppProps) {
       mode: nextMode,
       planMode: false,
     }));
+    saveRuntimeModePreference(nextMode, false);
     setScreen("main");
     appendSystemEvent("Mode updated", `Execution mode switched to ${formatModeLabel(nextMode)}.`);
   }, [appendSystemEvent, busy, updateRuntimeConfig]);
@@ -2138,6 +2085,7 @@ export function App({ launchArgs }: AppProps) {
       mode: next.mode,
       planMode: next.planMode,
     }));
+    saveRuntimeModePreference(next.mode, next.planMode);
     if (!next.planMode) {
       setPlanFlow(resetPlanFlow());
     }
@@ -2211,11 +2159,12 @@ export function App({ launchArgs }: AppProps) {
       ...current,
       planMode: nextEnabled,
     }));
+    saveRuntimeModePreference(mode, nextEnabled);
     if (!nextEnabled) {
       setPlanFlow(resetPlanFlow());
     }
     appendSystemEvent("Plan mode", `Plan mode ${nextEnabled ? "enabled" : "disabled"}.`);
-  }, [appendSystemEvent, busy, updateRuntimeConfig]);
+  }, [appendSystemEvent, busy, mode, updateRuntimeConfig]);
 
   const togglePlanModeWithNotice = useCallback(() => {
     setPlanModeWithNotice(!planMode);
@@ -2464,12 +2413,8 @@ export function App({ launchArgs }: AppProps) {
     if (nextShowBusyLoader !== showBusyLoader) {
       setShowBusyLoader(nextShowBusyLoader);
     }
-    if (nextSettings.terminalMouseMode !== terminalMouseMode) {
-      setTerminalMouseMode(nextSettings.terminalMouseMode);
-      setMouseOverride(null); // let the newly persisted mode drive mouseCapture
-    }
     setScreen("main");
-  }, [applyWorkspaceDisplayMode, showBusyLoader, terminalMouseMode, terminalTitleMode, workspaceDisplayMode]);
+  }, [applyWorkspaceDisplayMode, showBusyLoader, terminalTitleMode, workspaceDisplayMode]);
 
   const handleSkipUpdateForSession = useCallback(() => {
     returnFromUpdateOverlay();
@@ -2992,7 +2937,7 @@ export function App({ launchArgs }: AppProps) {
         stdout.write("\n");
       },
       afterLaunch: () => {
-        terminalControl.setMouseReporting(effectiveMouseCapture, "src/app.tsx:providerLaunch.restoreMouse");
+        terminalControl.setMouseReporting(false, "src/app.tsx:providerLaunch.keepMouseNative");
       },
     };
     const launchPromise = providerId === "mistral"
@@ -3015,7 +2960,6 @@ export function App({ launchArgs }: AppProps) {
     activeProviderRoute,
     appendErrorEvent,
     appendSystemEvent,
-    effectiveMouseCapture,
     ensureProviderModels,
     providerRegistry,
     probeLocalBackend,
@@ -3885,10 +3829,16 @@ export function App({ launchArgs }: AppProps) {
     }
 
     const turnId = createTurnId();
-    const conversationHistory = selectConversationContext(
-      activeConversationRef.current?.messages ?? [],
-      activeContextMetadata?.contextLength ? activeContextMetadata.contextLength * 4 : undefined,
-    );
+    const storedConversation = activeConversationRef.current?.messages ?? [];
+    // Local models own request-window compaction so they can create a semantic
+    // checkpoint before sliding old messages out. Other providers retain the
+    // existing tail-selection behavior.
+    const conversationHistory = activeProviderRoute.providerId === "local"
+      ? [...storedConversation]
+      : selectConversationContext(
+        storedConversation,
+        activeContextMetadata?.contextLength ? activeContextMetadata.contextLength * 4 : undefined,
+      );
     const userEvent: UserPromptEvent = {
       id: createEventId(),
       type: "user",
@@ -3900,6 +3850,9 @@ export function App({ launchArgs }: AppProps) {
     setConversationChars((count) => count + safeProviderPrompt.length);
 
     const runId = createEventId();
+    // A failed or canceled rollover must not reduce the next response's
+    // accounting. Each provider run starts with no response text covered.
+    rolloverResponseCharsRef.current = 0;
     perf.startSession(String(runId));
     perf.mark("dispatch_start");
     perf.setMeta("fast_cleanup", fastCleanupRun);
@@ -4030,6 +3983,9 @@ export function App({ launchArgs }: AppProps) {
             projectInstructions,
             runIntent: lifecycle.runIntent ?? "normal",
             conversationHistory,
+            localContextCheckpoint: activeProviderRoute.providerId === "local" || activeProviderRoute.providerId === "codexa-native"
+              ? activeConversationRef.current?.metadata.localContextCheckpoint
+              : undefined,
           },
           {
         onAssistantDelta: (chunk) => {
@@ -4148,7 +4104,9 @@ export function App({ launchArgs }: AppProps) {
           const finalizeResponse = () => {
             if (!isCurrentRun(activeRunIdRef.current, runId)) return;
             const safeResponse = sanitizeTerminalOutput(response, { preserveTabs: false, tabSize: 2 });
-            setConversationChars((count) => count + safeResponse.length);
+            const newlyVisibleResponseChars = Math.max(0, safeResponse.length - rolloverResponseCharsRef.current);
+            rolloverResponseCharsRef.current = 0;
+            setConversationChars((count) => count + newlyVisibleResponseChars);
 
             // Validate response quality for write-intent/destructive prompts:
             // If the backend returned filler like "Hello." instead of execution
@@ -4206,6 +4164,7 @@ export function App({ launchArgs }: AppProps) {
         },
         onError: (message, rawOutput) => {
           if (!isCurrentRun(activeRunIdRef.current, runId)) return;
+          rolloverResponseCharsRef.current = 0;
           const flushedLiveUpdates = flushLiveUpdates();
           const finalizeError = () => {
             if (!isCurrentRun(activeRunIdRef.current, runId)) return;
@@ -4248,6 +4207,24 @@ export function App({ launchArgs }: AppProps) {
             text: safeText,
           };
           liveScheduler.enqueue({ type: "progress", update: safeUpdate });
+        },
+        onLocalContextCheckpoint: (checkpoint) => {
+          const current = activeConversationRef.current;
+          if (!current || (activeProviderRoute.providerId !== "local" && activeProviderRoute.providerId !== "codexa-native")) return;
+          rolloverResponseCharsRef.current = checkpoint.responseCharsCovered ?? 0;
+          if (typeof checkpoint.activeWindowChars === "number") {
+            setConversationChars(checkpoint.activeWindowChars);
+          }
+          const next: ConversationRecord = {
+            ...current,
+            metadata: { ...current.metadata, localContextCheckpoint: checkpoint },
+          };
+          activeConversationRef.current = next;
+          try {
+            conversationStore.save(next);
+          } catch (error) {
+            appDiagLog(`CONVERSATION_STORE: checkpoint save failed: ${error instanceof Error ? error.message : "filesystem error"}`);
+          }
         },
       },
       );
@@ -4809,17 +4786,6 @@ export function App({ launchArgs }: AppProps) {
         case "open_auth_panel":
           openAuthPanel();
           return;
-        case "mouse_toggle": {
-          const nextMouse = !(mouseOverride ?? (terminalMouseMode === "wheel"));
-          setMouseOverride(nextMouse);
-          appendSystemEvent(
-            "Mouse mode updated",
-            nextMouse
-              ? "Mouse preference set to wheel mode. Main chat still uses native terminal scrollback; SGR capture is not used for transcript scrolling."
-              : "Mouse preference set to selection mode. Main chat uses native terminal scrollback and native drag-select.",
-          );
-          return;
-        }
         case "verbose_toggle": {
           if (commandResult.message) {
             appendSystemEvent("Debug", commandResult.message);
@@ -5182,7 +5148,6 @@ export function App({ launchArgs }: AppProps) {
         uiState={uiState}
         verboseMode={verboseMode}
         clearCount={sessionState.clearCount}
-        repaintGeneration={staticRepaintGeneration}
         notice={themeNotice}
         composer={composerElement}
         composerRows={composerRows}
@@ -5201,9 +5166,6 @@ export function App({ launchArgs }: AppProps) {
           activeEvents={activeEvents}
           uiState={uiState}
           verboseMode={verboseMode}
-          mouseCapture={effectiveMouseCapture}
-          onMouseActivity={resetMouseIdle}
-          selectionProfile={selectionProfile}
           clearCount={sessionState.clearCount}
           headerConfig={effectiveHeaderConfig}
           updateAvailable={

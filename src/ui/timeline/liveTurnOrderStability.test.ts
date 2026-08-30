@@ -202,23 +202,29 @@ test("a streaming turn never reorders its live blocks; reasoning reflows in only
   // 2) action-card burst (running tools) → streamSeq 2, 3.
   run = upsertRunToolActivity(run, runningTool(1));
   run = upsertRunToolActivity(run, runningTool(2));
-  const f1 = blockOrder(nativeParts(run, user, "streaming").liveRows);
+  const nativeOrder = (currentRun: RunEvent) => {
+    const parts = nativeParts(currentRun, user, "streaming");
+    return blockOrder([
+      ...parts.staticItems.flatMap((item) => item.rows),
+      ...parts.liveRows,
+    ]);
+  };
+  const f1 = nativeOrder(run);
 
   // 3) stream assistant text → streamSeq 4.
   run = appendRunResponseChunk(run, "Here is the answer ");
-  const f2 = blockOrder(nativeParts(run, user, "streaming").liveRows);
+  const f2 = nativeOrder(run);
 
   // 4) the reasoning block completes WHILE the run is still running. This is the
   //    historical trigger: the old collector would now reveal it at the top.
   run = completeReasoning(run);
-  const frame3 = nativeParts(run, user, "streaming");
-  const f3 = blockOrder(frame3.liveRows);
+  const f3 = nativeOrder(run);
 
   // 5) update action statuses (running → completed) and stream more text.
   run = upsertRunToolActivity(run, completedTool(1));
   run = upsertRunToolActivity(run, completedTool(2));
   run = appendRunResponseChunk(run, "with more detail.");
-  const f4 = blockOrder(nativeParts(run, user, "streaming").liveRows);
+  const f4 = nativeOrder(run);
 
   const runningFrames = [f1, f2, f3, f4];
 
@@ -245,16 +251,18 @@ test("a streaming turn never reorders its live blocks; reasoning reflows in only
   assertAppendOnly(f3, f4, "f3->f4");
   assert.deepEqual(f4, ["action-2", "action-3", "response-4"], "final live order");
 
-  // ── No clipped/empty bordered action-card fragment at the top ───────────────
-  // The first live row must belong to the top action card, and that card must
-  // render real content (not a lone border fragment).
-  const liveRows = nativeParts(run, user, "streaming").liveRows;
+  // ── No clipped/empty bordered action-card fragment at the static/live seam ──
+  const currentParts = nativeParts(run, user, "streaming");
+  const orderedRows = [
+    ...currentParts.staticItems.flatMap((item) => item.rows),
+    ...currentParts.liveRows,
+  ];
   assert.equal(
-    blockIdFromKey(liveRows[0]!.key),
+    blockOrder(orderedRows)[0],
     "action-2",
-    "first live row must be the top action card, not a stray fragment",
+    "first stream block must be the top action card, not a stray fragment",
   );
-  const topCardRows = liveRows.filter((row) => blockIdFromKey(row.key) === "action-2");
+  const topCardRows = orderedRows.filter((row) => blockIdFromKey(row.key) === "action-2");
   assert.ok(
     topCardRows.some((row) => /[A-Za-z0-9]/.test(rowText(row))),
     "top action card must render content, not an empty border",

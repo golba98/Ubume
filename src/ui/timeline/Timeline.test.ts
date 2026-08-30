@@ -18,8 +18,6 @@ import {
   isNearBottom,
   pageDownTimelineViewport,
   pageUpTimelineViewport,
-  parseTimelineNavigationInput,
-  parseWheelScrollDirections,
   reflowTimelineViewport,
   resolveTurnOpacity,
   scrollTimelineViewport,
@@ -147,7 +145,6 @@ test("groups user, run, and assistant events into a single turn item", () => {
   assert.equal(items[0].run?.progressEntries[0]?.text, "Scanning routes...");
   assert.equal(items[0].assistant?.content, "I found the auth router.");
 });
-
 test("empty transcript event state builds no timeline render rows", () => {
   const items = buildTimelineItems([]);
   const renderItems = buildStaticRenderItems(items, [], null, null, null);
@@ -819,19 +816,6 @@ test("completed assistant turn renders local links as compact terminal paths", (
   assert.match(joined, /\[OpenAI\]\(https:\/\/platform\.openai\.com\/docs\)/);
   assert.doesNotMatch(joined, /C:\/Users|C:\\Users|file:\/\//);
   assert.doesNotMatch(joined, /\]\(C:/);
-});
-
-test("parses sgr mouse wheel directions without treating other mouse events as scroll", () => {
-  const raw = "\u001b[<64;12;9M\u001b[<65;12;10M\u001b[<0;12;10M";
-  assert.deepEqual(parseWheelScrollDirections(raw), ["up", "down"]);
-});
-
-test("parses timeline navigation keys from raw terminal input", () => {
-  assert.deepEqual(parseTimelineNavigationInput("\u001b[5~"), ["pageUp"]);
-  assert.deepEqual(parseTimelineNavigationInput("\u001b[6~"), ["pageDown"]);
-  assert.deepEqual(parseTimelineNavigationInput("\u001b[1;5H"), ["home"]);
-  assert.deepEqual(parseTimelineNavigationInput("\u001b[1;5F"), ["end"]);
-  assert.deepEqual(parseTimelineNavigationInput("\u001b[<64;12;9M\u001b[<65;12;10M"), ["wheelUp", "wheelDown"]);
 });
 
 test("home anchors the browse window to the first page and end restores tail follow", () => {
@@ -2175,11 +2159,4 @@ test("response completion does not jump to top when user is scrolled mid-transcr
   assert.equal(afterFinalize.anchorRow, 20, "anchor must remain at row 20");
   // Unseen rows should reflect new content
   assert.equal(afterFinalize.unseenRows, 30, "unseen rows = 80 - 50");
-});
-
-test("parseTimelineNavigationInput parses modifier keys correctly", () => {
-  assert.deepEqual(parseTimelineNavigationInput("\u001b[5;2~"), ["pageUp"]);
-  assert.deepEqual(parseTimelineNavigationInput("\u001b[6;2~"), ["pageDown"]);
-  assert.deepEqual(parseTimelineNavigationInput("\u001b[1;5H"), ["home"]);
-  assert.deepEqual(parseTimelineNavigationInput("\u001b[1;5F"), ["end"]);
 });

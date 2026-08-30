@@ -6,6 +6,17 @@ function isPrimitive(value: unknown): value is string | number | boolean {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
 }
 
+export function formatTomlKey(key: string): string {
+  if (/^[A-Za-z0-9_-]+$/.test(key)) {
+    return key;
+  }
+  return JSON.stringify(key);
+}
+
+export function formatTomlPath(path: readonly string[]): string {
+  return path.map(formatTomlKey).join(".");
+}
+
 function formatTomlPrimitive(value: string | number | boolean): string {
   if (typeof value === "string") {
     return JSON.stringify(value);
@@ -27,7 +38,7 @@ function formatTomlArray(values: readonly unknown[]): string {
     }
 
     if (isRecord(value)) {
-      return `{ ${Object.entries(value).map(([key, item]) => `${key} = ${formatTomlValue(item)}`).join(", ")} }`;
+      return `{ ${Object.entries(value).map(([key, item]) => `${formatTomlKey(key)} = ${formatTomlValue(item)}`).join(", ")} }`;
     }
 
     // TOML has no null literal; fall back to JSON encoding for unknown types.
@@ -45,7 +56,7 @@ function formatTomlValue(value: unknown): string {
   }
 
   if (isRecord(value)) {
-    return `{ ${Object.entries(value).map(([key, item]) => `${key} = ${formatTomlValue(item)}`).join(", ")} }`;
+    return `{ ${Object.entries(value).map(([key, item]) => `${formatTomlKey(key)} = ${formatTomlValue(item)}`).join(", ")} }`;
   }
 
   // TOML has no null literal; fall back to JSON encoding for unknown types.
@@ -64,11 +75,11 @@ function serializeTomlSection(
   const arrayTableEntries = Object.entries(value).filter(([, item]) => Array.isArray(item) && (item as unknown[]).every(isRecord));
 
   if (path.length > 0) {
-    lines.push(`[${path.join(".")}]`);
+    lines.push(`[${formatTomlPath(path)}]`);
   }
 
   for (const [key, item] of [...scalarEntries, ...arrayEntries]) {
-    lines.push(`${key} = ${formatTomlValue(item)}`);
+    lines.push(`${formatTomlKey(key)} = ${formatTomlValue(item)}`);
   }
 
   for (const [key, item] of tableEntries) {
@@ -83,7 +94,7 @@ function serializeTomlSection(
       if (lines.length > 0 && lines[lines.length - 1] !== "") {
         lines.push("");
       }
-      lines.push(`[[${[...path, key].join(".")}]]`);
+      lines.push(`[[${formatTomlPath([...path, key])}]]`);
       const tableLines: string[] = [];
       serializeTomlSection([], table, tableLines);
       lines.push(...tableLines);

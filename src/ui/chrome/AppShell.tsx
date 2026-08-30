@@ -1,12 +1,11 @@
-import React, { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Text, useStdin } from "ink";
+import React, { memo, useEffect, useMemo, useRef } from "react";
+import { Box, Text } from "ink";
 import { useTheme } from "../theme.js";
 import type { RuntimeSummary } from "../../config/runtimeConfig.js";
 import type { CodexAuthState } from "../../core/auth/codexAuth.js";
 import { HEADER_CONFIG_DEFAULTS, type HeaderConfig } from "../../config/settings.js";
 import * as renderDebug from "../../core/perf/renderDebug.js";
 import type { Screen, TimelineEvent, UIState } from "../../session/types.js";
-import { isBusy } from "../../session/types.js";
 import {
   ActivePanelLayoutContext,
   type ActivePanelLayout,
@@ -25,17 +24,7 @@ import {
   MIN_TERMINAL_ROWS,
   type TerminalViewport,
 } from "../layout.js";
-import {
-  buildActiveRenderItems,
-  buildStaticRenderItems,
-  buildTimelineItems,
-  parseTimelineNavigationInput,
-  Timeline,
-  TimelineRowView,
-  type TimelineItem,
-} from "../timeline/Timeline.js";
-import { buildNativeTranscriptParts, type NativeTranscriptRowItem, type TimelineRow } from "../timeline/timelineMeasure.js";
-import type { TerminalSelectionProfile } from "../../core/terminal/terminalSelection.js";
+import { Timeline } from "../timeline/Timeline.js";
 import { MemoizedTopHeader, measureTopHeaderRows, type UpdateAvailableInfo } from "./TopHeader.js";
 
 const COMPACT_HEADER_TO_COMPOSER_GAP_ROWS = 1;
@@ -45,9 +34,6 @@ const TALL_HEADER_TO_COMPOSER_GAP_ROWS = 1;
 // ─── Types & constants ────────────────────────────────────────────────────────
 
 type AppShellLayout = TerminalViewport;
-type NativeStaticItem =
-  { type: "rows" } & NativeTranscriptRowItem;
-
 export interface AppShellProps {
   layout: AppShellLayout;
   screen: Screen;
@@ -65,9 +51,6 @@ export interface AppShellProps {
   composerRows: number;
   panelHint?: React.ReactNode;
   verboseMode?: boolean;
-  mouseCapture?: boolean;
-  onMouseActivity?: () => void;
-  selectionProfile?: TerminalSelectionProfile;
   clearCount?: number;
   headerConfig?: HeaderConfig;
   updateAvailable?: UpdateAvailableInfo | null;
@@ -127,28 +110,6 @@ export function calculateColdStartSpacerRows({
 export function calculateHeaderToContentGapRows(layout: Layout): number {
   if (layout.mode === "compact" || layout.rows <= 18) return 0;
   return 1;
-}
-
-function NativeRowsItem({ rows }: { rows: TimelineRow[] }) {
-  return (
-    <Box flexDirection="column">
-      {rows.map((row) => (
-        <TimelineRowView key={row.key} row={row} />
-      ))}
-    </Box>
-  );
-}
-
-function NativePauseBar({ unseenRows }: { unseenRows: number }) {
-  return (
-    <Box width="100%" paddingX={1}>
-      <Text dimColor>
-        {unseenRows > 0
-          ? `↓  ${unseenRows} new rows · End to follow`
-          : "↓  New output · End to follow"}
-      </Text>
-    </Box>
-  );
 }
 
 function CrampedView({ layout }: { layout: Layout }) {
@@ -223,9 +184,6 @@ function AppShellInner({
   composerRows,
   panelHint,
   verboseMode = false,
-  mouseCapture = false,
-  onMouseActivity,
-  selectionProfile,
   clearCount = 0,
   headerConfig = HEADER_CONFIG_DEFAULTS,
   updateAvailable = null,
@@ -255,7 +213,7 @@ function AppShellInner({
     mode: layout.mode,
   });
 
-  if (layout.isCramped && !mouseCapture) {
+  if (layout.isCramped) {
     return <CrampedView layout={layout} />;
   }
 
@@ -271,60 +229,12 @@ function AppShellInner({
     ? { ...layout, cols: Math.min(layout.cols, 71), mode: "compact" as const }
     : layout;
   const headerRows = measureTopHeaderRows(headerLayout, headerConfig, !!updateAvailable);
-  const hasUserPrompt = useMemo(
-    () => staticEvents.some((e) => e.type === "user") || activeEvents.some((e) => e.type === "user"),
-    [staticEvents, activeEvents],
-  );
   const previousMeasurements = useRef<{
     timelineRows: number;
     composerRows: number;
     shellHeight: number;
     shellWidth: number;
   } | null>(null);
-
-  // ── Native mode scroll-pause state ────────────────────────────────────────
-  // When the user presses Page Up or Home during streaming, we freeze nativeAllRows
-  // so Ink's lastOutputHeight stays constant and the terminal stops auto-scrolling.
-  const [nativePaused, setNativePaused] = useState(false);
-  const nativePausedRef = useRef(false);
-  const frozenNativeRowsRef = useRef<TimelineRow[]>([]);
-  const frozenLiveRowCountRef = useRef(0);
-  const { stdin } = useStdin();
-
-  useEffect(() => {
-    nativePausedRef.current = nativePaused;
-  }, [nativePaused]);
-
-  useEffect(() => {
-    const handleRawInput = (chunk: Buffer | string) => {
-      if (!showTimeline || !isBusy(uiState)) return;
-      const raw = typeof chunk === "string" ? chunk : chunk.toString();
-      const actions = parseTimelineNavigationInput(raw);
-      if (actions.length === 0) return;
-
-      if (actions.some((action) => action === "pageUp" || action === "home" || action === "wheelUp")) {
-        setNativePaused(true);
-      } else if (actions.some((action) => action === "pageDown" || action === "end" || action === "wheelDown")) {
-        setNativePaused(false);
-      }
-    };
-
-    if (stdin.isTTY) {
-      stdin.on("data", handleRawInput);
-      return () => {
-        stdin.off("data", handleRawInput);
-      };
-    }
-  }, [stdin, uiState, showTimeline]);
-
-  // Auto-unpause when busy state ends.
-  useEffect(() => {
-    if (!isBusy(uiState) && nativePaused) {
-      setNativePaused(false);
-    }
-  }, [uiState, nativePaused]);
-
-  // ── End native mode scroll-pause state ────────────────────────────────────
 
   const effectiveShowComposer = showComposer;
   const panelHintRows = showPanelStage && panelHint ? 2 : 0;
@@ -367,104 +277,6 @@ function AppShellInner({
     };
   }, [shellHeight, shellWidth, finalTimelineRows]);
 
-  // ─── Native mode transcript ───────────────────────────────────────────────
-
-  const nativeTranscriptParts = useMemo(() => {
-    if (mouseCapture) {
-      return { staticItems: [], liveRows: [] };
-    }
-
-    const staticItems = buildTimelineItems(staticEvents);
-    const activeItems = buildTimelineItems(activeEvents);
-    const turnIds = [...staticItems, ...activeItems]
-      .filter((item): item is Extract<TimelineItem, { type: "turn" }> => item.type === "turn")
-      .map((item) => item.turnId);
-
-    const parts = buildNativeTranscriptParts(
-      [
-        ...buildStaticRenderItems(staticItems, turnIds, null, null, null),
-        ...buildActiveRenderItems(activeItems, turnIds, uiState),
-      ],
-      {
-        totalWidth: finalShellWidth,
-        verboseMode,
-        debugLabel: "app-shell-native",
-        workspaceRoot,
-      },
-    );
-
-    if (!showTimeline) {
-      return { ...parts, liveRows: [] };
-    }
-
-    return parts;
-  }, [activeEvents, finalShellWidth, mouseCapture, showTimeline, staticEvents, uiState, verboseMode, workspaceRoot]);
-
-  // ─── Spacer logic for native mode ─────────────────────────────────────────
-
-  const nativeStaticTranscriptRows = useMemo(
-    () => nativeTranscriptParts.staticItems.reduce((total, item) => total + item.rows.length, 0),
-    [nativeTranscriptParts.staticItems],
-  );
-
-  const nativeSpacerRows = useMemo(() => {
-    if (mouseCapture || !effectiveShowComposer || showMainPanel) return 0;
-    const rows = calculateNativeSpacerRows({
-      shellRows: finalShellHeight,
-      introRows: headerRows + headerToContentGapRows,
-      composerRows: bottomChromeRows,
-      staticRows: nativeStaticTranscriptRows,
-      liveRows: nativeTranscriptParts.liveRows.length,
-    });
-    if (!hasUserPrompt) {
-      return calculateColdStartSpacerRows({
-        shellRows: finalShellHeight,
-        headerRows,
-        composerRows: bottomChromeRows,
-        layoutMode: layout.mode,
-        availableRows: rows,
-      });
-    }
-    return rows;
-  }, [mouseCapture, effectiveShowComposer, showMainPanel, finalShellHeight, headerRows, headerToContentGapRows, bottomChromeRows, layout.mode, nativeStaticTranscriptRows, nativeTranscriptParts.liveRows.length, hasUserPrompt]);
-
-  const nativeStaticAllItems = useMemo<NativeStaticItem[]>(
-    () => {
-      if (mouseCapture) return [];
-      return nativeTranscriptParts.staticItems.map((item) => ({ ...item, type: "rows" as const }));
-    },
-    [mouseCapture, nativeTranscriptParts.staticItems],
-  );
-
-  const nativeAllRows = useMemo<TimelineRow[]>(
-    () => {
-      if (mouseCapture) return [];
-
-      const allStaticRows = nativeStaticAllItems.flatMap((item) => item.rows);
-      const maxStaticRows = finalShellHeight > 0 ? finalShellHeight * 2 : allStaticRows.length;
-      const trimmedStaticRows = allStaticRows.slice(Math.max(0, allStaticRows.length - maxStaticRows));
-
-      const liveRows = showTimeline ? nativeTranscriptParts.liveRows : [];
-
-      if (nativePaused) {
-        return frozenNativeRowsRef.current;
-      }
-
-      const rows = [
-        ...trimmedStaticRows,
-        ...liveRows,
-      ];
-      frozenLiveRowCountRef.current = liveRows.length;
-      frozenNativeRowsRef.current = rows;
-      return rows;
-    },
-    [mouseCapture, nativePaused, nativeStaticAllItems, nativeTranscriptParts.liveRows, showTimeline, finalShellHeight],
-  );
-
-  const nativeUnseenRows = nativePaused
-    ? Math.max(0, (showTimeline ? nativeTranscriptParts.liveRows.length : 0) - frozenLiveRowCountRef.current)
-    : 0;
-
   useEffect(() => {
     previousMeasurements.current = {
       timelineRows: resolvedTimelineRows,
@@ -473,13 +285,6 @@ function AppShellInner({
       shellWidth: finalShellWidth,
     };
   }, [resolvedTimelineRows, bottomChromeRows, finalShellHeight, finalShellWidth]);
-
-  const clonedComposer = React.isValidElement(composer)
-    ? React.cloneElement(
-      composer as React.ReactElement<{ selectionProfile?: TerminalSelectionProfile }>,
-      { selectionProfile },
-    )
-    : composer;
 
   const contentWidth = getContentWidth(layout.cols);
   const panelStagePaddingY = appLayoutBudget.panelStagePaddingY;
@@ -547,9 +352,8 @@ function AppShellInner({
           authState={authState}
           workspaceLabel={workspaceLabel}
           workspaceRoot={workspaceRoot}
-          mouseCapture={mouseCapture}
-          onMouseActivity={onMouseActivity}
           contentSized
+          showIntro={false}
         />
       </Box>
 
@@ -582,10 +386,7 @@ function AppShellInner({
 
       {effectiveShowComposer && (
         <Box flexDirection="column" flexShrink={0}>
-          {nativePaused && (
-            <NativePauseBar unseenRows={nativeUnseenRows} />
-          )}
-          {clonedComposer}
+          {composer}
         </Box>
       )}
     </Box>
@@ -666,8 +467,6 @@ export const AppShell = memo(AppShellInner, (prev, next) => {
     prev.mainPanel       === next.mainPanel       &&
     prev.mainPanelMode   === next.mainPanelMode   &&
     prev.verboseMode     === next.verboseMode     &&
-    prev.mouseCapture    === next.mouseCapture    &&
-    prev.onMouseActivity === next.onMouseActivity &&
     prev.clearCount      === next.clearCount      &&
     prev.updateAvailable === next.updateAvailable &&
     panelPropsEqual

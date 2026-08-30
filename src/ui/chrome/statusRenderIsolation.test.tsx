@@ -138,11 +138,9 @@ function makeActiveEvents(actionStatus: ActionStatus | null = "completed", secon
 function Harness({
   actionStatus = "completed",
   secondActionStatus,
-  mouseCapture = false,
 }: {
   actionStatus?: ActionStatus | null;
   secondActionStatus?: ActionStatus;
-  mouseCapture?: boolean;
 }) {
   const layout = createLayoutSnapshot(120, 40);
   const uiState: UIState = { kind: "THINKING", turnId: 1 };
@@ -169,7 +167,6 @@ function Harness({
         uiState={uiState}
         composerRows={composerRows}
         panel={null}
-        mouseCapture={mouseCapture}
         composer={(
           <BottomComposer
             layout={layout}
@@ -208,13 +205,11 @@ function AppShellHarness({
   activeEvents,
   uiState,
   workspaceLabel = "13-Custom-CLI-Normal",
-  mouseCapture = false,
 }: {
   staticEvents: TimelineEvent[];
   activeEvents: TimelineEvent[];
   uiState: UIState;
   workspaceLabel?: string;
-  mouseCapture?: boolean;
 }) {
   const layout = createLayoutSnapshot(120, 40);
   const composerRows = measureBottomComposerRows({
@@ -240,7 +235,6 @@ function AppShellHarness({
         uiState={uiState}
         composerRows={composerRows}
         panel={null}
-        mouseCapture={mouseCapture}
         composer={(
           <BottomComposer
             layout={layout}
@@ -327,7 +321,7 @@ test("app-scroll action rows update without remounting when a running action com
 
   const stdin = new TestInput();
   const stdout = new TestOutput();
-  const instance = render(<Harness actionStatus="running" mouseCapture={true} />, {
+  const instance = render(<Harness actionStatus="running" />, {
     stdin: stdin as unknown as NodeJS.ReadStream,
     stdout: stdout as unknown as NodeJS.WriteStream,
     stderr: stdout as unknown as NodeJS.WriteStream,
@@ -345,7 +339,7 @@ test("app-scroll action rows update without remounting when a running action com
 
     assert.ok(mountedActionRows.length > 0, "expected action rows to mount in the initial frame");
 
-    instance.rerender(<Harness actionStatus="completed" mouseCapture={true} />);
+    instance.rerender(<Harness actionStatus="completed" />);
     await sleep(100);
 
     const afterCompletion = readRecords(logPath).slice(beforeCompletion.length);
@@ -509,7 +503,6 @@ test("native AppShell finalize keeps transcript rows in one keyed tree", async (
       staticEvents={[]}
       activeEvents={runningEvents}
       uiState={{ kind: "THINKING", turnId: 1 }}
-      mouseCapture={false}
     />,
     {
       stdin: stdin as unknown as NodeJS.ReadStream,
@@ -529,7 +522,6 @@ test("native AppShell finalize keeps transcript rows in one keyed tree", async (
         staticEvents={completedEvents}
         activeEvents={[]}
         uiState={{ kind: "IDLE" }}
-        mouseCapture={false}
       />,
     );
     await sleep(100);

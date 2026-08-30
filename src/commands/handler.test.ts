@@ -516,7 +516,7 @@ test("documents runtime commands in help", () => {
   assert.match(result?.message ?? "", /\/setting, \/settings Open the settings picker/i);
   assert.match(result?.message ?? "", /\/setting workspace \[dir\|name\|simple\]/i);
   assert.match(result?.message ?? "", /\/setting busy-loader \[true\|false\]/i);
-  assert.match(result?.message ?? "", /\/mouse\s+Toggle SGR mouse capture for in-app wheel scroll/i);
+  assert.doesNotMatch(result?.message ?? "", /\/mouse/);
   assert.match(result?.message ?? "", /Current plan mode: Disabled/i);
   assert.match(result?.message ?? "", /Shift\+Tab\s+Rotate Plan.*Read-only.*Auto.*Full Access/i);
   assert.match(result?.message ?? "", /Ctrl\+Y\s+Cycle execution mode/i);

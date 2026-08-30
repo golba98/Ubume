@@ -36,10 +36,10 @@ export interface RunAgentLoopOptions {
   includeSystemPrompt: boolean;
   toolProtocol?: "none" | "text" | "openai";
   signal?: AbortSignal;
-  maxToolCalls?: number;
+  maxConsecutiveNoProgressCalls?: number;
 }
 
-const DEFAULT_MAX_TOOL_CALLS = 10;
+const DEFAULT_MAX_CONSECUTIVE_NO_PROGRESS_CALLS = 3;
 
 function workspaceSummary(workspaceRoot: string): string {
   const lines = [`Workspace root: ${workspaceRoot}`];
@@ -79,6 +79,10 @@ function localAgentSystemPrompt(request: ProviderChatRequest, toolProtocol: "non
     planning
       ? "PLAN MODE: inspect the repository and return a concrete Markdown implementation plan. Do not write files, apply patches, or run shell commands."
       : "Use tools to create, edit, build, and test when the user asks for workspace changes.",
+    planning
+      ? null
+      : "When the user explicitly asks you to commit, push, or open a pull request, complete those actions with tools when runtime policy permits. Do not replace unfinished authorized work with commands for the user to run.",
+    "Keep inspecting and acting until the requested work is complete or a concrete external blocker prevents progress. Never mention internal tool budgets or claim a file, commit, push, or pull request exists unless a tool confirmed it.",
     "Do not ask vague clarification questions when the user's intent has an obvious safe implementation.",
     hasCargoToml
       ? "Rust workspace note: Cargo.toml exists. Prefer src/main.rs for simple binaries, use cargo check for validation, use cargo run for running, and do not use rustc main.rs unless main.rs is truly at the workspace root."
@@ -153,6 +157,11 @@ function toolCallSignature(call: Pick<NormalizedAgentToolCall, "name" | "argumen
   return `${call.name}:${stableJson(call.arguments)}`;
 }
 
+function toolResultFingerprint(result: AgentToolResult): string {
+  const { durationMs: _durationMs, ...stableResult } = result;
+  return stableJson(stableResult);
+}
+
 function recordToolResult(summary: AgentLoopSummary, result: AgentToolResult): void {
   for (const file of result.paths ?? []) {
     if (file) summary.changedFiles.add(file);
@@ -177,16 +186,7 @@ function commandStatus(command: ExecutedCommand): string {
   return `- ${command.command}: ${status}${exitCode}`;
 }
 
-function nextCommand(request: ProviderChatRequest, summary: AgentLoopSummary): string {
-  if (existsSync(path.join(request.workspaceRoot, "Cargo.toml"))) return "cargo run";
-  const lastValidation = [...summary.commands].reverse().find((item) =>
-    /\b(?:cargo check|cargo run|bun test|npm test|bun run typecheck|tsc)\b/.test(item.command)
-  );
-  if (lastValidation) return lastValidation.command;
-  return "bun test";
-}
-
-function synthesizeFinalMessage(request: ProviderChatRequest, summary: AgentLoopSummary, reason: string): string {
+function synthesizeFinalMessage(_request: ProviderChatRequest, summary: AgentLoopSummary, reason: string): string {
   const files = [...summary.changedFiles].sort();
   const commandLines = summary.commands.map(commandStatus);
   return [
@@ -197,8 +197,6 @@ function synthesizeFinalMessage(request: ProviderChatRequest, summary: AgentLoop
     "",
     "Commands run:",
     commandLines.length > 0 ? commandLines.join("\n") : "- None",
-    "",
-    `Next command: ${nextCommand(request, summary)}`,
   ].join("\n").trim();
 }
 
@@ -207,8 +205,8 @@ async function requestFinalAnswer(options: RunAgentLoopOptions, messages: AgentC
     role: "user",
     content: [
       reason,
-      "Stop calling tools now. Write the final answer using the tool results already provided.",
-      "Include files changed, commands run, whether they succeeded, and the next command the user can run.",
+      "Repeated tool calls are no longer changing the result. Stop calling tools and report the exact blocker using only confirmed tool results.",
+      "Include files changed and commands run with their outcomes. Do not expose internal loop controls, claim unfinished work is complete, or delegate runnable actions to the user unless the required capability is genuinely unavailable.",
     ].join("\n"),
   });
   const response = await options.sendMessages(messages, toolCallCount);
@@ -252,12 +250,16 @@ function appendToolResultMessage(
 }
 
 export async function runAgentLoop(options: RunAgentLoopOptions): Promise<string> {
-  const maxToolCalls = options.maxToolCalls ?? DEFAULT_MAX_TOOL_CALLS;
+  const maxConsecutiveNoProgressCalls = Math.max(
+    1,
+    Math.floor(options.maxConsecutiveNoProgressCalls ?? DEFAULT_MAX_CONSECUTIVE_NO_PROGRESS_CALLS),
+  );
   const toolProtocol = options.toolProtocol ?? "text";
   const messages = buildInitialMessages(options.request, options.includeSystemPrompt, toolProtocol);
   let toolCallCount = 0;
-  let previousToolSignatures = new Set<string>();
   const completedToolCallIds = new Set<string>();
+  const previousToolResults = new Map<string, string>();
+  let consecutiveNoProgressCalls = 0;
   const approvedForRun = new Set<string>();
   const summary: AgentLoopSummary = {
     changedFiles: new Set(),
@@ -302,12 +304,6 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<string
       calls = [];
     }
 
-    if (toolCallCount >= maxToolCalls) {
-      const reason = `Local agent reached ${maxToolCalls} tool calls without a final answer.`;
-      const final = await requestFinalAnswer(options, messages, toolCallCount, reason);
-      return final ?? synthesizeFinalMessage(options.request, summary, reason);
-    }
-
     const callIds = calls.map((call, index) => call.id ?? `local-call-${toolCallCount + index + 1}`);
     const malformedIds = malformedCalls.map((call, index) => call.id ?? `local-malformed-${toolCallCount + index + 1}`);
     if (native) {
@@ -331,7 +327,12 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<string
         error: `Malformed tool call: ${textMalformed.error}`,
         raw: textMalformed.raw,
       });
-      previousToolSignatures = new Set();
+      consecutiveNoProgressCalls += 1;
+      if (consecutiveNoProgressCalls >= maxConsecutiveNoProgressCalls) {
+        const reason = "The Local agent repeated malformed tool calls without making progress.";
+        const final = await requestFinalAnswer(options, messages, toolCallCount, reason);
+        return final ?? synthesizeFinalMessage(options.request, summary, reason);
+      }
       continue;
     }
 
@@ -344,30 +345,34 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<string
         error: `Malformed tool call: ${malformed.error}`,
         raw: malformed.rawArguments,
       });
+      consecutiveNoProgressCalls += 1;
+    }
+    if (consecutiveNoProgressCalls >= maxConsecutiveNoProgressCalls) {
+      const reason = "The Local agent repeated malformed tool calls without making progress.";
+      const final = await requestFinalAnswer(options, messages, toolCallCount, reason);
+      return final ?? synthesizeFinalMessage(options.request, summary, reason);
     }
 
-    const nextSignatures = new Set<string>();
     for (let index = 0; index < calls.length; index += 1) {
       const call = calls[index]!;
       const callId = callIds[index]!;
       const signature = toolCallSignature(call);
-      if (completedToolCallIds.has(callId) || previousToolSignatures.has(signature)) {
-        const reason = `Local agent repeated the same ${call.name} tool call with identical arguments.`;
+      if (completedToolCallIds.has(callId)) {
+        const reason = `Local agent replayed completed tool call ID ${callId}.`;
         appendToolResultMessage(messages, native, callId, {
           success: false,
           tool: call.name,
           error: reason,
         });
-        const final = await requestFinalAnswer(options, messages, toolCallCount, reason);
-        return final ?? synthesizeFinalMessage(options.request, summary, reason);
-      }
-      if (toolCallCount >= maxToolCalls) {
-        const reason = `Local agent reached ${maxToolCalls} tool calls without a final answer.`;
-        const final = await requestFinalAnswer(options, messages, toolCallCount, reason);
-        return final ?? synthesizeFinalMessage(options.request, summary, reason);
+        consecutiveNoProgressCalls += 1;
+        if (consecutiveNoProgressCalls >= maxConsecutiveNoProgressCalls) {
+          const finalReason = "The Local agent replayed completed tool calls without making progress.";
+          const final = await requestFinalAnswer(options, messages, toolCallCount, finalReason);
+          return final ?? synthesizeFinalMessage(options.request, summary, finalReason);
+        }
+        continue;
       }
 
-      nextSignatures.add(signature);
       completedToolCallIds.add(callId);
       toolCallCount += 1;
       const activityId = `local-agent-${toolCallCount}-${call.name}`;
@@ -412,6 +417,17 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<string
         });
         recordToolResult(summary, denied);
         appendToolResultMessage(messages, native, callId, denied);
+        const deniedFingerprint = toolResultFingerprint(denied);
+        const previousDenied = previousToolResults.get(signature);
+        previousToolResults.set(signature, deniedFingerprint);
+        consecutiveNoProgressCalls = previousDenied === deniedFingerprint
+          ? consecutiveNoProgressCalls + 1
+          : 0;
+        if (consecutiveNoProgressCalls >= maxConsecutiveNoProgressCalls) {
+          const reason = "The Local agent repeated denied tool calls without making progress.";
+          const final = await requestFinalAnswer(options, messages, toolCallCount, reason);
+          return final ?? synthesizeFinalMessage(options.request, summary, reason);
+        }
         continue;
       }
 
@@ -432,9 +448,17 @@ export async function runAgentLoop(options: RunAgentLoopOptions): Promise<string
       });
       recordToolResult(summary, result);
       appendToolResultMessage(messages, native, callId, result);
+      const resultFingerprint = toolResultFingerprint(result);
+      const previousResult = previousToolResults.get(signature);
+      previousToolResults.set(signature, resultFingerprint);
+      consecutiveNoProgressCalls = previousResult === resultFingerprint
+        ? consecutiveNoProgressCalls + 1
+        : 0;
+      if (consecutiveNoProgressCalls >= maxConsecutiveNoProgressCalls) {
+        const reason = "The Local agent repeated tool calls with unchanged results and could not make further progress.";
+        const final = await requestFinalAnswer(options, messages, toolCallCount, reason);
+        return final ?? synthesizeFinalMessage(options.request, summary, reason);
+      }
     }
-    previousToolSignatures = nextSignatures;
   }
-
-  throw new Error(`Local agent stopped after ${maxToolCalls} tool calls without a final answer.`);
 }

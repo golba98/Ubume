@@ -6,20 +6,17 @@ import {
   DEFAULT_AUTH_PREFERENCE,
   DEFAULT_LAYOUT_STYLE,
   DEFAULT_SHOW_BUSY_LOADER,
-  DEFAULT_TERMINAL_MOUSE_MODE,
   DEFAULT_TERMINAL_TITLE_MODE,
   DEFAULT_THEME,
   DEFAULT_WORKSPACE_DISPLAY_MODE,
   HEADER_CONFIG_DEFAULTS,
   LEGACY_DIRECTORY_DISPLAY_MODES,
-  TERMINAL_MOUSE_MODES,
   WORKSPACE_DISPLAY_MODES,
   getCodexConfigFile,
   normalizeLegacyDirectoryDisplayMode,
   SETTINGS_FILE,
   type AuthPreference,
   type HeaderConfig,
-  type TerminalMouseMode,
   type TerminalTitleMode,
   type WorkspaceDisplayMode,
 } from "./settings.js";
@@ -32,6 +29,7 @@ import {
   normalizeRuntimeConfig,
   type RuntimeConfig,
 } from "./runtimeConfig.js";
+import type { AvailableMode } from "./settings.js";
 
 export interface UiSettings {
   layoutStyle: string;
@@ -39,7 +37,6 @@ export interface UiSettings {
   workspaceDisplayMode: WorkspaceDisplayMode;
   terminalTitleMode: TerminalTitleMode;
   showBusyLoader: boolean;
-  terminalMouseMode: TerminalMouseMode;
   customTheme?: Partial<Theme>;
 }
 
@@ -99,9 +96,6 @@ function normalizeUiSettings(input: Partial<UiSettings> | null | undefined): UiS
     showBusyLoader: typeof input?.showBusyLoader === "boolean"
       ? input.showBusyLoader
       : DEFAULT_SHOW_BUSY_LOADER,
-    terminalMouseMode: TERMINAL_MOUSE_MODES.includes(input?.terminalMouseMode as TerminalMouseMode)
-      ? (input!.terminalMouseMode as TerminalMouseMode)
-      : DEFAULT_TERMINAL_MOUSE_MODE,
     customTheme: input?.customTheme,
   };
 }
@@ -187,18 +181,6 @@ function parseTerminalTitleMode(uiSource: Record<string, unknown>, fallback: Ter
   return fallback;
 }
 
-function parseTerminalMouseMode(uiSource: Record<string, unknown>, fallback: TerminalMouseMode): TerminalMouseMode {
-  const camel = uiSource.terminalMouseMode;
-  if (typeof camel === "string" && TERMINAL_MOUSE_MODES.includes(camel as TerminalMouseMode)) {
-    return camel as TerminalMouseMode;
-  }
-  const snake = uiSource.terminal_mouse_mode;
-  if (typeof snake === "string" && TERMINAL_MOUSE_MODES.includes(snake as TerminalMouseMode)) {
-    return snake as TerminalMouseMode;
-  }
-  return fallback;
-}
-
 function parseWorkspaceDisplayMode(uiSource: Record<string, unknown>, fallback: WorkspaceDisplayMode): WorkspaceDisplayMode {
   const direct = uiSource.workspaceDisplayMode ?? uiSource.workspace_display_mode;
   if (typeof direct === "string" && WORKSPACE_DISPLAY_MODES.includes(direct as WorkspaceDisplayMode)) {
@@ -249,7 +231,6 @@ export function parseSettingsData(data: unknown): AppSettings {
       workspaceDisplayMode: parseWorkspaceDisplayMode(uiSource, defaults.ui.workspaceDisplayMode),
       terminalTitleMode: parseTerminalTitleMode(uiSource, defaults.ui.terminalTitleMode),
       showBusyLoader: pickBool(uiSource, "showBusyLoader", "show_busy_loader") ?? defaults.ui.showBusyLoader,
-      terminalMouseMode: parseTerminalMouseMode(uiSource, defaults.ui.terminalMouseMode),
       customTheme: (uiSource.customTheme ?? uiSource.custom_theme) as Partial<Theme> | undefined,
     }),
     auth: {
@@ -288,7 +269,6 @@ export function serializeSettings(settings: AppSettings): Record<string, unknown
       workspace_display_mode: settings.ui.workspaceDisplayMode,
       terminal_title_mode: settings.ui.terminalTitleMode,
       show_busy_loader: settings.ui.showBusyLoader,
-      terminal_mouse_mode: settings.ui.terminalMouseMode,
       custom_theme: settings.ui.customTheme,
     },
     auth: {
@@ -358,5 +338,25 @@ export function saveSettings(settings: AppSettings): void {
     writeJsonFile(SETTINGS_FILE, serializeSettings(settings));
   } catch {
     // Silently ignore — settings are best-effort
+  }
+}
+
+/** Persist the interactive execution choice without replacing unrelated Codex config. */
+export function saveRuntimeModePreference(mode: AvailableMode, planMode: boolean): void {
+  try {
+    const codexConfigFile = getCodexConfigFile();
+    const current = existsSync(codexConfigFile)
+      ? parseTomlDocument(readFileSync(codexConfigFile, "utf-8"))
+      : {};
+    const codexa = current.codexa && typeof current.codexa === "object" && !Array.isArray(current.codexa)
+      ? { ...(current.codexa as Record<string, unknown>) }
+      : {};
+    current.codexa = { ...codexa, mode, plan_mode: planMode };
+    mkdirSync(dirname(codexConfigFile), { recursive: true });
+    const tmpFile = `${codexConfigFile}.tmp`;
+    writeFileSync(tmpFile, serializeTomlDocument(current), "utf-8");
+    renameSync(tmpFile, codexConfigFile);
+  } catch {
+    // Runtime preference persistence is best-effort and must not crash the TUI.
   }
 }

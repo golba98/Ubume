@@ -42,6 +42,28 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function sseResponse(payloads: readonly string[], chunkSizes: readonly number[] = []): Response {
+  const encoded = new TextEncoder().encode(payloads.join(""));
+  let offset = 0;
+  let chunkIndex = 0;
+  return new Response(new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= encoded.length) {
+        controller.close();
+        return;
+      }
+      const requested = chunkSizes[chunkIndex++] ?? encoded.length;
+      const end = Math.min(offset + requested, encoded.length);
+      controller.enqueue(encoded.slice(offset, end));
+      offset = end;
+    },
+  }), { headers: { "Content-Type": "text/event-stream" } });
+}
+
+function dataEvent(value: unknown): string {
+  return `data: ${JSON.stringify(value)}\n\n`;
+}
+
 function buildRequest(overrides: Partial<ProviderChatRequest> = {}): ProviderChatRequest {
   return {
     prompt: "hi",
@@ -69,6 +91,8 @@ async function withLocalEnv<T>(
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     UNSLOTH_STUDIO_URL: process.env.UNSLOTH_STUDIO_URL,
     UNSLOTH_API_KEY: process.env.UNSLOTH_API_KEY,
+    CODEXA_DEBUG_LOCAL_STREAM: process.env.CODEXA_DEBUG_LOCAL_STREAM,
+    CODEXA_DEBUG_LOCAL_STREAM_FILE: process.env.CODEXA_DEBUG_LOCAL_STREAM_FILE,
   };
 
   try {
@@ -593,6 +617,342 @@ test("Local provider reconstructs streamed text and OpenAI tool-call arguments",
     assert.equal(((assistant?.tool_calls as Array<Record<string, unknown>>)?.[0]?.id), "call_1");
     assert.equal(tool?.tool_call_id, "call_1");
   });
+});
+
+test("Local streaming accepts reasoning_content followed by standard delta.content", async () => {
+  const progress: string[] = [];
+  const fetchImpl = (async () => sseResponse([
+    dataEvent({ choices: [{ delta: { content: null } }] }),
+    dataEvent({ choices: [{ delta: { reasoning_content: "Think first." } }] }),
+    dataEvent({ choices: [{ delta: {} }] }),
+    dataEvent({ choices: [{ delta: { content: "Visible answer." } }] }),
+    dataEvent({ choices: [{ delta: {}, finish_reason: "stop" }] }),
+    "data: [DONE]\n\n",
+  ])) as typeof fetch;
+
+  const text = await runLocalOpenAiCompatible(
+    buildRequest({ localConfig: { baseUrl: "http://local.test/v1" } }),
+    { onResponse: () => undefined, onError: assert.fail, onProgress: (update) => progress.push(update.text) },
+    { fetchImpl },
+  );
+
+  assert.equal(text, "Visible answer.");
+  assert.deepEqual(progress, ["Think first."]);
+});
+
+test("Local streaming accepts reasoning plus array content parts from a fragmented SSE event", async () => {
+  const progress: string[] = [];
+  const fetchImpl = (async () => sseResponse([
+    dataEvent({ choices: [{ delta: { reasoning: "Separate reasoning." } }] }),
+    dataEvent({ choices: [{ delta: { content: [{ type: "text", text: "Array " }, { type: "output_text", text: "answer." }] } }] }),
+    dataEvent({ choices: [{ finish_reason: "stop", delta: {} }], usage: { prompt_tokens: 12, completion_tokens: 4 } }),
+    "data: [DONE]\n\n",
+  ], [1, 2, 5, 3, 8, 13, 21])) as typeof fetch;
+
+  const text = await runLocalOpenAiCompatible(
+    buildRequest({ localConfig: { baseUrl: "http://local.test/v1" } }),
+    { onResponse: () => undefined, onError: assert.fail, onProgress: (update) => progress.push(update.text) },
+    { fetchImpl },
+  );
+
+  assert.equal(text, "Array answer.");
+  assert.deepEqual(progress, ["Separate reasoning."]);
+});
+
+test("Local streaming accepts content delivered in choices[0].message", async () => {
+  const fetchImpl = (async () => sseResponse([
+    dataEvent({ choices: [{ message: { content: [{ type: "text", text: "Message content." }] }, finish_reason: "stop" }] }),
+    "data: [DONE]\n\n",
+  ])) as typeof fetch;
+
+  const text = await runLocalOpenAiCompatible(
+    buildRequest({ localConfig: { baseUrl: "http://local.test/v1" } }),
+    { onResponse: () => undefined, onError: assert.fail },
+    { fetchImpl },
+  );
+
+  assert.equal(text, "Message content.");
+});
+
+test("Local streaming silently rolls finish_reason=length into a fresh context window", async () => {
+  let streamCount = 0;
+  let summaryCount = 0;
+  const assistantDeltas: string[] = [];
+  const fetchImpl = (async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as { stream?: boolean };
+    if (body.stream === false) {
+      summaryCount += 1;
+      return jsonResponse({ choices: [{ message: { content: "Objective: finish the answer. Next response position: after It's a" }, finish_reason: "stop" }] });
+    }
+    streamCount += 1;
+    return streamCount === 1
+      ? sseResponse([
+        dataEvent({ choices: [{ delta: { content: "It's a" } }] }),
+        dataEvent({ choices: [{ delta: {}, finish_reason: "length" }] }),
+        "data: [DONE]\n\n",
+      ])
+      : sseResponse([
+        dataEvent({ choices: [{ delta: { content: " complete answer." } }] }),
+        dataEvent({ choices: [{ delta: {}, finish_reason: "stop" }] }),
+        "data: [DONE]\n\n",
+      ]);
+  }) as typeof fetch;
+
+  const text = await runLocalOpenAiCompatible(
+    buildRequest({ localConfig: {
+      baseUrl: "http://local.test/v1",
+      models: { "google/gemma-4-26b-a4b": { contextLength: 2_024 } },
+    } }),
+    { onResponse: () => undefined, onError: assert.fail, onAssistantDelta: (chunk) => assistantDeltas.push(chunk) },
+    { fetchImpl },
+  );
+
+  assert.equal(text, "It's a complete answer.");
+  assert.deepEqual(assistantDeltas, ["It's a complete answer."]);
+  assert.equal(streamCount, 2);
+  assert.equal(summaryCount, 1);
+});
+
+test("Local streaming supports more than twenty silent context-window transitions", async () => {
+  let streamCount = 0;
+  let summaryCount = 0;
+  const fetchImpl = (async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as { stream?: boolean };
+    if (body.stream === false) {
+      summaryCount += 1;
+      return jsonResponse({ choices: [{ message: { content: `Checkpoint ${summaryCount}` }, finish_reason: "stop" }] });
+    }
+    streamCount += 1;
+    const final = streamCount === 22;
+    return sseResponse([
+      dataEvent({ choices: [{ delta: { content: final ? "done" : `part-${streamCount} ` } }] }),
+      dataEvent({ choices: [{ delta: {}, finish_reason: final ? "stop" : "length" }] }),
+      "data: [DONE]\n\n",
+    ]);
+  }) as typeof fetch;
+
+  const text = await runLocalOpenAiCompatible(
+    buildRequest({ localConfig: { baseUrl: "http://local.test/v1" } }),
+    { onResponse: () => undefined, onError: assert.fail },
+    { fetchImpl },
+  );
+
+  assert.equal(streamCount, 22);
+  assert.equal(summaryCount, 21);
+  assert.match(text, /^part-1 part-2 /);
+  assert.match(text, /part-21 done$/);
+});
+
+test("Local continuation removes repeated boundary text", async () => {
+  let streamCount = 0;
+  const fetchImpl = (async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as { stream?: boolean };
+    if (body.stream === false) {
+      return jsonResponse({ choices: [{ message: { content: "Continue after Hello world" }, finish_reason: "stop" }] });
+    }
+    streamCount += 1;
+    return streamCount === 1
+      ? sseResponse([dataEvent({ choices: [{ delta: { content: "Hello world" }, finish_reason: "length" }] }), "data: [DONE]\n\n"])
+      : sseResponse([dataEvent({ choices: [{ delta: { content: "world!" }, finish_reason: "stop" }] }), "data: [DONE]\n\n"]);
+  }) as typeof fetch;
+
+  const text = await runLocalOpenAiCompatible(
+    buildRequest({ localConfig: { baseUrl: "http://local.test/v1" } }),
+    { onResponse: () => undefined, onError: assert.fail },
+    { fetchImpl },
+  );
+
+  assert.equal(text, "Hello world!");
+});
+
+test("Local reasoning-only length rolls into visible content without exposing reasoning", async () => {
+  let streamCount = 0;
+  const progress: string[] = [];
+  const fetchImpl = (async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as { stream?: boolean };
+    if (body.stream === false) {
+      return jsonResponse({ choices: [{ message: { content: "Objective: answer now." }, finish_reason: "stop" }] });
+    }
+    streamCount += 1;
+    return streamCount === 1
+      ? sseResponse([dataEvent({ choices: [{ delta: { reasoning_content: "Work through it." }, finish_reason: "length" }] }), "data: [DONE]\n\n"])
+      : sseResponse([dataEvent({ choices: [{ delta: { content: "Visible result." }, finish_reason: "stop" }] }), "data: [DONE]\n\n"]);
+  }) as typeof fetch;
+
+  const text = await runLocalOpenAiCompatible(
+    buildRequest({ localConfig: { baseUrl: "http://local.test/v1" } }),
+    { onResponse: () => undefined, onError: assert.fail, onProgress: (update) => progress.push(update.text) },
+    { fetchImpl },
+  );
+
+  assert.equal(text, "Visible result.");
+  assert.deepEqual(progress, ["Work through it."]);
+  assert.doesNotMatch(text, /Work through/);
+});
+
+test("Local streaming retries without stream_options when a server rejects usage streaming", async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const fetchImpl = (async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    bodies.push(body);
+    if (bodies.length === 1) return jsonResponse({ error: "unknown parameter stream_options" }, 400);
+    return sseResponse([
+      dataEvent({ choices: [{ delta: { content: "Compatible." }, finish_reason: "stop" }] }),
+      "data: [DONE]\n\n",
+    ]);
+  }) as typeof fetch;
+
+  const text = await runLocalOpenAiCompatible(
+    buildRequest({ localConfig: { baseUrl: "http://local.test/v1" } }),
+    { onResponse: () => undefined, onError: assert.fail },
+    { fetchImpl },
+  );
+
+  assert.equal(text, "Compatible.");
+  assert.deepEqual(bodies[0]?.stream_options, { include_usage: true });
+  assert.equal(bodies[1]?.stream_options, undefined);
+});
+
+test("Local provider creates a semantic checkpoint before old history fills the request window", async () => {
+  const bodies: Array<{ stream?: boolean; messages?: Array<{ role: string; content: string }> }> = [];
+  const fetchImpl = (async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as { stream?: boolean; messages?: Array<{ role: string; content: string }> };
+    bodies.push(body);
+    if (body.stream === false) {
+      return jsonResponse({ choices: [{ message: { content: "Objective: preserve the current task. Established facts: old history was compacted." }, finish_reason: "stop" }] });
+    }
+    return sseResponse([
+      dataEvent({ choices: [{ delta: { content: "Windowed answer." }, finish_reason: "stop" }] }),
+      "data: [DONE]\n\n",
+    ]);
+  }) as typeof fetch;
+
+  const text = await runLocalOpenAiCompatible(
+    buildRequest({
+      prompt: "current request",
+      conversationHistory: [
+        { role: "user", content: `old request ${"x".repeat(10_000)}` },
+        { role: "assistant", content: `old answer ${"y".repeat(10_000)}` },
+      ],
+      localConfig: {
+        baseUrl: "http://local.test/v1",
+        models: { "google/gemma-4-26b-a4b": { contextLength: 2_024 } },
+      },
+    }),
+    { onResponse: () => undefined, onError: assert.fail },
+    { fetchImpl },
+  );
+
+  assert.equal(text, "Windowed answer.");
+  assert.equal(bodies[0]?.stream, false);
+  assert.equal(bodies[1]?.stream, true);
+  const mainPrompt = JSON.stringify(bodies[1]?.messages);
+  assert.match(mainPrompt, /Earlier conversation checkpoint/);
+  assert.match(mainPrompt, /current request/);
+  assert.doesNotMatch(mainPrompt, /x{1000}|y{1000}/);
+});
+
+test("Local continuation never executes a tool call truncated at a window boundary", async () => {
+  await withTempWorkspace(async (workspaceRoot) => {
+    let streamCount = 0;
+    const completedTools: string[] = [];
+    const fetchImpl = (async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as { stream?: boolean };
+      if (body.stream === false) {
+        return jsonResponse({ choices: [{ message: { content: "Reissue list_files completely." }, finish_reason: "stop" }] });
+      }
+      streamCount += 1;
+      if (streamCount === 1) {
+        return sseResponse([
+          dataEvent({ choices: [{ delta: { tool_calls: [{ index: 0, id: "cut", function: { name: "list_files", arguments: "{\"pa" } }] } }] }),
+          dataEvent({ choices: [{ delta: {}, finish_reason: "length" }] }),
+          "data: [DONE]\n\n",
+        ]);
+      }
+      if (streamCount === 2) {
+        return sseResponse([
+          dataEvent({ choices: [{ delta: { tool_calls: [{ index: 0, id: "complete", function: { name: "list_files", arguments: "{\"path\":\".\"}" } }] } }] }),
+          dataEvent({ choices: [{ delta: {}, finish_reason: "tool_calls" }] }),
+          "data: [DONE]\n\n",
+        ]);
+      }
+      return sseResponse([
+        dataEvent({ choices: [{ delta: { content: "Listed once." }, finish_reason: "stop" }] }),
+        "data: [DONE]\n\n",
+      ]);
+    }) as typeof fetch;
+
+    const text = await runLocalOpenAiCompatible(
+      buildRequest({
+        workspaceRoot,
+        route: { providerId: "local", modelId: "deepseek-r1", backendKind: "local-openai-compatible" },
+        localConfig: { baseUrl: "http://local.test/v1" },
+      }),
+      {
+        onResponse: () => undefined,
+        onError: assert.fail,
+        onToolActivity: (activity) => {
+          if (activity.status === "completed") completedTools.push(activity.command);
+        },
+      },
+      { fetchImpl },
+    );
+
+    assert.equal(text, "Listed once.");
+    assert.deepEqual(completedTools, ["list_files: ."]);
+  });
+});
+
+test("Local streaming distinguishes reasoning-only completion from a genuinely empty stream", async () => {
+  const responses = [
+    sseResponse([
+      dataEvent({ choices: [{ delta: { reasoning_content: "Only thought." } }] }),
+      dataEvent({ choices: [{ delta: {}, finish_reason: "stop" }] }),
+      "data: [DONE]\n\n",
+    ]),
+    sseResponse([
+      dataEvent({ choices: [{ delta: {} }] }),
+      dataEvent({ choices: [{ delta: {}, finish_reason: "stop" }] }),
+      "data: [DONE]\n\n",
+    ]),
+  ];
+  const fetchImpl = (async () => responses.shift()!) as typeof fetch;
+  const request = buildRequest({ localConfig: { baseUrl: "http://local.test/v1" } });
+  const handlers = { onResponse: () => undefined, onError: () => undefined };
+
+  await assert.rejects(runLocalOpenAiCompatible(request, handlers, { fetchImpl }), /reasoning characters but no visible assistant text/);
+  await assert.rejects(runLocalOpenAiCompatible(request, handlers, { fetchImpl }), /returned no visible assistant text or tool call/);
+});
+
+test("Local stream diagnostics log safe request fields, raw chunks, parsed chunks, and completion", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "codexa-local-stream-debug-"));
+  const logPath = path.join(workspaceRoot, "stream.jsonl");
+  try {
+    await withLocalEnv({
+      CODEXA_DEBUG_LOCAL_STREAM: "1",
+      CODEXA_DEBUG_LOCAL_STREAM_FILE: logPath,
+      CODEXA_LOCAL_API_KEY: "must-not-be-logged",
+    }, async () => {
+      const fetchImpl = (async () => sseResponse([
+        dataEvent({ choices: [{ delta: { content: "Logged." }, finish_reason: "stop" }] }),
+        "data: [DONE]\n\n",
+      ])) as typeof fetch;
+      await runLocalOpenAiCompatible(
+        buildRequest({ localConfig: { baseUrl: "http://local.test/v1", apiKey: "also-secret" } }),
+        { onResponse: () => undefined, onError: assert.fail },
+        { fetchImpl },
+      );
+    });
+    const log = await readFile(logPath, "utf8");
+    assert.match(log, /local-stream-request/);
+    assert.match(log, /raw-local-stream-chunk/);
+    assert.match(log, /parsed-local-stream-chunk/);
+    assert.match(log, /local-stream-complete/);
+    assert.match(log, /"received_done":true/);
+    assert.doesNotMatch(log, /must-not-be-logged|also-secret/);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
 });
 
 test("Local provider executes unterminated text tool calls before final answer", async () => {
@@ -1174,6 +1534,55 @@ test("Unsloth discovers only loaded models and merges inference status", async (
     assert.deepEqual(discovery.models.map((model) => model.modelId), ["loaded-qwen"]);
     assert.equal((discovery.models[0]?.raw as Record<string, unknown>).context_length, 32768);
     assert.equal((discovery.models[0]?.raw as Record<string, unknown>).supports_tool_calls, true);
+  });
+});
+
+test("Unsloth active model replaces a stale persisted model and carries its context", async () => {
+  await withLocalEnv({
+    UNSLOTH_STUDIO_URL: "http://127.0.0.1:8888",
+    UNSLOTH_API_KEY: "test-unsloth-key",
+  }, async () => {
+    const fetchImpl = (async (input) => {
+      const url = String(input);
+      if (url.endsWith("/v1/models")) {
+        return jsonResponse({
+          data: [
+            { id: "previous-model", loaded: true },
+            { id: "newly-loaded-model", loaded: true },
+          ],
+        });
+      }
+      if (url.endsWith("/api/inference/status")) {
+        return jsonResponse({
+          active_model: "newly-loaded-model",
+          context_length: 65536,
+          max_context_length: 131072,
+        });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    }) as typeof fetch;
+
+    const validation = await checkLocalProvider({
+      localBackend: "unsloth",
+      override: {
+        localBackend: "unsloth",
+        currentModel: "previous-model",
+        defaultModel: "previous-model",
+      },
+      fetchImpl,
+    });
+
+    assert.equal(validation.status, "ready");
+    assert.equal(validation.diagnostics?.selectedModel, "newly-loaded-model");
+    assert.equal(validation.diagnostics?.selectionReason, "active-loaded");
+    const discovery = discoverLocalModels({
+      localBackend: "unsloth",
+      currentModel: "previous-model",
+      defaultModel: "previous-model",
+    }, "unsloth");
+    const active = discovery.models.find((model) => model.modelId === "newly-loaded-model");
+    assert.equal((active?.raw as Record<string, unknown>).context_length, 65536);
+    assert.equal((active?.raw as Record<string, unknown>).max_context_length, 131072);
   });
 });
 

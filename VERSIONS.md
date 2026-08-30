@@ -3,6 +3,19 @@
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
 
+## v1.0.19 — 2026-08-30
+
+Codexa now keeps long Local workflows moving beyond ten tool calls and completes
+explicitly authorized Git and pull-request work instead of stopping early with
+commands for the user. Restored Local models refresh their discovered context
+size after startup, so the header no longer remains at `Unknown` when the model
+server reports a limit.
+
+Long Local conversations also preserve continuity through validated semantic
+checkpoints, Local streaming has opt-in privacy-aware diagnostics, runtime mode
+choices persist safely, and terminal history uses native scrollback with less
+obsolete mouse and viewport machinery.
+
 ## v1.0.18 — 2026-08-28
 
 Codexa now supports Unsloth Studio as a selectable Local backend. It discovers

@@ -10,19 +10,11 @@ import {
   buildStaticRenderItems,
   buildTimelineItems,
   TimelineRowView,
-  type TimelineItem,
 } from "./Timeline.js";
+import { buildNativeTranscriptParts, type NativeTranscriptRowItem, type TimelineRow } from "./timelineMeasure.js";
 import { getShellHeight, getShellWidth, resolveStartupHeaderMode, type TerminalViewport } from "../layout.js";
-import {
-  buildNativeTranscriptParts,
-  type NativeTranscriptRowItem,
-  type TimelineRow,
-} from "./timelineMeasure.js";
 import { LOGO_COMPACT, LOGO_COMPACT_MIN_COLS, LOGO_LARGE, LOGO_MEDIUM, selectLogoVariant } from "../render/logoVariants.js";
 import { useTheme } from "../theme.js";
-
-type TranscriptStaticItem = NativeTranscriptRowItem & { type: "rows" };
-type StaticRenderItem = TranscriptStaticItem;
 
 export interface TranscriptShellProps {
   layout: TerminalViewport;
@@ -38,24 +30,7 @@ export interface TranscriptShellProps {
   notice?: string | null;
   verboseMode?: boolean;
   clearCount?: number;
-  /**
-   * Bumped whenever a width-changing resize forces the terminal's app.tsx-owned
-   * clear boundary to physically wipe the screen. Folded into <Static>'s key
-   * (not the whole component's) so already-flushed content reprints at the
-   * new width — without remounting the composer or anything else.
-   */
-  repaintGeneration?: number;
   visible?: boolean;
-}
-
-function RowsBlock({ rows }: { rows: TimelineRow[] }) {
-  return (
-    <Box flexDirection="column">
-      {rows.map((row) => (
-        <TimelineRowView key={row.key} row={row} />
-      ))}
-    </Box>
-  );
 }
 
 function isTranscriptEvent(event: TimelineEvent): boolean {
@@ -100,69 +75,6 @@ function getLogoHiddenReason({
   return null;
 }
 
-function buildTranscriptItems({
-  layout,
-  authState,
-  workspaceLabel,
-  workspaceRoot,
-  runtimeSummary,
-  staticEvents,
-  activeEvents,
-  uiState,
-  composerRows,
-  verboseMode,
-}: Pick<
-  TranscriptShellProps,
-  | "layout"
-  | "authState"
-  | "workspaceLabel"
-  | "workspaceRoot"
-  | "runtimeSummary"
-  | "staticEvents"
-  | "activeEvents"
-  | "uiState"
-  | "composerRows"
-  | "verboseMode"
->): { staticItems: TranscriptStaticItem[]; liveRows: TimelineRow[]; startupHeaderMode: ReturnType<typeof resolveStartupHeaderMode> } {
-  const staticItems = buildTimelineItems(staticEvents);
-  const activeItems = buildTimelineItems(activeEvents);
-  const turnIds = [...staticItems, ...activeItems]
-    .filter((item): item is Extract<TimelineItem, { type: "turn" }> => item.type === "turn")
-    .map((item) => item.turnId);
-  const startupHeaderMode = resolveStartupHeaderMode({
-    cols: layout.cols,
-    rows: layout.rows,
-    introRows: 8,
-    composerRows: composerRows ?? 5,
-  });
-
-  const parts = buildNativeTranscriptParts(
-    [
-      buildIntroRenderItem({
-        authState,
-        workspaceLabel,
-        layout,
-        providerLabel: runtimeSummary?.providerLabel ?? null,
-        startupHeaderMode,
-      }),
-      ...buildStaticRenderItems(staticItems, turnIds, null, null, null),
-      ...buildActiveRenderItems(activeItems, turnIds, uiState),
-    ],
-    {
-      totalWidth: getShellWidth(layout.cols),
-      verboseMode,
-      debugLabel: "transcript-shell",
-      workspaceRoot,
-    },
-  );
-
-  return {
-    staticItems: parts.staticItems.map((item) => ({ ...item, type: "rows" as const })),
-    liveRows: parts.liveRows,
-    startupHeaderMode,
-  };
-}
-
 function TranscriptShellInner({
   layout,
   authState,
@@ -180,54 +92,16 @@ function TranscriptShellInner({
   visible = true,
 }: TranscriptShellProps) {
   const theme = useTheme();
-  const { staticItems, liveRows, startupHeaderMode } = useMemo(
-    () => buildTranscriptItems({
-      layout,
-      authState,
-      workspaceLabel,
-      workspaceRoot,
-      runtimeSummary,
-      staticEvents,
-      activeEvents,
-      uiState,
-      composerRows,
-      verboseMode,
+  const startupHeaderMode = useMemo(
+    () => resolveStartupHeaderMode({
+      cols: layout.cols,
+      rows: layout.rows,
+      introRows: 8,
+      composerRows: composerRows ?? 5,
     }),
-    [activeEvents, authState, composerRows, layout, runtimeSummary, staticEvents, uiState, verboseMode, workspaceLabel, workspaceRoot],
+    [composerRows, layout.cols, layout.rows],
   );
   const homeScreenActive = visible && isHomeScreenState({ staticEvents, activeEvents, uiState });
-  const visibleStaticItemsRef = useRef(staticItems);
-
-  useEffect(() => {
-    if (visible) {
-      visibleStaticItemsRef.current = staticItems;
-    }
-  }, [staticItems, visible]);
-
-  const displayedStaticItems = visible ? staticItems : visibleStaticItemsRef.current;
-
-  const staticRenderItems = useMemo<StaticRenderItem[]>(() => {
-    return displayedStaticItems.map((item) => ({
-      ...item,
-      key: `clear-${clearCount}-${item.key}`,
-    }));
-  }, [clearCount, displayedStaticItems]);
-
-  const displayedLiveRows = visible ? liveRows : [];
-  const staticRowCount = useMemo(
-    () => displayedStaticItems.reduce((rowCount, item) => rowCount + item.rows.length, 0),
-    [displayedStaticItems],
-  );
-  const liveBottomSpacerRows = visible
-    ? Math.max(0, getShellHeight(layout.rows) - staticRowCount - displayedLiveRows.length - (composerRows ?? 0) - (notice ? 1 : 0))
-    : 0;
-  const spacerRows = useMemo<TimelineRow[]>(
-    () => Array.from({ length: liveBottomSpacerRows }, (_, index) => ({
-      key: `live-bottom-spacer-${clearCount}-${index}`,
-      spans: [{ text: " ".repeat(getShellWidth(layout.cols)) }],
-    })),
-    [clearCount, layout.cols, liveBottomSpacerRows],
-  );
   const shellWidth = getShellWidth(layout.cols);
   const introInnerWidth = Math.max(10, shellWidth - 2);
   const selectedLogoRows = startupHeaderMode === "tiny"
@@ -242,6 +116,46 @@ function TranscriptShellInner({
     width: introInnerWidth,
   });
   const startupTraceKeyRef = useRef<string | null>(null);
+  const visibleTranscriptRef = useRef({ staticEvents, activeEvents, uiState });
+  if (visible) {
+    visibleTranscriptRef.current = { staticEvents, activeEvents, uiState };
+  }
+  const renderedTranscript = visibleTranscriptRef.current;
+  const conversationViewportRows = Math.max(
+    2,
+    getShellHeight(layout.rows) - (composerRows ?? 0) - (notice ? 1 : 0),
+  );
+  const nativeTranscript = useMemo(() => {
+    const staticItems = buildTimelineItems(renderedTranscript.staticEvents);
+    const activeItems = buildTimelineItems(renderedTranscript.activeEvents);
+    const allTurnIds = [...staticItems, ...activeItems]
+      .flatMap((item) => item.type === "turn" ? [item.turnId] : []);
+    const activeTurnId = activeItems.find((item) => item.type === "turn")?.turnId ?? null;
+    return buildNativeTranscriptParts(
+      [
+        buildIntroRenderItem({
+          authState,
+          workspaceLabel,
+          layout,
+          providerLabel: runtimeSummary?.providerLabel ?? null,
+          startupHeaderMode,
+        }),
+        ...buildStaticRenderItems(staticItems, allTurnIds, activeTurnId, null, null),
+        ...buildActiveRenderItems(activeItems, allTurnIds, renderedTranscript.uiState),
+      ],
+      {
+        totalWidth: shellWidth,
+        verboseMode,
+        debugLabel: "transcript-shell-native",
+        workspaceRoot,
+      },
+    );
+  }, [activeEvents, authState, layout, renderedTranscript, runtimeSummary?.providerLabel, shellWidth, startupHeaderMode, staticEvents, uiState, verboseMode, visible, workspaceLabel, workspaceRoot]);
+  const committedRows = useMemo(
+    () => nativeTranscript.staticItems.reduce((total, item) => total + item.rows.length, 0),
+    [nativeTranscript.staticItems],
+  );
+  const spacerRows = Math.max(0, conversationViewportRows - committedRows - nativeTranscript.liveRows.length);
 
   useEffect(() => {
     const nextKey = [
@@ -274,14 +188,13 @@ function TranscriptShellInner({
       composerCount: visible ? 1 : 0,
       footerCount: visible ? 1 : 0,
       homeScreenRendererUsed: homeScreenActive,
-      staticItemCount: staticRenderItems.length,
-      liveRowCount: displayedLiveRows.length,
+      staticItemCount: staticEvents.length,
+      liveRowCount: activeEvents.length,
       clearCount,
     });
   }, [
     activeEvents,
     clearCount,
-    displayedLiveRows.length,
     homeScreenActive,
     layout.cols,
     layout.mode,
@@ -290,19 +203,17 @@ function TranscriptShellInner({
     selectedLogoVariant,
     startupHeaderMode,
     staticEvents,
-    staticRenderItems.length,
     uiState.kind,
     visible,
   ]);
 
   return (
     <Box flexDirection="column" width="100%" display={visible ? "flex" : "none"}>
-      <Static key={`static-${clearCount}`} items={staticRenderItems}>
-        {(item) => <RowsBlock key={item.key} rows={item.rows} />}
+      <Static key={`native-static-${clearCount}`} items={nativeTranscript.staticItems}>
+        {(item: NativeTranscriptRowItem) => <NativeRowsItem key={item.key} rows={item.rows} />}
       </Static>
-
-      {displayedLiveRows.length > 0 && <RowsBlock rows={displayedLiveRows} />}
-      {spacerRows.length > 0 && <RowsBlock rows={spacerRows} />}
+      {spacerRows > 0 && <Box height={spacerRows} />}
+      <NativeRowsItem rows={nativeTranscript.liveRows} />
 
       {visible && notice && (
         <Box width="100%" paddingX={1}>
@@ -315,17 +226,18 @@ function TranscriptShellInner({
 }
 
 export const TranscriptShell = memo(function TranscriptShell(props: TranscriptShellProps) {
-  // repaintGeneration is folded in here (not just <Static>'s own key) because
-  // Ink only reliably re-flushes <Static> content on a genuine fresh mount of
-  // the whole subtree — its "capture before delete" escape hatch
-  // (reconciler.js's isStaticDirty/onImmediateRender) does not fire the same
-  // way when only the inner <Static> node is keyed away and remounted on its
-  // own. This does remount the composer too, but only on the (already
-  // disruptive) event of a real terminal resize, not during normal typing.
   return (
     <TranscriptShellInner
-      key={`clear-${props.clearCount ?? 0}-repaint-${props.repaintGeneration ?? 0}`}
+      key={`clear-${props.clearCount ?? 0}`}
       {...props}
     />
   );
 });
+
+function NativeRowsItem({ rows }: { rows: TimelineRow[] }) {
+  return (
+    <Box flexDirection="column">
+      {rows.map((row) => <TimelineRowView key={row.key} row={row} />)}
+    </Box>
+  );
+}

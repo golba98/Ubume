@@ -141,3 +141,28 @@ test("apply_patch updates a file with context matching", async () => {
     assert.equal(await readFile(path.join(workspaceRoot, "main.txt"), "utf8"), "one\nTWO\nthree\n");
   });
 });
+
+test("apply_patch adds each new-file line exactly once", async () => {
+  await withTempWorkspace(async (workspaceRoot) => {
+    const result = await executeAgentTool("apply_patch", {
+      patch: [
+        "*** Begin Patch",
+        "*** Add File: README.md",
+        "+# Watchtower",
+        "+",
+        "+Local-first operations.",
+        "*** End Patch",
+        "",
+      ].join("\n"),
+    }, {
+      workspaceRoot,
+      runtime: runtime("workspace-write"),
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(
+      await readFile(path.join(workspaceRoot, "README.md"), "utf8"),
+      "# Watchtower\n\nLocal-first operations.\n",
+    );
+  });
+});

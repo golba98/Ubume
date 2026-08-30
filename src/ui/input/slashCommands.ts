@@ -26,7 +26,6 @@ export const SLASH_COMMANDS = [
   { cmd: "/workspace", desc: "Show the locked workspace" },
   { cmd: "/copy", desc: "Copy the full conversation transcript to clipboard" },
   { cmd: "/update", desc: "Check for updates and install the latest Codexa" },
-  { cmd: "/mouse", desc: "Toggle mouse capture for wheel scrolling (off by default)" },
   { cmd: "/exit", desc: "Quit the application" },
 ] as const satisfies readonly SlashCommandSuggestion[];
 

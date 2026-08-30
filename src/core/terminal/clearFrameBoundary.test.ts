@@ -8,9 +8,7 @@ import type { InkRenderInstance } from "./inkRenderReset.js";
 import { configureRenderDebug } from "../perf/renderDebug.js";
 
 function createHarness(overrides: {
-  onWidthResizeRefresh?: () => void;
   isOverlayActive?: () => boolean;
-  getRenderedRepaintGeneration?: () => number;
   getRenderedLayoutCols?: () => number | undefined;
 } = {}) {
   const events: string[] = [];
@@ -305,7 +303,7 @@ test("replays suppressed static intro rows into the first authoritative post-cle
   assert.equal(controller.getState().clearPending, false);
 });
 
-test("defers the width repaint until the re-flushed static frame arrives, then commits it atomically", () => {
+test("writes a resized main frame without clearing native scrollback", () => {
   // A width change reflows the frame already on screen, but the commit that
   // first observes the new width was still built from pre-resize React state,
   // and <Static> never re-emits flushed content on its own. The boundary must
@@ -313,15 +311,7 @@ test("defers the width repaint until the re-flushed static frame arrives, then c
   // (onWidthResizeRefresh), and only then clear scrollback and write the
   // rebuilt frame — clear and content land atomically, so no intermediate
   // "composer-only" frame is ever visible or stranded in scrollback.
-  let renderedGeneration = 0;
-  let resizeRefreshCount = 0;
-  const harness = createHarness({
-    onWidthResizeRefresh: () => {
-      resizeRefreshCount += 1;
-      renderedGeneration += 1;
-    },
-    getRenderedRepaintGeneration: () => renderedGeneration,
-  });
+  const harness = createHarness();
   const { controller, instance, stdout, calls, events } = harness;
 
   instance.renderInteractiveFrame?.("initial-frame", 4, "");
@@ -330,42 +320,28 @@ test("defers the width repaint until the re-flushed static frame arrives, then c
 
   stdout.columns = 180;
   stdout.rows = 50;
-  instance.renderInteractiveFrame?.("stale-width-frame", 4, "");
-  assert.equal(resizeRefreshCount, 1, "width change should request the <Static> re-flush");
-  assert.equal(controller.getState().widthRepaintPending, true);
-  assert.equal(events.some((entry) => entry.startsWith("write:")), false, "the stale-state frame must be suppressed, not written");
-  assert.equal(events.some((entry) => entry.startsWith("clear:")), false, "no physical clear before the rebuilt frame exists");
-
-  instance.renderInteractiveFrame?.("rebuilt-frame", 6, "██ re-flushed static\n");
+  instance.renderInteractiveFrame?.("rebuilt-frame", 6, "");
   const clearIndex = events.findIndex((entry) => entry.startsWith("clear:test:clearBoundary:resizeRefresh"));
   const writeIndex = events.findIndex((entry) => entry.startsWith("write:rebuilt-frame"));
-  assert.ok(clearIndex >= 0, "the repaint must use the scrollback-inclusive transcript clear");
-  assert.ok(writeIndex > clearIndex, "clear must immediately precede the rebuilt frame write");
+  assert.equal(clearIndex, -1, "resize must preserve native scrollback");
+  assert.ok(writeIndex >= 0, "the resized live frame is written normally");
   assert.equal(
-    events.some((entry) => entry === `write:rebuilt-frame:6:${"██ re-flushed static\n".length}`),
+    events.some((entry) => entry === "write:rebuilt-frame:6:0"),
     true,
-    "the rebuilt frame must carry the full re-flushed static content",
+    "the unified frame contains the complete resized transcript",
   );
-  assert.equal(controller.getState().widthRepaintPending, false);
-  assert.equal(controller.getState().lastFrameWasAuthoritative, true);
-  assert.equal(calls.logReset, resetBeforeResize + 1, "the repaint resets Ink's caches exactly once");
+  assert.equal(controller.getState().lastFrameWasAuthoritative, false);
+  assert.equal(calls.logReset, resetBeforeResize, "resize must not reset committed static history");
 });
 
-test("waits for the committed layout to match the new width before requesting the <Static> re-flush", () => {
+test("does not suppress frames while the React layout settles after resize", () => {
   // The viewport hook commits new dimensions on a trailing settle (~100ms), so
   // frames observing the new stdout.columns can still be laid out at the old
   // width. Remounting <Static> against that stale layout would re-flush the
   // logo/transcript at the wrong width — exactly the stale-variant home screen
   // the VTE startup settle used to produce.
   let renderedLayoutCols = 120;
-  let renderedGeneration = 0;
-  let resizeRefreshCount = 0;
   const harness = createHarness({
-    onWidthResizeRefresh: () => {
-      resizeRefreshCount += 1;
-      renderedGeneration += 1;
-    },
-    getRenderedRepaintGeneration: () => renderedGeneration,
     getRenderedLayoutCols: () => renderedLayoutCols,
   });
   const { controller, instance, stdout, events } = harness;
@@ -377,92 +353,48 @@ test("waits for the committed layout to match the new width before requesting th
   stdout.columns = 180;
   instance.renderInteractiveFrame?.("stale-layout-frame", 4, "");
   instance.renderInteractiveFrame?.("still-stale-layout-frame", 4, "");
-  assert.equal(resizeRefreshCount, 0, "no <Static> remount while the committed layout lags the terminal width");
-  assert.equal(events.some((entry) => entry.startsWith("write:")), false, "stale-layout frames stay suppressed");
+  assert.equal(events.some((entry) => entry.startsWith("write:")), true, "native mode keeps writing without a resize gate");
 
   // The viewport settle lands: the committed layout now matches the terminal.
   renderedLayoutCols = 180;
   instance.renderInteractiveFrame?.("settled-layout-frame", 4, "");
-  assert.equal(resizeRefreshCount, 1, "the re-flush is requested from the first width-correct commit");
-  assert.equal(events.some((entry) => entry.startsWith("write:")), false, "the pre-remount frame is still suppressed");
-
-  instance.renderInteractiveFrame?.("rebuilt-frame", 6, "width-correct static\n");
   assert.equal(
-    events.some((entry) => entry === `write:rebuilt-frame:6:${"width-correct static\n".length}`),
+    events.some((entry) => entry === "write:settled-layout-frame:4:0"),
     true,
-    "the repaint commits with static rebuilt at the settled width",
+    "the width-correct unified frame commits immediately",
   );
-  assert.equal(controller.getState().widthRepaintPending, false);
 });
 
-test("does not mistake a pre-resize static chunk for the rebuilt frame", () => {
+test("repaints on every width change, and a settled width never re-arms", () => {
   // Incremental static chunks (e.g. a system event flushed by the old <Static>
   // instance) can land between the resize and the re-flush commit. Committing
   // one of those after the clear would wipe scrollback and leave only that
   // chunk on screen.
-  let renderedGeneration = 0;
-  const harness = createHarness({
-    getRenderedRepaintGeneration: () => renderedGeneration,
-  });
+  const harness = createHarness();
   const { controller, instance, stdout, events } = harness;
 
   instance.renderInteractiveFrame?.("initial-frame", 4, "");
   events.length = 0;
 
   stdout.columns = 180;
-  instance.renderInteractiveFrame?.("stale-width-frame", 4, "");
-  instance.renderInteractiveFrame?.("chunk-frame", 4, "incremental chunk\n");
-  assert.equal(events.some((entry) => entry.startsWith("write:")), false, "pre-re-flush static chunks must stay suppressed");
-  assert.equal(controller.getState().widthRepaintPending, true);
-
-  renderedGeneration = 1;
-  instance.renderInteractiveFrame?.("rebuilt-frame", 6, "full re-flush\n");
-  assert.equal(
-    events.some((entry) => entry === `write:rebuilt-frame:6:${"full re-flush\n".length}`),
-    true,
-    "only the post-bump re-flush frame commits the repaint",
-  );
-  assert.equal(controller.getState().widthRepaintPending, false);
-});
-
-test("repaints on every width change, and a settled width never re-arms", () => {
-  let renderedGeneration = 0;
-  let resizeRefreshCount = 0;
-  const harness = createHarness({
-    onWidthResizeRefresh: () => {
-      resizeRefreshCount += 1;
-      renderedGeneration += 1;
-    },
-    getRenderedRepaintGeneration: () => renderedGeneration,
-  });
-  const { controller, instance, stdout, events } = harness;
-
-  instance.renderInteractiveFrame?.("initial-frame", 4, "");
-
-  stdout.columns = 180;
-  instance.renderInteractiveFrame?.("stale-one", 4, "");
-  instance.renderInteractiveFrame?.("rebuilt-one", 6, "static one\n");
+  instance.renderInteractiveFrame?.("rebuilt-one", 6, "");
 
   // Another commit at the settled width: no new repaint.
   instance.renderInteractiveFrame?.("steady-frame", 6, "");
-  assert.equal(resizeRefreshCount, 1, "a commit at the settled width must not re-arm the repaint");
   assert.equal(controller.getState().lastFrameWasAuthoritative, false, "steady frames are diffed, not authoritative");
 
   // A second, later width change repaints again.
   stdout.columns = 101;
-  instance.renderInteractiveFrame?.("stale-two", 6, "");
-  instance.renderInteractiveFrame?.("rebuilt-two", 7, "static two\n");
-  assert.equal(resizeRefreshCount, 2);
+  instance.renderInteractiveFrame?.("rebuilt-two", 7, "");
   assert.equal(
     events.filter((entry) => entry.startsWith("clear:test:clearBoundary:resizeRefresh")).length,
-    2,
-    "each width change should emit its own transcript clear",
+    0,
+    "width changes must not clear native transcript history",
   );
 });
 
 test("does not repaint on a height-only resize (no width change)", () => {
-  let resizeRefreshCount = 0;
-  const harness = createHarness({ onWidthResizeRefresh: () => { resizeRefreshCount += 1; } });
+  const harness = createHarness();
   const { controller, instance, stdout, calls, events } = harness;
 
   instance.renderInteractiveFrame?.("initial-frame", 4, "");
@@ -471,7 +403,6 @@ test("does not repaint on a height-only resize (no width change)", () => {
   // Only the row count changes — no reflow risk, so no authoritative repaint.
   stdout.rows = 60;
   instance.renderInteractiveFrame?.("taller-frame", 5, "");
-  assert.equal(resizeRefreshCount, 0, "height-only resize should not trigger the re-flush callback");
   assert.equal(controller.getState().lastFrameWasAuthoritative, false);
   assert.equal(calls.logReset, resetAfterFirstFrame, "height-only resize should not force a reset");
   assert.equal(
@@ -486,12 +417,10 @@ test("does not repaint on a height-only resize (no width change)", () => {
   );
 });
 
-test("width repaint safety valve commits after the suppression cap instead of freezing", () => {
+test("repeated width-change frames remain writable without a suppression gate", () => {
   // If the re-flushed frame never arrives (render stall, hidden transcript),
   // the gate must open rather than suppress frames forever.
-  const harness = createHarness({
-    getRenderedRepaintGeneration: () => 0,
-  });
+  const harness = createHarness({ getRenderedLayoutCols: () => 120 });
   const { controller, instance, stdout, events } = harness;
 
   instance.renderInteractiveFrame?.("initial-frame", 4, "");
@@ -503,13 +432,12 @@ test("width repaint safety valve commits after the suppression cap instead of fr
     instance.renderInteractiveFrame?.(`stalled-frame-${index}`, 4, "");
   }
 
-  assert.equal(controller.getState().widthRepaintPending, false, "the safety valve must resolve the pending repaint");
   const fallbackClear = events.findIndex((entry) => entry.startsWith("clear:test:clearBoundary:resizeRefreshFallback"));
-  assert.ok(fallbackClear >= 0, "the fallback still clears before repainting");
+  assert.equal(fallbackClear, -1, "native resize never clears scrollback");
   assert.equal(
-    events.some((entry) => entry === `write:stalled-frame-8:4:${"accumulated static\n".length}`),
+    events.some((entry) => entry === "write:stalled-frame-8:4:0"),
     true,
-    "the fallback repaints with the static content Ink accumulated",
+    "the live frame continues through normal Ink rendering",
   );
 });
 
@@ -579,15 +507,8 @@ test("holds transcript static flushed during an overlay and replays it into the 
 
 test("a width change while an overlay is open repaints the alt buffer, then re-arms the transcript repaint on exit", () => {
   let overlayActive = false;
-  let renderedGeneration = 0;
-  let resizeRefreshCount = 0;
   const harness = createHarness({
     isOverlayActive: () => overlayActive,
-    onWidthResizeRefresh: () => {
-      resizeRefreshCount += 1;
-      renderedGeneration += 1;
-    },
-    getRenderedRepaintGeneration: () => renderedGeneration,
   });
   const { controller, instance, stdout, events } = harness;
 
@@ -610,20 +531,14 @@ test("a width change while an overlay is open repaints the alt buffer, then re-a
   events.length = 0;
   overlayActive = false;
   instance.renderInteractiveFrame?.("main-frame-exit", 5, "");
-  assert.equal(controller.getState().widthRepaintPending, true);
-  assert.equal(events.some((entry) => entry.startsWith("write:")), false, "the stale restored frame must not be written");
+  assert.equal(events.some((entry) => entry.startsWith("write:main-frame-exit")), true, "restored native buffer receives the exit frame");
 
-  instance.renderInteractiveFrame?.("main-frame-stale", 5, "");
-  assert.equal(resizeRefreshCount, 1, "the repaint must request the <Static> re-flush once the layout is ready");
-  assert.equal(events.some((entry) => entry.startsWith("write:")), false, "pre-re-flush frames stay suppressed");
-
-  instance.renderInteractiveFrame?.("main-frame-rebuilt", 6, "re-flushed transcript\n");
+  instance.renderInteractiveFrame?.("main-frame-rebuilt", 6, "");
   assert.equal(
-    events.some((entry) => entry === `write:main-frame-rebuilt:6:${"re-flushed transcript\n".length}`),
+    events.some((entry) => entry === "write:main-frame-rebuilt:6:0"),
     true,
     "the rebuilt transcript frame commits the repaint after the overlay exit",
   );
-  assert.equal(controller.getState().widthRepaintPending, false);
 });
 
 test("logs clear generation, stale suppression, and first committed post-clear frame fields for terminal tracing", () => {
@@ -671,8 +586,8 @@ test("logs clear generation, stale suppression, and first committed post-clear f
     const resizeCommit = records.find((entry) => entry.kind === "terminal" && entry.event === "resizeRefreshCommitted");
     assert.ok(frameRecords.some((entry) => entry.staleFrameSuppressed === true), "stale pre-clear suppression should be traced");
     assert.ok(frameRecords.some((entry) => entry.frameClassification === "post-clear"), "post-clear frame classification should be traced");
-    assert.ok(repaintArmed, "width-change repaint arming should be traced");
-    assert.ok(resizeCommit, "resize refresh commit should be traced");
+    assert.equal(repaintArmed, undefined, "native width changes do not arm transcript repaint");
+    assert.equal(resizeCommit, undefined, "native width changes do not clear and recommit history");
     assert.ok(firstCommit, "first committed post-clear frame should be traced");
     assert.equal(typeof firstCommit.frameHash, "string");
     assert.equal(firstCommit.firstFrameAuthoritative, true);

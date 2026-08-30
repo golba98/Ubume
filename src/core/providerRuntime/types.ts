@@ -5,7 +5,7 @@ import type { ResolvedRuntimeConfig } from "../../config/runtimeConfig.js";
 export type { ResolvedRuntimeConfig };
 import type { LocalBackendId, ProviderId } from "../providerLauncher/types.js";
 import type { ProviderWorkspaceOverride } from "../providerLauncher/types.js";
-import type { ConversationMessage } from "../workspace/conversationStore.js";
+import type { ConversationContextCheckpoint, ConversationMessage } from "../workspace/conversationStore.js";
 
 export type ProviderBackendKind =
   | "codex-cli-auth"
@@ -93,6 +93,7 @@ export interface ProviderChatRequest {
   localConfig?: ProviderWorkspaceOverride | null;
   runIntent?: "normal" | "plan" | "approved-execution";
   conversationHistory?: readonly ConversationMessage[];
+  localContextCheckpoint?: ConversationContextCheckpoint;
 }
 
 export interface ProviderChatResponse {
