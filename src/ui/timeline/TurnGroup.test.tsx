@@ -309,6 +309,140 @@ test("assistant output 'Codexa' label is indented by transcriptContentIndent", a
   harness.instance.unmount();
 });
 
+test("renders accumulated Local reasoning once and keeps the final response separate", async () => {
+  const turnId = 101;
+  const user = makeUser(turnId);
+  const run: RunEvent = {
+    ...makeRunningRun(turnId),
+    status: "completed",
+    durationMs: 500,
+    progressEntries: [{
+      id: "local-reasoning-session-1-1-0",
+      source: "reasoning",
+      text: "The user said Hi. I should answer helpfully.",
+      sequence: 1,
+      createdAt: 2,
+      updatedAt: 3,
+      pendingNewlineCount: 0,
+      blocks: [{
+        id: "local-reasoning-session-1-1-0-block-1",
+        text: "The user said Hi. I should answer helpfully.",
+        sequence: 1,
+        createdAt: 2,
+        updatedAt: 3,
+        status: "completed",
+        streamSeq: 1,
+      }],
+    }],
+    responseSegments: [{
+      id: "response-1",
+      streamSeq: 2,
+      chunks: ["Hi! How can I help?"],
+      status: "completed",
+      startedAt: 4,
+    }],
+    streamItems: [
+      { streamSeq: 1, kind: "thinking", refId: "local-reasoning-session-1-1-0-block-1" },
+      { streamSeq: 2, kind: "response", refId: "response-1" },
+    ],
+  };
+  const harness = renderTurnGroup(
+    <ThemeProvider theme="purple">
+      <TurnGroup
+        cols={120}
+        turnIndex={1}
+        user={user}
+        run={run}
+        assistant={makeAssistant(turnId, "Hi! How can I help?")}
+        opacity="active"
+        question={null}
+        runPhase="final"
+        streamPreviewRows={8}
+        streamMode="assistant-first"
+      />
+    </ThemeProvider>,
+  );
+
+  await sleep();
+  const frame = harness.readOutput();
+  assert.equal(frame.match(/Reasoning/g)?.length, 1);
+  assert.equal(frame.match(/^    Codexa$/gm)?.length, 1);
+  assert.match(frame, /The user said Hi/);
+  assert.match(frame, /Hi! How can I help/);
+  harness.instance.unmount();
+});
+
+test("consecutive Local reasoning fragments coalesce under a single Reasoning header", async () => {
+  const turnId = 102;
+  const user = makeUser(turnId);
+  const thinkingEntry = (n: number, text: string) => ({
+    id: `local-reasoning-session-1-1-${n}`,
+    source: "reasoning" as const,
+    text,
+    sequence: n,
+    createdAt: n,
+    updatedAt: n,
+    pendingNewlineCount: 0,
+    blocks: [{
+      id: `local-reasoning-session-1-1-${n}-block-1`,
+      text,
+      sequence: 1,
+      createdAt: n,
+      updatedAt: n,
+      status: "completed" as const,
+      streamSeq: n + 1,
+    }],
+  });
+  const run: RunEvent = {
+    ...makeRunningRun(turnId),
+    status: "completed",
+    durationMs: 500,
+    progressEntries: [
+      thinkingEntry(0, "We need to interpret the conversation."),
+      thinkingEntry(1, "The user says Hi."),
+      thinkingEntry(2, "We should respond with a greeting."),
+    ],
+    responseSegments: [{
+      id: "response-1",
+      streamSeq: 4,
+      chunks: ["Hi! How can I help?"],
+      status: "completed",
+      startedAt: 5,
+    }],
+    streamItems: [
+      { streamSeq: 1, kind: "thinking", refId: "local-reasoning-session-1-1-0-block-1" },
+      { streamSeq: 2, kind: "thinking", refId: "local-reasoning-session-1-1-1-block-1" },
+      { streamSeq: 3, kind: "thinking", refId: "local-reasoning-session-1-1-2-block-1" },
+      { streamSeq: 4, kind: "response", refId: "response-1" },
+    ],
+  };
+  const harness = renderTurnGroup(
+    <ThemeProvider theme="purple">
+      <TurnGroup
+        cols={120}
+        turnIndex={1}
+        user={user}
+        run={run}
+        assistant={makeAssistant(turnId, "Hi! How can I help?")}
+        opacity="active"
+        question={null}
+        runPhase="final"
+        streamPreviewRows={8}
+        streamMode="assistant-first"
+        verboseMode
+      />
+    </ThemeProvider>,
+  );
+
+  await sleep();
+  const frame = harness.readOutput();
+  assert.equal(frame.match(/Reasoning/g)?.length, 1, "contiguous fragments must share one header");
+  assert.match(frame, /We need to interpret the conversation/);
+  assert.match(frame, /We should respond with a greeting/);
+  assert.match(frame, /Hi! How can I help/);
+  harness.instance.unmount();
+});
+
 
 test("snaps cleanly from streaming cursor view to completion view", async () => {
   const turnId = 11;

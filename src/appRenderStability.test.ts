@@ -50,7 +50,7 @@ test("TranscriptShell owns native static history while AppShell remains the over
   assert.match(transcriptShellSource, /providerLabel: runtimeSummary\?\.providerLabel/);
   assert.doesNotMatch(transcriptShellSource, /staticOffsetRef/);
   assert.doesNotMatch(transcriptShellSource, /clear-offset-\$\{clearCount\}/);
-  assert.match(transcriptShellSource, /key=\{`clear-\$\{props\.clearCount \?\? 0\}`\}/);
+  assert.match(transcriptShellSource, /key=\{`clear-\$\{props\.clearCount \?\? 0\}-repaint-\$\{props\.repaintGeneration \?\? 0\}`\}/);
   assert.match(appShellSource, /MemoizedTopHeader/);
   assert.doesNotMatch(appShellSource, /import \{[^}]*Static[^}]*\} from "ink"/);
   assert.doesNotMatch(appShellSource, /<Static\b/);
@@ -90,7 +90,6 @@ test("startup update checks run before the composer can accept input", () => {
   assert.match(appSource, /handleSkipUpdateForSession[\s\S]*?setScreen\("main"\)/);
   assert.match(appSource, /isCacheForRunningVersion\(cache, APP_VERSION\)/);
   assert.doesNotMatch(appSource, /updateOverlay:viewportClear/);
-  assert.doesNotMatch(appSource, /bumpStaticRepaintGeneration/);
 });
 
 test("Startup provider migration notice is seeded before the first composer frame", () => {
@@ -234,8 +233,15 @@ test("Ink render-cache reset is reserved for explicit transcript clear", () => {
   assert.doesNotMatch(layoutSource, /resetInkOutputForFreshFrame/);
 });
 
-test("Resize leaves native transcript scrollback intact", () => {
-  assert.doesNotMatch(clearBoundarySource, /resizeRefresh|widthRepaintArmed/);
+test("Width resize repaints the transcript through the frame boundary", () => {
+  // A width change must re-flush <Static> at the new width and commit it
+  // atomically with a scrollback-inclusive clear — see CLAUDE.md's terminal
+  // lifecycle invariants. Deleting this machinery leaves the transcript frozen
+  // at the pre-resize width with the composer stranded mid-screen.
+  assert.match(clearBoundarySource, /widthRepaintArmed/);
+  assert.match(clearBoundarySource, /"resizeRefresh"/);
+  assert.match(clearBoundarySource, /armWidthRepaint\("overlayExitWidthChanged"\)/);
+  assert.match(appSource, /onWidthResizeRefresh: \(\) => bumpStaticRepaintGeneration/);
   // Viewport-only clears are reserved for the alternate screen buffer, which has
   // no scrollback (overlay enter / overlay resize) — never for the transcript.
   const viewportClearReasons = [...clearBoundarySource.matchAll(/clearViewport\(`\$\{source\}:([a-zA-Z]+)`\)/g)]

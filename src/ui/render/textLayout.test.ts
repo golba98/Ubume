@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { wrapCommandText, wrapPlainText, getTextWidth } from "./textLayout.js";
+import { wrapCommandText, wrapPlainText, wrapTextRows, getTextWidth } from "./textLayout.js";
 
 test("wrapCommandText breaks on spaces and indents continuation lines", () => {
   const result = wrapCommandText("if (Get-Command rg) { rg --files } else { Get-ChildItem -Recurse -File }", 40);
@@ -33,6 +33,20 @@ test("wrapPlainText honors a narrower firstLineWidth on the first row only", () 
   for (const row of rows.slice(1)) {
     assert.ok(getTextWidth(row) <= 20, `continuation row "${row}" must fit maxWidth (20)`);
   }
-  // No content is lost — char-level wrapping moves every unit into some row.
-  assert.equal(rows.join(""), text);
+  assert.deepEqual(rows, ["alpha", "beta gamma delta", "epsilon zeta eta"]);
+});
+
+test("wrapPlainText moves a whole word to the continuation row", () => {
+  assert.deepEqual(wrapPlainText("say was", 6), ["say", "was"]);
+});
+
+test("wrapTextRows preserves source offsets when a soft-wrap separator is hidden", () => {
+  assert.deepEqual(wrapTextRows("say was", 6), [
+    { text: "say", start: 0, end: 3, breakType: "soft" },
+    { text: "was", start: 4, end: 7, breakType: "end" },
+  ]);
+});
+
+test("wrapPlainText only character-splits an individually overlong word", () => {
+  assert.deepEqual(wrapPlainText("supercalifragilistic", 5), ["super", "calif", "ragil", "istic"]);
 });

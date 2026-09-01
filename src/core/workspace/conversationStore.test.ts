@@ -48,6 +48,30 @@ test("ConversationStore preserves the selected Local backend", () => {
   assert.equal(conversations.load(created.metadata.id)?.metadata.localBackend, "unsloth");
 });
 
+test("ConversationStore persists the opaque Local Harness session used by /resume", () => {
+  const conversations = store("2026-08-16T10:00:00.000Z", "local-harness");
+  const created = conversations.createConversation({
+    providerId: "local",
+    modelId: "qwen",
+    backendKind: "local-openai-compatible",
+  });
+  created.metadata.localHarnessSession = {
+    version: 1,
+    sessionId: "session-123",
+    harnessVersion: "0.1.1-rc.2",
+    routeFingerprint: "route-hash",
+    throughMessageCount: 2,
+    transcriptHash: "transcript-hash",
+    updatedAt: "2026-08-16T10:00:00.000Z",
+  };
+  conversations.save(created);
+
+  assert.deepEqual(
+    conversations.load(created.metadata.id)?.metadata.localHarnessSession,
+    created.metadata.localHarnessSession,
+  );
+});
+
 test("ConversationStore persists invisible Local context checkpoints", () => {
   const conversations = store("2026-08-16T10:00:00.000Z", "local-checkpoint");
   const created = conversations.createConversation({

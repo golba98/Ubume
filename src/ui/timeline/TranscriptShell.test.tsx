@@ -393,6 +393,37 @@ test("first submitted prompt remains visible in the owned conversation viewport"
   assert.ok(text.lastIndexOf("hi") < text.lastIndexOf("BOTTOM COMPOSER AFTER SUBMIT"));
 });
 
+test("reflows the current running turn when the terminal becomes wider", async () => {
+  const prompt = "Update the README structure so every section is easier to read and then update the existing pull request";
+  const activeEvents = [userPromptEvent(10, prompt), runningRunEvent(10, prompt)];
+  const { instance, stdout, getOutput } = renderTranscript([launchEvent()], {
+    activeEvents,
+    uiState: { kind: "THINKING", turnId: 10 },
+    cols: 60,
+    rows: 30,
+  });
+  await sleep();
+
+  const narrowFrame = stripAnsi(getOutput());
+  assert.doesNotMatch(narrowFrame, new RegExp(prompt));
+
+  const beforeResizeLength = getOutput().length;
+  stdout.columns = 140;
+  instance.rerender(transcriptNode({
+    staticEvents: [launchEvent()],
+    activeEvents,
+    uiState: { kind: "THINKING", turnId: 10 },
+    cols: 140,
+    rows: 30,
+  }));
+  await sleep();
+
+  const wideFrame = stripAnsi(getOutput().slice(beforeResizeLength));
+  assert.match(wideFrame, new RegExp(prompt));
+  assert.equal(countOccurrences(wideFrame, prompt), 1);
+  instance.cleanup();
+});
+
 test("commits complete history to native scrollback without clearing the terminal", async () => {
   const manyEvents = [launchEvent(90), ...Array.from({ length: 30 }, (_, index) => systemEvent(index + 100, `history line ${index}`))];
   const { instance, getOutput } = renderTranscript(manyEvents);

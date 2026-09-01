@@ -78,18 +78,18 @@ Keep this folder's top level folders-only except for its README. Update that ove
 | --- | --- |
 | `src/core/README.md` | Documents the core folder map, provider-layer distinction, and intentional diagnostic modules. |
 
-### `src/core/agent/` — Built-in agent loop and tools
+### `src/core/agent/` — Legacy internal agent compatibility utilities
 
 Keep the protocol strict, validate tool inputs and workspace boundaries, and test malformed calls, cancellation, and platform command behavior.
 
 | File | Purpose |
 | --- | --- |
 | `src/core/agent/loop.test.ts` | Verifies loop behavior and regression contracts in the core/agent area. |
-| `src/core/agent/loop.ts` | Runs the internal tool-using agent loop, assembles workspace-aware instructions, and coordinates model/tool turns. |
+| `src/core/agent/loop.ts` | Retained internal compatibility utility; it is not used by the active Local provider, which delegates its loop to DeepSeek Harness. |
 | `src/core/agent/protocol.test.ts` | Verifies protocol behavior and regression contracts in the core/agent area. |
 | `src/core/agent/protocol.ts` | Parses and validates the structured tool-call protocol exchanged with the internal agent loop. |
 | `src/core/agent/tools.test.ts` | Verifies tools behavior and regression contracts in the core/agent area. |
-| `src/core/agent/tools.ts` | Implements the internal agent's file, search, and shell tools with validation and workspace safety. |
+| `src/core/agent/tools.ts` | Implements internal compatibility tools and exports the shared destructive-command classifier used by the Local Harness approval adapter. |
 
 ### `src/core/auth/` — Provider authentication probes
 
@@ -215,7 +215,8 @@ Each runtime must report truthful availability, validation, models, reasoning, a
 | `src/core/providerRuntime/lmstudio.ts` | Defines LM Studio/OpenAI-compatible request and response helpers used by the local runtime. |
 | `src/core/providerRuntime/unsloth.ts` | Verifies a local Unsloth Studio instance, resolves secure API authentication, and parses loaded models. |
 | `src/core/providerRuntime/local.test.ts` | Verifies local behavior and regression contracts in the core/providerRuntime area. |
-| `src/core/providerRuntime/local.ts` | Checks local-server readiness, discovers models, resolves configuration, runs chat requests, and reports diagnostics. |
+| `src/core/providerRuntime/local.ts` | Checks local-server readiness, discovers models, resolves configuration, delegates active Local requests to the Harness adapter, and reports diagnostics. |
+| `src/core/providerRuntime/localHarness/` | Owns the Local-only DeepSeek Harness process, generic OpenAI-compatible profile, session lifecycle, event mapping, permissions, cancellation, and focused tests. |
 | `src/core/providerRuntime/mistralVibe.test.ts` | Verifies mistral Vibe behavior and regression contracts in the core/providerRuntime area. |
 | `src/core/providerRuntime/mistralVibe.ts` | Discovers Vibe configuration/models, resolves and launches the CLI, manages sessions, and adapts routed output. |
 | `src/core/providerRuntime/models.ts` | Defines shared provider model fallbacks, aliases, normalization, and conversion to Codex-style capabilities. |
@@ -407,6 +408,8 @@ Preserve cursor-safe Unicode editing, normalized shortcuts, focus routing, paste
 | `src/ui/input/focusFlow.test.tsx` | Verifies focus Flow behavior and regression contracts in the ui/input area. |
 | `src/ui/input/inputBuffer.test.ts` | Verifies input Buffer behavior and regression contracts in the ui/input area. |
 | `src/ui/input/inputBuffer.ts` | Implements cursor-aware Unicode editing, history movement, paste, deletion, and buffer updates. |
+| `src/ui/input/rawArrowKeys.test.ts` | Verifies raw Arrow Keys behavior and regression contracts in the ui/input area. |
+| `src/ui/input/rawArrowKeys.ts` | Resolves arrow keys from raw stdin chunks so panels survive split escape sequences. |
 | `src/ui/input/slashCommands.ts` | Defines discoverable slash-command metadata, aliases, filtering, and completion behavior. |
 
 ### `src/ui/` — Shared UI foundations
@@ -501,6 +504,8 @@ Preserve semantic row identity, stream order, scroll anchors, follow-tail behavi
 | `src/ui/timeline/progressEntries.ts` | Normalizes provider progress entries into stable visible thinking blocks. |
 | `src/ui/timeline/runActivityView.test.ts` | Verifies run Activity View behavior and regression contracts in the ui/timeline area. |
 | `src/ui/timeline/runActivityView.ts` | Aggregates and formats changed-file and tool activity for timeline display. |
+| `src/ui/timeline/streamCoalesce.test.ts` | Verifies stream Coalesce behavior and regression contracts in the ui/timeline area. |
+| `src/ui/timeline/streamCoalesce.ts` | Merges consecutive reasoning stream events so contiguous thought renders under one header. |
 | `src/ui/timeline/streamingHeightStability.test.ts` | Verifies streaming Height Stability behavior and regression contracts in the ui/timeline area. |
 | `src/ui/timeline/timelineMeasure.ts` | Converts timeline items into stable semantic rows, caches measurements, and builds viewport snapshots. |
 | `src/ui/timeline/timelineMeasureCache.test.ts` | Verifies timeline Measure Cache behavior and regression contracts in the ui/timeline area. |

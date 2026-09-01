@@ -211,6 +211,7 @@ import {
 } from "./core/providerRuntime/registry.js";
 import { hasGeminiApiKey, runGeminiDiagnostics } from "./core/providerRuntime/gemini.js";
 import { checkLocalProvider, runLocalDiagnostics, setLocalProviderConfig } from "./core/providerRuntime/local.js";
+import { closeLocalHarnessSession, shutdownLocalHarness } from "./core/providerRuntime/localHarness/runtime.js";
 import {
   detectVibeActiveModel,
   launchMistralVibeCli,
@@ -453,6 +454,11 @@ export function App({ launchArgs }: AppProps) {
   // tell, at frame-write time, whether the committing tree was laid out
   // against the current terminal width (the viewport hook commits dimensions
   // on a trailing settle, so frames can lag stdout.columns).
+  const terminalLayoutColsRef = useRef<number | undefined>(terminalLayout.rawCols ?? terminalLayout.cols);
+  terminalLayoutColsRef.current = terminalLayout.rawCols ?? terminalLayout.cols;
+  const [staticRepaintGeneration, bumpStaticRepaintGeneration] = useState(0);
+  const staticRepaintGenerationRef = useRef(0);
+  staticRepaintGenerationRef.current = staticRepaintGeneration;
 
   // ─── State & Refs ────────────────────────────────────────────────────────────
 
@@ -563,6 +569,9 @@ export function App({ launchArgs }: AppProps) {
       terminalControl,
       stdout,
       source: "src/app.tsx:clearBoundary",
+      onWidthResizeRefresh: () => bumpStaticRepaintGeneration((tick) => tick + 1),
+      getRenderedRepaintGeneration: () => staticRepaintGenerationRef.current,
+      getRenderedLayoutCols: () => terminalLayoutColsRef.current,
       // Read at frame-write time; screenRef is assigned during render, so it
       // always reflects the render that produced the frame being written.
       isOverlayActive: () => screenRef.current !== "main",
@@ -682,6 +691,17 @@ export function App({ launchArgs }: AppProps) {
       currentReasoning: reasoningLevel,
     });
   }, [conversationRouteOverride, launchArgs.modelOverride, model, providerWorkspaceConfig.activeRoute, reasoningLevel, registryNonce]);
+  const previousProviderRouteRef = useRef(activeProviderRoute);
+  useEffect(() => {
+    const previous = previousProviderRouteRef.current;
+    const changed = previous.providerId !== activeProviderRoute.providerId
+      || previous.modelId !== activeProviderRoute.modelId
+      || previous.localBackend !== activeProviderRoute.localBackend;
+    if (changed && previous.providerId === "local") {
+      void closeLocalHarnessSession(activeConversationRef.current?.metadata.localHarnessSession?.sessionId);
+    }
+    previousProviderRouteRef.current = activeProviderRoute;
+  }, [activeProviderRoute]);
   const activeProviderRuntime = useMemo(
     () => getProviderRuntime(activeProviderRoute.providerId),
     [activeProviderRoute.providerId],
@@ -1309,6 +1329,9 @@ export function App({ launchArgs }: AppProps) {
             runIntent: options.runIntent,
             conversationHistory: options.conversationHistory,
             localContextCheckpoint: options.localContextCheckpoint,
+            localHarnessSession: activeProviderRoute.providerId === "local"
+              ? activeConversationRef.current?.metadata.localHarnessSession
+              : undefined,
           }, handlers) ?? (() => undefined);
         }
         : undefined,
@@ -1361,6 +1384,7 @@ export function App({ launchArgs }: AppProps) {
     return () => {
       isMountedRef.current = false;
       cleanupRef.current?.();
+      void shutdownLocalHarness();
       if (themePreviewTimerRef.current) {
         clearTimeout(themePreviewTimerRef.current);
         themePreviewTimerRef.current = null;
@@ -1543,6 +1567,10 @@ export function App({ launchArgs }: AppProps) {
       appendErrorEvent("Resume failed", "That conversation could not be loaded.");
       setScreen("main");
       return;
+    }
+    const previousHarnessSessionId = activeConversationRef.current?.metadata.localHarnessSession?.sessionId;
+    if (previousHarnessSessionId && previousHarnessSessionId !== loaded.metadata.localHarnessSession?.sessionId) {
+      void closeLocalHarnessSession(previousHarnessSessionId);
     }
     activeConversationRef.current = loaded;
     setConversationChars(loaded.messages.reduce((total, message) => total + message.content.length, 0));
@@ -3565,6 +3593,7 @@ export function App({ launchArgs }: AppProps) {
     });
     cancelActiveRun(false);
     saveActiveConversation();
+    void closeLocalHarnessSession(activeConversationRef.current?.metadata.localHarnessSession?.sessionId);
     activeConversationRef.current = null;
     setConversationRouteOverride(null);
     activeTurnIdRef.current = null;
@@ -3962,7 +3991,8 @@ export function App({ launchArgs }: AppProps) {
 
       // Capture the workspace state after the visible run has had a chance to
       // render, so first-prompt filesystem work cannot block initial progress.
-      if (activeProviderRoute.providerId === "openai" && backend === "codex-subprocess") {
+      if ((activeProviderRoute.providerId === "openai" && backend === "codex-subprocess")
+        || activeProviderRoute.providerId === "local") {
         preRunSnapshot = captureWorkspaceSnapshot(workspaceRoot);
         activityTracker = createWorkspaceActivityTracker({
           rootDir: workspaceRoot,
@@ -4225,6 +4255,24 @@ export function App({ launchArgs }: AppProps) {
           } catch (error) {
             appDiagLog(`CONVERSATION_STORE: checkpoint save failed: ${error instanceof Error ? error.message : "filesystem error"}`);
           }
+        },
+        onLocalHarnessSession: (session) => {
+          const current = activeConversationRef.current;
+          if (!current || activeProviderRoute.providerId !== "local") return;
+          const next: ConversationRecord = {
+            ...current,
+            metadata: { ...current.metadata, localHarnessSession: session },
+          };
+          activeConversationRef.current = next;
+          try {
+            conversationStore.save(next);
+          } catch (error) {
+            appDiagLog(`CONVERSATION_STORE: Local Harness save failed: ${error instanceof Error ? error.message : "filesystem error"}`);
+          }
+        },
+        onContextUsage: (usage) => {
+          if (!isCurrentRun(activeRunIdRef.current, runId)) return;
+          setConversationChars(Math.max(0, usage.contextTokens * 4));
         },
       },
       );
@@ -5148,6 +5196,7 @@ export function App({ launchArgs }: AppProps) {
         uiState={uiState}
         verboseMode={verboseMode}
         clearCount={sessionState.clearCount}
+        repaintGeneration={staticRepaintGeneration}
         notice={themeNotice}
         composer={composerElement}
         composerRows={composerRows}

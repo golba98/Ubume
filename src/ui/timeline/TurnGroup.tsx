@@ -34,6 +34,7 @@ import { normalizeCommand, getFriendlyActionLabel } from "../input/commandNormal
 import * as renderDebug from "../../core/perf/renderDebug.js";
 import { normalizePlanReviewMarkdown } from "../../core/workspace/planStorage.js";
 import { AgentBlock } from "./AgentBlock.js";
+import { coalesceConsecutiveThinking } from "./streamCoalesce.js";
 
 export type TurnOpacity = "active" | "recent" | "dim";
 
@@ -280,7 +281,7 @@ function resolveStreamEvents(
     });
   }
 
-  return resolved;
+  return coalesceConsecutiveThinking(resolved);
 }
 
 function PlanPanel({
@@ -406,7 +407,7 @@ function CodexThinkingBlock({
 
   return (
     <Box flexDirection="column" width="100%" paddingLeft={transcriptContentIndent} paddingRight={1}>
-      <Text color={theme.textMuted} bold>Codexa</Text>
+      <Text color={theme.textMuted} bold>Reasoning</Text>
       {formatProgressBlockBodyLines(block.text, contentWidth)
         .slice(0, verboseMode ? undefined : COMPACT_PROCESSING_BODY_LINE_CAP)
         .map((line, i) => (

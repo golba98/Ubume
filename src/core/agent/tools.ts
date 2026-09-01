@@ -51,6 +51,10 @@ const DANGEROUS_SHELL_PATTERNS: RegExp[] = [
   />\s*\/dev\/(?:sd|hd|nvme|disk)/i,
 ];
 
+export function isDangerousShellCommand(command: string): boolean {
+  return DANGEROUS_SHELL_PATTERNS.some((pattern) => pattern.test(command));
+}
+
 function preview(text: string, maxChars = MAX_OUTPUT_CHARS): string {
   const sanitized = sanitizeTerminalOutput(text);
   return sanitized.length > maxChars ? `${sanitized.slice(0, maxChars)}\n...[truncated]` : sanitized;
@@ -333,7 +337,7 @@ async function runShellTool(args: Record<string, unknown>, context: AgentToolCon
   const command = stringArg(args, "command");
   if (!command) return { success: false, tool: "run_shell", error: "Missing command." };
 
-  if (DANGEROUS_SHELL_PATTERNS.some((pattern) => pattern.test(command))) {
+  if (isDangerousShellCommand(command)) {
     return { success: false, tool: "run_shell", command, error: "Shell command blocked as dangerous." };
   }
   const rustGuard = rustCommandGuard(command, context);
