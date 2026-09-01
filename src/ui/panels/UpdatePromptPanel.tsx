@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Box, Text, useFocus, useInput, useStdin } from "ink";
 import { useTheme } from "../theme.js";
+import { getHorizontalArrowDirection, type HorizontalArrowDirection } from "../input/rawArrowKeys.js";
 import { CODEXA_NPM_PACKAGE, formatVersionLabel } from "../../core/version/updateCheck.js";
 import {
   formatPermissionGuidance,
@@ -23,13 +24,9 @@ const MENU_ITEMS = [
   { label: "Later" },
 ] as const;
 
-type HorizontalDirection = "left" | "right";
+type HorizontalDirection = HorizontalArrowDirection;
 
-export function getHorizontalArrowDirection(raw: string): HorizontalDirection | null {
-  if (/(?:\u001b\[(?:D|1(?:;\d+)?D|57361(?:;\d+)?u)|\u001bOD)/.test(raw)) return "left";
-  if (/(?:\u001b\[(?:C|1(?:;\d+)?C|57362(?:;\d+)?u)|\u001bOC)/.test(raw)) return "right";
-  return null;
-}
+export { getHorizontalArrowDirection };
 
 interface UpdatePromptPanelProps {
   focusId: string;

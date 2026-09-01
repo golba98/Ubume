@@ -2,7 +2,16 @@ import type { AvailableBackend } from "../../config/settings.js";
 import type { ResolvedRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { ProjectInstructions } from "../workspace/projectInstructions.js";
 import type { RunProgressSource, RunToolActivity } from "../../session/types.js";
-import type { ConversationContextCheckpoint, ConversationMessage } from "../workspace/conversationStore.js";
+import type { ConversationContextCheckpoint, ConversationMessage, LocalHarnessSessionMetadata } from "../workspace/conversationStore.js";
+
+export interface ProviderContextUsage {
+  inputTokens: number;
+  outputTokens: number;
+  contextTokens: number;
+  contextWindow: number | null;
+  exact: boolean;
+  compacted?: boolean;
+}
 
 export interface BackendProgressUpdate {
   id: string;
@@ -36,6 +45,10 @@ export interface BackendRunHandlers {
   onToolApproval?: (request: ToolApprovalRequest) => Promise<ToolApprovalDecision>;
   /** Persists invisible rolling memory used only by Local context-window rollover. */
   onLocalContextCheckpoint?: (checkpoint: ConversationContextCheckpoint) => void;
+  /** Persists the opaque DeepSeek Harness session backing a Local conversation. */
+  onLocalHarnessSession?: (session: LocalHarnessSessionMetadata) => void;
+  /** Reports authoritative provider token usage when available. */
+  onContextUsage?: (usage: ProviderContextUsage) => void;
   /** Called around backend child-process lifecycle boundaries. */
   onProcessLifecycle?: (event: "before-spawn" | "spawned" | "exit" | "error" | "cleanup") => void;
   /** Lightweight hooks used only by headless benchmark diagnostics. */

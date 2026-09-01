@@ -32,6 +32,16 @@ export interface ConversationContextCheckpoint {
   updatedAt: string;
 }
 
+export interface LocalHarnessSessionMetadata {
+  version: 1;
+  sessionId: string;
+  harnessVersion: string;
+  routeFingerprint: string;
+  throughMessageCount: number;
+  transcriptHash: string;
+  updatedAt: string;
+}
+
 export interface ConversationMetadata {
   version: 1;
   id: string;
@@ -44,6 +54,7 @@ export interface ConversationMetadata {
   reasoning?: string;
   localBackend?: LocalBackendId;
   localContextCheckpoint?: ConversationContextCheckpoint;
+  localHarnessSession?: LocalHarnessSessionMetadata;
   messageCount: number;
 }
 
@@ -108,6 +119,26 @@ function parseContextCheckpoint(value: unknown): ConversationContextCheckpoint |
   };
 }
 
+function parseLocalHarnessSession(value: unknown): LocalHarnessSessionMetadata | null {
+  if (!isRecord(value) || value.version !== 1) return null;
+  const sessionId = safeString(value.sessionId);
+  const harnessVersion = safeString(value.harnessVersion);
+  const routeFingerprint = safeString(value.routeFingerprint);
+  const transcriptHash = safeString(value.transcriptHash);
+  const updatedAt = safeString(value.updatedAt);
+  if (!sessionId || !harnessVersion || !routeFingerprint || !transcriptHash || !updatedAt) return null;
+  if (!isNonNegativeInteger(value.throughMessageCount)) return null;
+  return {
+    version: 1,
+    sessionId,
+    harnessVersion,
+    routeFingerprint,
+    throughMessageCount: value.throughMessageCount,
+    transcriptHash,
+    updatedAt,
+  };
+}
+
 function parseMessages(value: unknown): ConversationMessage[] | null {
   if (!Array.isArray(value)) return null;
   const messages: ConversationMessage[] = [];
@@ -132,6 +163,7 @@ function parseMetadata(value: unknown, fallbackId: string): ConversationMetadata
     ? Math.max(0, value.messageCount)
     : 0;
   const localContextCheckpoint = parseContextCheckpoint(value.localContextCheckpoint);
+  const localHarnessSession = parseLocalHarnessSession(value.localHarnessSession);
   return {
     version: 1,
     id,
@@ -144,6 +176,7 @@ function parseMetadata(value: unknown, fallbackId: string): ConversationMetadata
     ...(typeof value.reasoning === "string" && value.reasoning.trim() ? { reasoning: value.reasoning } : {}),
     ...(value.localBackend === "lm-studio" || value.localBackend === "unsloth" ? { localBackend: value.localBackend } : {}),
     ...(localContextCheckpoint ? { localContextCheckpoint } : {}),
+    ...(localHarnessSession ? { localHarnessSession } : {}),
     messageCount,
   };
 }

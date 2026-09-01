@@ -207,49 +207,92 @@ export function wrapTextRows(
   const safeWidth = Math.max(1, maxWidth);
   const safeFirstWidth = Math.max(1, firstLineWidth);
   const rows: WrappedTextRow[] = [];
-  let rowStart = 0;
-  let rowText = "";
+  let rowUnits: TextUnit[] = [];
   let rowWidth = 0;
+  let skippingSoftWhitespace = false;
+
+  const unitsText = (units: TextUnit[]) => units.map((unit) => unit.text).join("");
+  const unitsWidth = (units: TextUnit[]) => units.reduce((total, current) => total + current.width, 0);
+  const pushRow = (units: TextUnit[], end: number, breakType: WrappedTextRow["breakType"]) => {
+    rows.push({
+      text: unitsText(units),
+      start: units[0]?.start ?? end,
+      end,
+      breakType,
+    });
+  };
+  const findWordBoundary = (units: TextUnit[]): { breakStart: number; continuationStart: number } | null => {
+    for (let index = units.length - 2; index >= 0; index -= 1) {
+      if (!/^[ \t]$/.test(units[index]!.text)) continue;
+
+      let breakStart = index;
+      while (breakStart > 0 && /^[ \t]$/.test(units[breakStart - 1]!.text)) {
+        breakStart -= 1;
+      }
+
+      let continuationStart = index + 1;
+      while (continuationStart < units.length && /^[ \t]$/.test(units[continuationStart]!.text)) {
+        continuationStart += 1;
+      }
+
+      if (breakStart > 0 && continuationStart < units.length) {
+        return { breakStart, continuationStart };
+      }
+      index = breakStart;
+    }
+    return null;
+  };
 
   for (const unit of getTextUnits(normalized)) {
     if (unit.text === "\n") {
-      rows.push({
-        text: rowText,
-        start: rowStart,
-        end: unit.start,
-        breakType: "hard",
-      });
-      rowStart = unit.end;
-      rowText = "";
+      pushRow(rowUnits, unit.start, "hard");
+      rowUnits = [];
       rowWidth = 0;
+      skippingSoftWhitespace = false;
       continue;
     }
+
+    if (skippingSoftWhitespace && /^[ \t]$/.test(unit.text)) continue;
+    skippingSoftWhitespace = false;
 
     // Only the first emitted row honors firstLineWidth; later rows use maxWidth.
     const limit = rows.length === 0 ? safeFirstWidth : safeWidth;
-    if (rowText.length > 0 && rowWidth + unit.width > limit) {
-      rows.push({
-        text: rowText,
-        start: rowStart,
-        end: unit.start,
-        breakType: "soft",
-      });
-      rowStart = unit.start;
-      rowText = unit.text;
-      rowWidth = unit.width;
+    if (rowUnits.length > 0 && rowWidth + unit.width > limit) {
+      const candidate = [...rowUnits, unit];
+      const boundary = findWordBoundary(candidate);
+      if (boundary) {
+        const before = candidate.slice(0, boundary.breakStart);
+        const after = candidate.slice(boundary.continuationStart);
+        pushRow(before, candidate[boundary.breakStart]!.start, "soft");
+        rowUnits = after;
+        rowWidth = unitsWidth(after);
+      } else if (/^[ \t]$/.test(unit.text)) {
+        pushRow(rowUnits, unit.start, "soft");
+        rowUnits = [];
+        rowWidth = 0;
+        skippingSoftWhitespace = true;
+      } else {
+        pushRow(rowUnits, unit.start, "soft");
+        rowUnits = [unit];
+        rowWidth = unit.width;
+      }
       continue;
     }
 
-    rowText += unit.text;
+    rowUnits.push(unit);
     rowWidth += unit.width;
   }
 
-  rows.push({
-    text: rowText,
-    start: rowStart,
-    end: normalized.length,
-    breakType: "end",
-  });
+  if (rowUnits.length > 0) {
+    pushRow(rowUnits, normalized.length, "end");
+  } else {
+    rows.push({
+      text: "",
+      start: normalized.length,
+      end: normalized.length,
+      breakType: "end",
+    });
+  }
 
   return rows.length > 0 ? rows : [{
     text: "",

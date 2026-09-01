@@ -659,7 +659,7 @@ test("unchanged active response rows keep references while streaming text grows"
   assert.strictEqual(secondStableLine, firstStableLine);
 });
 
-test("native transcript commits the stable prefix before the active action", () => {
+test("native transcript keeps the complete running turn live", () => {
   __clearTimelineMeasureCachesForTests();
 
   const parts = buildNativeTranscriptParts(
@@ -680,11 +680,11 @@ test("native transcript commits the stable prefix before the active action", () 
   const staticKeys = parts.staticItems.flatMap((item) => item.rows.map((row) => row.key));
   const liveKeys = parts.liveRows.map((row) => row.key);
 
-  // User prompt is always committed to staticItems immediately.
-  assert.ok(staticKeys.some((key) => key.includes("-user-")));
-  assert.equal(staticKeys.some((key) => key.includes("-action-1-")), true);
+  assert.equal(staticKeys.some((key) => key.includes("-user-")), false);
+  assert.equal(staticKeys.some((key) => key.includes("-action-1-")), false);
   assert.equal(staticKeys.some((key) => key.includes("-action-2-")), false);
-  assert.equal(liveKeys.some((key) => key.includes("-action-1-")), false);
+  assert.ok(liveKeys.some((key) => key.includes("-user-")));
+  assert.ok(liveKeys.some((key) => key.includes("-action-1-")));
   assert.ok(liveKeys.some((key) => key.includes("-action-2-")));
 });
 
@@ -706,7 +706,7 @@ test("native transcript parts keep streaming response out of static rows", () =>
 
 // ── Placement fix: running runs keep all events in liveRows ──────────────────
 
-test("running run commits only the chronological stable prefix", () => {
+test("running run keeps its prompt and visible stream events reflowable", () => {
   __clearTimelineMeasureCachesForTests();
 
   const completedTool = makeTool({
@@ -754,20 +754,13 @@ test("running run commits only the chronological stable prefix", () => {
 
   const parts = buildNativeTranscriptParts([item], { totalWidth: 80, debugLabel: "running-placement" });
 
-  // User prompt is always committed to staticItems immediately (correct behavior).
   const staticKeys = parts.staticItems.flatMap((si) => si.rows.map((r) => r.key));
-  assert.ok(staticKeys.some((k) => k.includes("-user-")), "user row should be in staticItems");
-
-  // The completed action is a stable prefix and can enter native scrollback;
-  // the running action and everything after it remain live.
-  assert.equal(
-    parts.staticItems.filter((si) => si.key.includes("-stream-")).length,
-    1,
-    "one stable stream event should be committed during the active run",
-  );
+  assert.equal(staticKeys.some((k) => k.includes("-user-")), false, "running user row must stay live");
+  assert.equal(parts.staticItems.filter((si) => si.key.includes("-stream-")).length, 0);
 
   const liveKeys = parts.liveRows.map((r) => r.key);
-  assert.equal(liveKeys.some((k) => k.includes("-action-1-")), false, "completed prefix action should be static");
+  assert.ok(liveKeys.some((k) => k.includes("-user-")), "running user row should be reflowable");
+  assert.ok(liveKeys.some((k) => k.includes("-action-1-")), "completed action should remain reflowable until finalize");
   assert.ok(liveKeys.some((k) => k.includes("-action-2-")), "running action should be in liveRows");
   assert.ok(
     !liveKeys.some((k) => k.includes("-codex-thinking-")),
@@ -1009,4 +1002,85 @@ test("wrapStyledSpans: hard newlines in span text produce separate rows", () => 
   assert.equal(rows.length, 2);
   assert.ok(rows[0]!.map((s) => s.text).join("").includes("first line"));
   assert.ok(rows[1]!.map((s) => s.text).join("").includes("second line"));
+});
+
+test("contiguous reasoning coalesces to one Reasoning block; a tool call splits it", () => {
+  const thinkingEntry = (n: number, text: string): RunProgressEntry => ({
+    id: `local-reasoning-s1-0-${n}`,
+    source: "reasoning",
+    text,
+    sequence: n,
+    createdAt: n,
+    updatedAt: n,
+    pendingNewlineCount: 0,
+    blocks: [{
+      id: `local-reasoning-s1-0-${n}-block-1`,
+      text,
+      sequence: 1,
+      createdAt: n,
+      updatedAt: n,
+      status: "completed",
+      streamSeq: n,
+    }],
+  });
+  const run: RunEvent = {
+    id: 2,
+    type: "run",
+    createdAt: 1,
+    startedAt: 1,
+    durationMs: 900,
+    backendId: "codex-subprocess",
+    backendLabel: "Codexa",
+    runtime: TEST_RUNTIME,
+    prompt: "hi",
+    progressEntries: [
+      thinkingEntry(1, "first thought"),
+      thinkingEntry(2, "second thought"),
+      thinkingEntry(3, "third thought"),
+      thinkingEntry(5, "after the tool"),
+      thinkingEntry(6, "one more"),
+    ],
+    status: "completed",
+    summary: "Completed",
+    truncatedOutput: false,
+    toolActivities: [makeTool({ streamSeq: 4 })],
+    activity: [],
+    touchedFileCount: 0,
+    errorMessage: null,
+    turnId: 9,
+    streamItems: [
+      { streamSeq: 1, kind: "thinking", refId: "local-reasoning-s1-0-1-block-1" },
+      { streamSeq: 2, kind: "thinking", refId: "local-reasoning-s1-0-2-block-1" },
+      { streamSeq: 3, kind: "thinking", refId: "local-reasoning-s1-0-3-block-1" },
+      { streamSeq: 4, kind: "action", refId: "tool-1" },
+      { streamSeq: 5, kind: "thinking", refId: "local-reasoning-s1-0-5-block-1" },
+      { streamSeq: 6, kind: "thinking", refId: "local-reasoning-s1-0-6-block-1" },
+    ],
+    responseSegments: [],
+    lastStreamSeq: 6,
+    activeResponseSegmentId: null,
+  };
+  const item: RenderTimelineItem = {
+    key: "turn-9",
+    type: "turn",
+    padded: true,
+    item: {
+      type: "turn",
+      turnId: 9,
+      turnIndex: 0,
+      user: { id: 1, type: "user", createdAt: 1, prompt: "hi", turnId: 9 },
+      run,
+      assistant: null,
+    },
+    renderState: { runPhase: "final", opacity: "full" },
+  } as never;
+
+  const parts = buildNativeTranscriptParts([item], { totalWidth: 80, verboseMode: true, debugLabel: "coalesce-test" });
+  const joined = [...parts.staticItems.flatMap((entry) => entry.rows), ...parts.liveRows]
+    .map((row) => row.spans.map((span) => span.text).join(""))
+    .join("\n");
+
+  assert.equal(joined.match(/Reasoning/g)?.length, 2, "one Reasoning header per contiguous thought stream");
+  assert.match(joined, /first thought\s+second thought\s+third thought/);
+  assert.match(joined, /after the tool\s+one more/);
 });

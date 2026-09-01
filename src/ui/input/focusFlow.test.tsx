@@ -1050,7 +1050,9 @@ test("plan action picker supports focused hotkeys and esc cancel", async () => {
     assert.match(output, /selection:\s*revise/);
 
     harness.stdin.write("\u001b");
-    await sleep(80);
+    // A lone escape is held briefly to see whether it is the prefix of an arrow
+    // sequence, so allow for Ink's flush plus the picker's settle window.
+    await sleep(200);
 
     const finalOutput = harness.getOutput();
     assert.match(finalOutput, /cancel:\s*1/);
@@ -1076,6 +1078,44 @@ test("plan action picker ignores SGR mouse escape sequences", async () => {
     assert.ok(!output.includes("[<64;83;19M"), "scroll sequence must not appear in output");
     // selection should still be "none" — no accidental trigger
     assert.match(output, /selection:\s*none/);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("plan action picker moves the selection on a whole arrow sequence", async () => {
+  const harness = createInkHarness(<PlanActionPickerHarness />);
+
+  try {
+    await sleep();
+    harness.stdin.write("[C");
+    await sleep(120);
+
+    const output = harness.getOutput();
+    assert.match(output, /›\s*\[U\] Update plan/);
+    assert.match(output, /selection:\s*none/);
+    assert.match(output, /cancel:\s*0/);
+  } finally {
+    await harness.cleanup();
+  }
+});
+
+test("plan action picker does not cancel when an arrow arrives split across reads", async () => {
+  const harness = createInkHarness(<PlanActionPickerHarness />);
+
+  try {
+    await sleep();
+    // Ink flushes a lone ESC as a bare escape after ~20ms, so a right arrow
+    // split across two stdin reads must not be mistaken for "cancel review".
+    harness.stdin.write("");
+    await sleep(40);
+    harness.stdin.write("[C");
+    await sleep(150);
+
+    const output = harness.getOutput();
+    assert.match(output, /cancel:\s*0/);
+    assert.match(output, /selection:\s*none/);
+    assert.match(output, /›\s*\[U\] Update plan/);
   } finally {
     await harness.cleanup();
   }

@@ -22,6 +22,7 @@ import {
   type VisibleProgressBlock,
 } from "./progressEntries.js";
 import { selectVisibleRunActivity } from "./runActivityView.js";
+import { coalesceConsecutiveThinking } from "./streamCoalesce.js";
 import { getTextUnits, getTextWidth, wrapPlainText, wrapCommandText, splitTextAtColumn } from "../render/textLayout.js";
 import type { RenderTimelineItem } from "./Timeline.js";
 import { normalizePlanReviewMarkdown } from "../../core/workspace/planStorage.js";
@@ -1813,10 +1814,11 @@ function buildCodexPlainRows(
   keyPrefix: string,
   width: number,
   contentRows: TimelineRowSpan[][],
+  label = "Codexa",
 ): TimelineRow[] {
   const indent = " ".repeat(transcriptContentIndent);
   const rows: TimelineRow[] = [
-    createRow(`${keyPrefix}-label`, [createSpan(indent), createSpan("Codexa", "muted", { bold: true })], width),
+    createRow(`${keyPrefix}-label`, [createSpan(indent), createSpan(label, "muted", { bold: true })], width),
   ];
 
   contentRows.forEach((row, index) => {
@@ -1868,7 +1870,7 @@ function buildCodexThinkingRows(params: {
       ]);
     }
 
-    return buildCodexPlainRows(params.keyPrefix, params.width, contentRows);
+    return buildCodexPlainRows(params.keyPrefix, params.width, contentRows, "Reasoning");
   });
 }
 
@@ -2431,7 +2433,7 @@ function collectStreamEvents(item: Extract<RenderTimelineItem, { type: "turn" }>
     events.push({ kind: "response", streamSeq: 1, segment: synthetic });
   }
 
-  return events;
+  return coalesceConsecutiveThinking(events);
 }
 
 // ─── Turn assembly & static caching ──────────────────────────────────────────
@@ -2836,21 +2838,22 @@ function appendNativeTurnParts(
   const run = item.item.run;
   const innerWidth = Math.max(10, options.totalWidth - (item.padded ? 2 : 0));
   const verbose = options.verboseMode ?? false;
+  const running = run?.status === "running";
 
   if (item.item.user) {
-    output.staticItems.push({
-      key: `${item.key}-user`,
-      rows: wrapNativeRows(
-        buildUserInputRows(item, innerWidth),
-        options.totalWidth,
-        item.padded,
-        item.key,
-      ),
-    });
-    output.staticItems.push({
-      key: `${item.key}-prompt-gap`,
-      rows: [createBlankRow(`${item.key}-prompt-gap-row`, options.totalWidth)],
-    });
+    const userRows = wrapNativeRows(
+      buildUserInputRows(item, innerWidth),
+      options.totalWidth,
+      item.padded,
+      item.key,
+    );
+    const promptGapRow = createBlankRow(`${item.key}-prompt-gap-row`, options.totalWidth);
+    if (running) {
+      output.liveRows.push(...userRows, promptGapRow);
+    } else {
+      output.staticItems.push({ key: `${item.key}-user`, rows: userRows });
+      output.staticItems.push({ key: `${item.key}-prompt-gap`, rows: [promptGapRow] });
+    }
   }
 
   if (!run) return;
@@ -2860,17 +2863,10 @@ function appendNativeTurnParts(
     verbose,
     run.status !== "running",
   );
-  const firstMutableEventIndex = run.status === "running"
-    ? events.findIndex((event) => isNativeLiveStreamEvent(event, run))
-    : -1;
-
   events.forEach((event, eventIndex) => {
-    // Ink <Static> is append-only. Commit only the stable chronological prefix;
-    // the first mutable event and everything after it remain interactive so a
-    // later update can never need to insert above already-committed output.
-    const placeAsLive = run.status === "running"
-      && firstMutableEventIndex >= 0
-      && eventIndex >= firstMutableEventIndex;
+    // Ink <Static> is append-only and cannot reflow after a terminal resize.
+    // Keep the complete active turn live, then commit it atomically on finalize.
+    const placeAsLive = running;
     // Rendering: only the event that is currently active gets a live indicator
     // (spinner / streaming cursor). Completed events render in stable form even
     // while their parent run is still running.

@@ -230,4 +230,5 @@ test("getContentWidth returns responsive content widths", () => {
   assert.equal(getContentWidth(150), 145);
   assert.equal(getContentWidth(180), 171);
   assert.equal(getContentWidth(220), 207);
+  assert.equal(getContentWidth(300), 287);
 });

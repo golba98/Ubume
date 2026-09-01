@@ -30,6 +30,7 @@ export interface TranscriptShellProps {
   notice?: string | null;
   verboseMode?: boolean;
   clearCount?: number;
+  repaintGeneration?: number;
   visible?: boolean;
 }
 
@@ -226,9 +227,14 @@ function TranscriptShellInner({
 }
 
 export const TranscriptShell = memo(function TranscriptShell(props: TranscriptShellProps) {
+  // repaintGeneration must fold into the outer remount key (not just <Static>'s
+  // own key) — Ink only reliably re-flushes already-printed <Static> content on
+  // a genuine fresh mount of the whole subtree, confirmed empirically: keying
+  // away only the inner <Static> node did not trigger Ink's isStaticDirty/
+  // onImmediateRender escape hatch the same way a full remount does.
   return (
     <TranscriptShellInner
-      key={`clear-${props.clearCount ?? 0}`}
+      key={`clear-${props.clearCount ?? 0}-repaint-${props.repaintGeneration ?? 0}`}
       {...props}
     />
   );

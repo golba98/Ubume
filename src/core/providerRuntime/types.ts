@@ -5,7 +5,7 @@ import type { ResolvedRuntimeConfig } from "../../config/runtimeConfig.js";
 export type { ResolvedRuntimeConfig };
 import type { LocalBackendId, ProviderId } from "../providerLauncher/types.js";
 import type { ProviderWorkspaceOverride } from "../providerLauncher/types.js";
-import type { ConversationContextCheckpoint, ConversationMessage } from "../workspace/conversationStore.js";
+import type { ConversationContextCheckpoint, ConversationMessage, LocalHarnessSessionMetadata } from "../workspace/conversationStore.js";
 
 export type ProviderBackendKind =
   | "codex-cli-auth"
@@ -66,6 +66,20 @@ export interface ProviderRoute {
 
 export type ActiveProviderRoute = ProviderRoute;
 
+/** Ephemeral, request-scoped Local connection. Secrets are never persisted. */
+export interface ResolvedLocalAgentConfig {
+  localBackend: LocalBackendId;
+  baseUrl: string;
+  apiKey: string;
+  modelId: string;
+  contextWindow: number;
+  maxTokens: number;
+  supportsStreaming: boolean | null;
+  supportsToolCalls: boolean | null;
+  supportsSystemPrompt: boolean | null;
+  supportsVision: boolean;
+}
+
 export interface ProviderRouteValidationRequest {
   route: ProviderRoute;
   workspaceRoot: string;
@@ -91,9 +105,11 @@ export interface ProviderChatRequest {
   workspaceRoot: string;
   projectInstructions?: ProjectInstructions | null;
   localConfig?: ProviderWorkspaceOverride | null;
+  resolvedLocalAgentConfig?: ResolvedLocalAgentConfig;
   runIntent?: "normal" | "plan" | "approved-execution";
   conversationHistory?: readonly ConversationMessage[];
   localContextCheckpoint?: ConversationContextCheckpoint;
+  localHarnessSession?: LocalHarnessSessionMetadata;
 }
 
 export interface ProviderChatResponse {

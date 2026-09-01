@@ -20,7 +20,7 @@ test("normalizes windows line endings for the composer buffer", () => {
 
 test("wraps multiline input into stable viewport rows", () => {
   const rows = wrapInputRows("alpha\nbeta gamma", 5);
-  assert.deepEqual(rows.map((row) => row.text), ["alpha", "beta ", "gamma"]);
+  assert.deepEqual(rows.map((row) => row.text), ["alpha", "beta", "gamma"]);
   assert.deepEqual(rows.map((row) => row.breakType), ["hard", "soft", "end"]);
 });
 
@@ -35,7 +35,14 @@ test("keeps cursor mapping stable at hard newlines and soft wrap boundaries", ()
 
   const wrappedRows = wrapInputRows("alpha beta", 5);
   assert.deepEqual(locateCursor(wrappedRows, 5), { row: 0, column: 5 });
-  assert.deepEqual(locateCursor(wrappedRows, 6), { row: 1, column: 1 });
+  assert.deepEqual(locateCursor(wrappedRows, 6), { row: 1, column: 0 });
+});
+
+test("keeps words intact and maps skipped wrap whitespace to the continuation row", () => {
+  const rows = wrapInputRows("say was", 6);
+  assert.deepEqual(rows.map((row) => row.text), ["say", "was"]);
+  assert.deepEqual(locateCursor(rows, 4), { row: 1, column: 0 });
+  assert.deepEqual(locateCursor(rows, 7), { row: 1, column: 3 });
 });
 
 test("uses code-point-safe cursor movement and deletion", () => {

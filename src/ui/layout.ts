@@ -24,7 +24,6 @@ export const ROW_BREAKPOINT_MAX = 40;
 export const ROW_BREAKPOINT_WIDE = 30;
 export const ROW_BREAKPOINT_NORMAL = 20;
 export const ROW_BREAKPOINT_COMPACT = 14;
-export const MAX_CONTENT_WIDTH = 220;
 export const MIN_TERMINAL_COLS = 20;
 export const MIN_TERMINAL_ROWS = 10;
 export const MIN_VIEWPORT_COLS = 20;
@@ -169,8 +168,8 @@ export function getShellWidth(cols: number | undefined): number {
 }
 
 /**
- * Returns the width of the main content area, capped at MAX_CONTENT_WIDTH.
- * This is used to center the UI in large terminals.
+ * Returns the responsive width of the main content area. Large/maximized
+ * terminals retain a small gutter but continue growing with the viewport.
  */
 export function getContentWidth(cols: number | undefined): number {
   const shellWidth = getShellWidth(cols);
@@ -179,7 +178,7 @@ export function getContentWidth(cols: number | undefined): number {
   if (shellWidth < 150) return shellWidth - 4;
   if (shellWidth < 200) return shellWidth - 8;
 
-  return Math.min(shellWidth - 12, MAX_CONTENT_WIDTH);
+  return shellWidth - 12;
 }
 
 export function getUsableShellWidth(cols: number | undefined, reservedColumns = 0): number {

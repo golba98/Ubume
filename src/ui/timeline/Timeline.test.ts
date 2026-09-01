@@ -638,7 +638,7 @@ test("streaming defers all processing text (active and completed) until finalize
   assert.ok(snapshot.rows.every((row) => row.spans.map((span) => span.text).join("").length <= 54));
 });
 
-test("completed runs keep progress updates as separate readable blocks", () => {
+test("completed runs coalesce contiguous progress updates under one Reasoning block", () => {
   const items = buildTimelineItems([
     {
       id: 1,
@@ -689,9 +689,12 @@ test("completed runs keep progress updates as separate readable blocks", () => {
     .map((row) => row.spans.map((span) => span.text).join(""))
     .join("\n");
 
-  assert.match(joined, /Codex/);
+  // Contiguous reasoning (no tool call or response between) merges under a
+  // single Reasoning header; the compact cap elides the tail with a marker.
+  assert.equal(joined.match(/Reasoning/g)?.length, 1);
   assert.match(joined, /Checking the failing test/);
-  assert.match(joined, /Comparing expected behavior/);
+  assert.match(joined, /… \(\d+ more line/);
+  assert.doesNotMatch(joined, /Comparing expected behavior/);
   assert.doesNotMatch(joined, /^\s*thinking\b/m);
 });
 

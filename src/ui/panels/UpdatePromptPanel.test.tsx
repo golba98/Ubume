@@ -46,11 +46,14 @@ function makeResult(overrides: Partial<CommandResult> = {}): CommandResult {
   };
 }
 
-test("recognizes VTE, application-cursor, and Kitty horizontal arrows", () => {
-  assert.equal(getHorizontalArrowDirection("\u001b[D"), "left");
-  assert.equal(getHorizontalArrowDirection("\u001bOC"), "right");
-  assert.equal(getHorizontalArrowDirection("\u001b[57361;1u"), "left");
-  assert.equal(getHorizontalArrowDirection("\u001b[57362;1u"), "right");
+test("recognizes VTE, application-cursor, and modified horizontal arrows", () => {
+  const ESC = String.fromCharCode(27);
+  assert.equal(getHorizontalArrowDirection(`${ESC}[D`), "left");
+  assert.equal(getHorizontalArrowDirection(`${ESC}OC`), "right");
+  // Kitty encodes arrows as ordinary CSI finals with modifier parameters; its
+  // CSI-u codepoint space covers printscreen/pause, not the arrow keys.
+  assert.equal(getHorizontalArrowDirection(`${ESC}[1;5C`), "right");
+  assert.equal(getHorizontalArrowDirection(`${ESC}[1;2D`), "left");
 });
 
 interface Harness {
