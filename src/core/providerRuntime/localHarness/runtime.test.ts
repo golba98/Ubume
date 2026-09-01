@@ -56,7 +56,7 @@ function runRuntime(req: ProviderChatRequest, handlers: Partial<BackendRunHandle
 afterEach(() => resetLocalHarnessProcessForTests());
 
 describe("Local Harness provider routing", () => {
-  test("uses a stable keyed fingerprint for credential change detection", () => {
+  test("uses a stable salted fingerprint for credential change detection", () => {
     const first = localHarnessTestUtils.secretFingerprint("test-api-key");
     const repeated = localHarnessTestUtils.secretFingerprint("test-api-key");
     const changed = localHarnessTestUtils.secretFingerprint("different-api-key");
