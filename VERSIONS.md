@@ -3,6 +3,18 @@
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
 
+## v1.0.21 — 2026-09-01
+
+Codexa's updater now behaves as one coherent state machine: starting an install
+replaces the available-update card, and pressing Escape cancels safely back to
+that card without clearing or partially repainting the terminal. Canceled
+attempts cannot leak stale progress or completion, and the updater keeps focus
+so it can be used again immediately.
+
+Startup update checks also preserve the complete Codexa screen. The logo,
+workspace/provider details, composer, and model/context footer now appear
+together when the checker closes instead of leaving a large blank area.
+
 ## v1.0.19 — 2026-08-30
 
 Codexa now keeps long Local workflows moving beyond ten tool calls and completes

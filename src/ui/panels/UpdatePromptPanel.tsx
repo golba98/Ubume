@@ -12,7 +12,7 @@ import {
 } from "../../core/version/packageManager.js";
 import type { CommandResult, CommandStreamHandlers } from "../../core/process/CommandRunner.js";
 
-type Phase = "menu" | "running" | "done" | "error";
+export type UpdateUIState = "available" | "installing" | "success" | "failed";
 
 export type RunUpdateFn = (
   pm: GlobalPackageManager,
@@ -50,14 +50,13 @@ export function UpdatePromptPanel({
 }: UpdatePromptPanelProps) {
   const theme = useTheme();
   const { stdin } = useStdin();
-  const { isFocused } = useFocus({ id: focusId, autoFocus: true });
+  const { isFocused, focus } = useFocus({ id: focusId, autoFocus: true });
 
-  const [phase, setPhase] = useState<Phase>("menu");
+  const [updateState, setUpdateState] = useState<UpdateUIState>("available");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [outputLines, setOutputLines] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const runStartedRef = useRef(false);
   const rawArrowRef = useRef<HorizontalDirection | null>(null);
 
   useEffect(() => {
@@ -74,10 +73,20 @@ export function UpdatePromptPanel({
 
   useInput((input, key) => {
     if (key.escape) {
+      if (updateState === "installing") {
+        setOutputLines([]);
+        setErrorMessage(null);
+        setUpdateState("available");
+        // Ink clears the active focus id for every bare Escape before
+        // dispatching useInput handlers. Cancellation keeps this panel open,
+        // so explicitly retain its focus for the restored available state.
+        focus(focusId);
+        return;
+      }
       onSkip();
       return;
     }
-    if (phase === "menu") {
+    if (updateState === "available") {
       const rawArrow = rawArrowRef.current;
       rawArrowRef.current = null;
       if (key.leftArrow || rawArrow === "left" || input === "h") {
@@ -90,17 +99,19 @@ export function UpdatePromptPanel({
       }
       if (key.return) {
         if (selectedIndex === 0) {
-          setPhase("running");
+          setOutputLines([]);
+          setErrorMessage(null);
+          setUpdateState("installing");
         } else {
           onSkip();
         }
         return;
       }
-    } else if (phase === "done") {
+    } else if (updateState === "success") {
       if (key.return) {
         onRestart();
       }
-    } else if (phase === "error") {
+    } else if (updateState === "failed") {
       if (key.return) {
         onSkip();
       }
@@ -108,11 +119,11 @@ export function UpdatePromptPanel({
   }, { isActive: isFocused });
 
   useEffect(() => {
-    if (phase !== "running") return;
-    if (runStartedRef.current) return;
-    runStartedRef.current = true;
+    if (updateState !== "installing") return;
 
+    let disposed = false;
     const appendLines = (text: string) => {
+      if (disposed) return;
       const lines = text.split(/\r?\n/).filter(Boolean);
       if (lines.length > 0) {
         setOutputLines((prev) => [...prev, ...lines]);
@@ -125,11 +136,12 @@ export function UpdatePromptPanel({
       onStderr: appendLines,
     });
 
-    let disposed = false;
+    let settled = false;
     void result.then((res) => {
       if (disposed) return;
+      settled = true;
       if (res.status === "completed" && res.exitCode === 0) {
-        setPhase("done");
+        setUpdateState("success");
         return;
       }
       if (isPermissionError(res)) {
@@ -137,57 +149,42 @@ export function UpdatePromptPanel({
       } else {
         setErrorMessage(res.userMessage);
       }
-      setPhase("error");
+      setUpdateState("failed");
     });
 
     return () => {
       disposed = true;
-      cancel();
+      if (!settled) cancel();
     };
-  }, [phase, packageManager, runUpdate]);
+  }, [updateState, packageManager, runUpdate]);
 
-  const footerText = phase === "menu"
+  const footerText = updateState === "available"
     ? "←/→ to choose · Enter to confirm · Esc to close"
-    : phase === "done"
+    : updateState === "success"
       ? "Enter to restart · Esc to stay in Codexa"
-    : "Esc to close";
+      : updateState === "installing"
+        ? "Esc to cancel"
+        : "Esc to close";
 
   return (
     <Box flexDirection="column" width="100%" marginTop={1}>
       <Box
         borderStyle="round"
-        borderColor={theme.border}
+        borderColor={updateState === "available" ? theme.borderFocused : theme.border}
         paddingX={2}
         paddingY={1}
         width="100%"
         flexDirection="column"
       >
-        <Box>
-          <Text color={theme.accent} bold>{`Update available: Codexa ${latestVersion}`}</Text>
-        </Box>
-        <Box marginTop={1}>
-          <Text color={theme.text}>{`Current version: ${currentVersion}`}</Text>
-        </Box>
-        <Box>
-          <Text color={theme.textMuted}>{`Package: ${CODEXA_NPM_PACKAGE}`}</Text>
-        </Box>
-        <Box>
-          <Text color={theme.textMuted}>{`Run: ${getUpdateCommand(packageManager).displayCommand}`}</Text>
-        </Box>
-      </Box>
-
-      <Box
-        borderStyle="round"
-        borderColor={phase === "menu" ? theme.borderFocused : theme.border}
-        paddingX={2}
-        paddingY={1}
-        marginTop={1}
-        width="100%"
-        flexDirection="column"
-      >
-        {phase === "menu" && (
+        {updateState === "available" && (
           <>
-            <Box>
+            <Text color={theme.accent} bold>{`Update available: Codexa ${latestVersion}`}</Text>
+            <Box marginTop={1}>
+              <Text color={theme.text}>{`Current version: ${currentVersion}`}</Text>
+            </Box>
+            <Text color={theme.textMuted}>{`Package: ${CODEXA_NPM_PACKAGE}`}</Text>
+            <Text color={theme.textMuted}>{`Run: ${getUpdateCommand(packageManager).displayCommand}`}</Text>
+            <Box marginTop={1}>
               {MENU_ITEMS.map((item, index) => (
                 <Text
                   key={item.label}
@@ -201,7 +198,7 @@ export function UpdatePromptPanel({
           </>
         )}
 
-        {phase === "running" && (
+        {updateState === "installing" && (
           <>
             <Text color={theme.text}>{`Installing Codexa ${latestVersion}...`}</Text>
             {outputLines.map((line, i) => (
@@ -210,7 +207,7 @@ export function UpdatePromptPanel({
           </>
         )}
 
-        {phase === "done" && (
+        {updateState === "success" && (
           <>
             <Text color={theme.success}>{`Codexa ${formatVersionLabel(latestVersion)} installed successfully.`}</Text>
             <Text color={theme.textMuted}>{"Restart Codexa to use the new version."}</Text>
@@ -220,7 +217,7 @@ export function UpdatePromptPanel({
           </>
         )}
 
-        {phase === "error" && (
+        {updateState === "failed" && (
           <>
             <Text color={theme.error}>{"Update failed."}</Text>
             {errorMessage != null && <Text color={theme.textMuted}>{errorMessage}</Text>}

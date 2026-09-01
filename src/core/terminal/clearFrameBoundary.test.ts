@@ -564,6 +564,37 @@ test("enters the alternate screen atomically before the first overlay frame writ
   assert.equal(controller.getState().overlayActive, true);
 });
 
+test("startup overlay exit commits a freshly mounted main Static frame into an empty normal buffer", () => {
+  let overlayActive = true;
+  const harness = createHarness({ isOverlayActive: () => overlayActive });
+  const { controller, instance, events } = harness;
+
+  // The updater/checker is the first rendered screen, so no normal frame has
+  // been painted or cached before entering the alternate buffer.
+  instance.renderInteractiveFrame?.("startup-update-overlay", 30, "");
+  events.length = 0;
+
+  overlayActive = false;
+  const freshMainStatic = "Codexa logo\nWorkspace: test\nProvider: Local\n";
+  instance.fullStaticOutput = `${instance.fullStaticOutput ?? ""}${freshMainStatic}`;
+  instance.renderInteractiveFrame?.("composer\nLocal / model\nContext: Unknown", 6, freshMainStatic);
+
+  const altOffIndex = events.findIndex((entry) => entry.startsWith("altScreen:off"));
+  const writeIndex = events.findIndex((entry) => entry.startsWith("write:composer"));
+  assert.ok(altOffIndex >= 0, "the startup updater must leave the alternate screen");
+  assert.ok(writeIndex > altOffIndex, "the complete main frame is written only after restoring the normal buffer");
+  assert.equal(
+    events[writeIndex],
+    `write:composer\nLocal / model\nContext: Unknown:6:${freshMainStatic.length}`,
+  );
+  assert.equal(
+    events.some((entry) => entry.startsWith("clearViewport:") || entry.startsWith("clearTranscript:")),
+    false,
+    "checker exit must not physically clear the restored normal buffer",
+  );
+  assert.equal(controller.getState().overlayActive, false);
+});
+
 test("holds transcript static flushed during an overlay and replays it into the normal buffer on exit", () => {
   let overlayActive = false;
   const harness = createHarness({ isOverlayActive: () => overlayActive });

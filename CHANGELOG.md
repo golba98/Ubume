@@ -6,6 +6,30 @@ No changes yet.
 
 ---
 
+## [1.0.21] — 2026-09-01 — Reliable Updater Rendering
+
+### Fixed
+
+- **Installation replaces the available-update card** — the updater now uses
+  mutually exclusive available, installing, success, and failure states instead
+  of stacking installation progress beneath the original prompt.
+- **Canceling an installation preserves the complete TUI** — Escape cancels the
+  active updater process, restores the available-update state, retains keyboard
+  focus, and ignores stale output or completion from the canceled attempt.
+- **Startup update checks no longer hide the Codexa header** — the normal
+  transcript buffer receives a fresh static logo, workspace, and provider frame
+  before it is exposed, preventing the composer-only blank-screen state.
+- **Local API-key fingerprints are no longer reusable offline digests** —
+  Harness credential-change detection now uses process-salted scrypt instead
+  of hashing the configured secret directly.
+
+### Maintenance
+
+- Added updater lifecycle, immediate and repeated cancellation, full-shell,
+  initial alternate-buffer, and credential-fingerprint regression coverage.
+
+---
+
 ## [1.0.19] — 2026-08-30 — Reliable Local Workflows
 
 ### Added

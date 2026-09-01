@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, scryptSync } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,7 @@ const HARNESS_VERSION = "0.1.1-rc.2";
 const PROFILE_NAME = "codexa-local";
 const INTERNAL_PROVIDER = "codexa-local";
 const require = createRequire(import.meta.url);
+const PROCESS_FINGERPRINT_SALT = randomBytes(16);
 
 interface HarnessNotification {
   sessionId?: string;
@@ -93,6 +94,13 @@ function routeFingerprint(config: HarnessConfig, request: ProviderChatRequest): 
     sandbox: resolveHarnessSandboxMode(request),
     writableRoots: request.runtime.policy.writableRoots,
   })).digest("hex");
+}
+
+function secretFingerprint(value: string): string {
+  // This only detects credential changes during this process. A process-local
+  // salt and memory-hard KDF prevent an exposed fingerprint from becoming a
+  // reusable offline API-key oracle.
+  return scryptSync(value, PROCESS_FINGERPRINT_SALT, 32).toString("hex");
 }
 
 function yamlString(value: string): string {
@@ -283,7 +291,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
   async run(request: ProviderChatRequest, handlers: BackendRunHandlers, signal: AbortSignal): Promise<string> {
     const config = resolveHarnessConfig(request);
     const fingerprint = routeFingerprint(config, request);
-    const processFingerprint = `${fingerprint}:${createHash("sha256").update(config.apiKey).digest("hex")}`;
+    const processFingerprint = `${fingerprint}:${secretFingerprint(config.apiKey)}`;
     await this.ensureStarted(request, config, processFingerprint, handlers);
     const metadata = request.localHarnessSession;
     const canResume = metadata?.routeFingerprint === fingerprint
@@ -734,5 +742,6 @@ export const localHarnessTestUtils = {
   resolveHarnessConfig,
   resolveHarnessSandboxMode,
   routeFingerprint,
+  secretFingerprint,
   profilePatch,
 };

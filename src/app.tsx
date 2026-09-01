@@ -511,6 +511,17 @@ export function App({ launchArgs }: AppProps) {
   const [screen, setScreen] = useState<Screen>(
     startupUpdateEnabled.current ? "update-prompt" : "main",
   );
+  // A startup update check can be the first frame Ink ever renders. Do not
+  // pre-mount TranscriptShell hidden in that case: its <Static> intro would be
+  // consumed before the normal buffer has received it, leaving only the live
+  // composer/footer when the overlay exits. Mount it fresh on the first real
+  // main-screen render, then keep it mounted across later overlays so normal
+  // transcript/static-buffer preservation continues to work.
+  const transcriptHasMountedRef = useRef(screen === "main");
+  const shouldMountTranscript = screen === "main" || transcriptHasMountedRef.current;
+  if (screen === "main") {
+    transcriptHasMountedRef.current = true;
+  }
   const [pendingImport, setPendingImport] = useState<{
     prompt: string;
     providerPrompt: string;
@@ -5185,23 +5196,25 @@ export function App({ launchArgs }: AppProps) {
 
   return (
     <ThemeProvider theme={activeThemeName} customTheme={customTheme}>
-      <TranscriptShell
-        layout={terminalLayout}
-        authState={authStatus.state}
-        workspaceLabel={workspaceLabel}
-        workspaceRoot={workspaceRoot}
-        runtimeSummary={headerRuntimeSummary}
-        staticEvents={staticEvents}
-        activeEvents={activeEvents}
-        uiState={uiState}
-        verboseMode={verboseMode}
-        clearCount={sessionState.clearCount}
-        repaintGeneration={staticRepaintGeneration}
-        notice={themeNotice}
-        composer={composerElement}
-        composerRows={composerRows}
-        visible={screen === "main"}
-      />
+      {shouldMountTranscript && (
+        <TranscriptShell
+          layout={terminalLayout}
+          authState={authStatus.state}
+          workspaceLabel={workspaceLabel}
+          workspaceRoot={workspaceRoot}
+          runtimeSummary={headerRuntimeSummary}
+          staticEvents={staticEvents}
+          activeEvents={activeEvents}
+          uiState={uiState}
+          verboseMode={verboseMode}
+          clearCount={sessionState.clearCount}
+          repaintGeneration={staticRepaintGeneration}
+          notice={themeNotice}
+          composer={composerElement}
+          composerRows={composerRows}
+          visible={screen === "main"}
+        />
+      )}
 
       {screen !== "main" && (
         <AppShell
