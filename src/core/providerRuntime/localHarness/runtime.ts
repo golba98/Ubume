@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, scryptSync } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +17,7 @@ const HARNESS_VERSION = "0.1.1-rc.2";
 const PROFILE_NAME = "codexa-local";
 const INTERNAL_PROVIDER = "codexa-local";
 const require = createRequire(import.meta.url);
-const PROCESS_FINGERPRINT_KEY = randomBytes(32);
+const PROCESS_FINGERPRINT_SALT = randomBytes(16);
 
 interface HarnessNotification {
   sessionId?: string;
@@ -98,8 +98,9 @@ function routeFingerprint(config: HarnessConfig, request: ProviderChatRequest): 
 
 function secretFingerprint(value: string): string {
   // This only detects credential changes during this process. A process-local
-  // HMAC key prevents the fingerprint from becoming an offline API-key oracle.
-  return createHmac("sha256", PROCESS_FINGERPRINT_KEY).update(value).digest("hex");
+  // salt and memory-hard KDF prevent an exposed fingerprint from becoming a
+  // reusable offline API-key oracle.
+  return scryptSync(value, PROCESS_FINGERPRINT_SALT, 32).toString("hex");
 }
 
 function yamlString(value: string): string {

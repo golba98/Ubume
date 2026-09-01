@@ -20,8 +20,8 @@ No changes yet.
   transcript buffer receives a fresh static logo, workspace, and provider frame
   before it is exposed, preventing the composer-only blank-screen state.
 - **Local API-key fingerprints are no longer reusable offline digests** —
-  Harness credential-change detection now uses a process-keyed HMAC instead of
-  hashing the configured secret directly.
+  Harness credential-change detection now uses process-salted scrypt instead
+  of hashing the configured secret directly.
 
 ### Maintenance
 
