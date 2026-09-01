@@ -3,18 +3,18 @@
 This guide documents how to publish the npm package `@golba98/codexa` to the
 public npm registry.
 
-## Prepare version 1.0.19
+## Prepare version 1.0.21
 
 Run these commands from the repository root. NPM versions are immutable, so
 never reuse a version that has already been published.
 
 ```bash
-npm version 1.0.19 --no-git-tag-version
+npm version 1.0.21 --no-git-tag-version
 npm run gen-build-info
 npm pkg get name version
 ```
 
-Continue only after the printed version is `1.0.19`.
+Continue only after the printed version is `1.0.21`.
 
 ## Validate the release
 
@@ -53,8 +53,8 @@ runs the TypeScript typecheck, and runs the full Bun test suite.
 ## Verify the published package
 
 ```bash
-npm view @golba98/codexa@1.0.19 version --registry=https://registry.npmjs.org
-npm install -g @golba98/codexa@1.0.19 --registry=https://registry.npmjs.org
+npm view @golba98/codexa@1.0.21 version --registry=https://registry.npmjs.org
+npm install -g @golba98/codexa@1.0.21 --registry=https://registry.npmjs.org
 codexa --version
 ```
 
@@ -70,7 +70,7 @@ codexa --version
 
 ```bash
 git add -A
-git commit -m "release: prepare Codexa v1.0.19"
-git tag v1.0.19
-git push origin agent/prepare-codexa-v1-0-19 --follow-tags
+git commit -m "release: prepare Codexa v1.0.21"
+git tag v1.0.21
+git push origin agent/prepare-codexa-v1-0-21 --follow-tags
 ```
