@@ -81,6 +81,14 @@ test("Update prompt owns the visible update notice so the header card is not dup
   assert.match(appSource, /screen === "update-prompt"[\s\S]*?<UpdatePromptPanel/);
 });
 
+test("startup update overlay defers TranscriptShell's first Static mount until main is visible", () => {
+  assert.match(appSource, /const transcriptHasMountedRef = useRef\(screen === "main"\)/);
+  assert.match(appSource, /const shouldMountTranscript = screen === "main" \|\| transcriptHasMountedRef\.current/);
+  assert.match(appSource, /\{shouldMountTranscript && \(\s*<TranscriptShell/);
+  assert.match(appSource, /if \(screen === "main"\) \{\s*transcriptHasMountedRef\.current = true/);
+  assert.doesNotMatch(appSource, /returnFromUpdateOverlay[\s\S]*?clearViewport/);
+});
+
 test("startup update checks run before the composer can accept input", () => {
   assert.match(appSource, /Check npm on every interactive startup before enabling the composer/);
   assert.doesNotMatch(appSource, /isCacheValid\(cache, ucSettings\.intervalHours/);

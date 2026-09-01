@@ -11,6 +11,8 @@ import { HEADER_CONFIG_DEFAULTS } from "../../config/settings.js";
 import { buildRuntimeSummary } from "../../config/runtimeConfig.js";
 import { TEST_RUNTIME } from "../../test/runtimeTestUtils.js";
 import { BottomComposer } from "./BottomComposer.js";
+import { UpdatePromptPanel, type RunUpdateFn } from "../panels/UpdatePromptPanel.js";
+import type { CommandResult } from "../../core/process/CommandRunner.js";
 
 class TestInput extends PassThrough {
   readonly isTTY = true;
@@ -34,6 +36,10 @@ const mockProviders = [
   { id: "local", displayName: "Local", routeMode: "provider-direct", backendType: "local", isActiveRoute: false, enabled: true, currentModel: "llama-3", statusLabel: "Ready" },
   { id: "antigravity", displayName: "Antigravity", routeMode: "provider-direct", backendType: "antigravity", isActiveRoute: false, enabled: true, currentModel: "AG-1", statusLabel: "Ready" }
 ];
+
+function makePendingUpdateResult(): Promise<CommandResult> {
+  return new Promise(() => {});
+}
 
 test("AppShell renders ProviderPicker with all 5 providers at normal standard size", async () => {
   const stdin = new TestInput();
@@ -136,4 +142,108 @@ test("AppShell renders ProviderPicker with all 5 providers at normal standard si
     false,
     "Broken state (missing Mistral Vibe or Local while rendering others) detected!"
   );
+});
+
+test("canceling an install leaves the complete updater shell visible", async () => {
+  const stdin = new TestInput();
+  const stdout = new TestOutput();
+  stdout.columns = 120;
+  stdout.rows = 40;
+  let output = "";
+  let cancelCalls = 0;
+  let skipCalls = 0;
+  stdout.on("data", (chunk) => { output += chunk.toString(); });
+
+  const layout = createTerminalViewport(120, 40);
+  const runUpdate: RunUpdateFn = () => ({
+    result: makePendingUpdateResult(),
+    cancel: () => { cancelCalls += 1; },
+  });
+  const composer = (
+    <BottomComposer
+      layout={layout}
+      uiState={{ kind: "IDLE" }}
+      mode="auto-edit"
+      model="gpt-5.4"
+      themeName="purple"
+      reasoningLevel="medium"
+      tokensUsed={1200}
+      value=""
+      cursor={0}
+      onChangeInput={() => {}}
+      onSubmit={() => {}}
+      onCancel={() => {}}
+      onChangeValue={() => {}}
+      onChangeCursor={() => {}}
+      onHistoryUp={() => {}}
+      onHistoryDown={() => {}}
+      onOpenBackendPicker={() => {}}
+      onOpenModelPicker={() => {}}
+      onOpenModePicker={() => {}}
+      onOpenThemePicker={() => {}}
+      onOpenAuthPanel={() => {}}
+      onTogglePlanMode={() => {}}
+      onClear={() => {}}
+      onCycleMode={() => {}}
+      onQuit={() => {}}
+    />
+  );
+
+  const instance = render(
+    <ThemeProvider theme="purple">
+      <AppShell
+        layout={layout}
+        screen="update-prompt"
+        authState="authenticated"
+        workspaceLabel="13-Codexa CLI"
+        runtimeSummary={buildRuntimeSummary(TEST_RUNTIME)}
+        staticEvents={[]}
+        activeEvents={[]}
+        uiState={{ kind: "IDLE" }}
+        panel={
+          <UpdatePromptPanel
+            focusId="update-prompt-integration"
+            currentVersion="1.0.19"
+            latestVersion="1.0.20"
+            packageManager="npm"
+            runUpdate={runUpdate}
+            onSkip={() => { skipCalls += 1; }}
+            onRestart={() => {}}
+          />
+        }
+        composer={composer}
+        composerRows={4}
+        headerConfig={HEADER_CONFIG_DEFAULTS}
+      />
+    </ThemeProvider>,
+    {
+      stdin: stdin as any,
+      stdout: stdout as any,
+      stderr: stdout as any,
+      debug: true,
+      exitOnCtrlC: false,
+      patchConsole: false,
+    },
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  stdin.write("\r");
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  const beforeCancel = output.length;
+  stdin.write("\u001b");
+  await new Promise((resolve) => setTimeout(resolve, 180));
+
+  const postCancel = output.slice(beforeCancel).replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+  assert.equal(cancelCalls, 1);
+  assert.equal(skipCalls, 0);
+  assert.match(postCancel, /Codexa v/);
+  assert.match(postCancel, /13-Codexa CLI/);
+  assert.match(postCancel, /Update available: Codexa 1\.0\.20/);
+  assert.match(postCancel, /Current version: 1\.0\.19/);
+  assert.match(postCancel, /│ ❯/);
+  assert.match(postCancel, /gpt-5\.4 \(medium\)/);
+  assert.match(postCancel, /Context:/);
+  assert.doesNotMatch(postCancel.slice(postCancel.lastIndexOf("Update available")), /Installing Codexa/);
+
+  instance.cleanup();
 });

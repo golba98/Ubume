@@ -131,14 +131,17 @@ test("Update now with a successful runner reaches the done phase", async () => {
 
   const harness = renderPanel({ packageManager: "pnpm", runUpdate });
   await sleep();
+  const availableOutputLength = harness.output().length;
   harness.stdin.write("\r"); // Enter on "Update now"
   await sleep();
 
+  const installAndSuccessOutput = harness.output().slice(availableOutputLength);
   assert.deepEqual(calls, ["pnpm"]);
-  assert.match(harness.output(), /Codexa v1\.0\.5 installed successfully\./);
-  assert.match(harness.output(), /Restart Codexa to use the new version\./);
-  assert.match(harness.output(), /❯ \[ Restart now \]/);
-  assert.match(harness.output(), /Enter to restart · Esc to stay in Codexa/);
+  assert.match(installAndSuccessOutput, /Installing Codexa 1\.0\.5/);
+  assert.match(installAndSuccessOutput, /Codexa v1\.0\.5 installed successfully\./);
+  assert.match(installAndSuccessOutput, /Restart Codexa to use the new version\./);
+  assert.match(installAndSuccessOutput, /❯ \[ Restart now \]/);
+  assert.match(installAndSuccessOutput, /Enter to restart · Esc to stay in Codexa/);
 
   harness.stdin.write("\r");
   await sleep(20);
@@ -211,4 +214,84 @@ test("Right arrow selects Later and Esc also skips without running an update", a
   await sleep(150);
   escHarness.cleanup();
   assert.equal(escHarness.onSkipCalls(), 1);
+});
+
+test("installing replaces the available card and Esc cancels back to a clean available state", async () => {
+  const resolvers: Array<(result: CommandResult) => void> = [];
+  let cancelCalls = 0;
+  let runCalls = 0;
+  const runUpdate: RunUpdateFn = (_pm, handlers) => {
+    runCalls += 1;
+    handlers?.onStdout?.("downloading package\n");
+    return {
+      result: new Promise<CommandResult>((resolve) => resolvers.push(resolve)),
+      cancel: () => { cancelCalls += 1; },
+    };
+  };
+
+  const harness = renderPanel({ runUpdate });
+  await sleep();
+  const beforeInstall = harness.output().length;
+
+  harness.stdin.write("\r");
+  await sleep();
+
+  const installingFrame = harness.output().slice(beforeInstall);
+  assert.equal(runCalls, 1);
+  assert.match(installingFrame, /Installing Codexa 1\.0\.5/);
+  assert.match(installingFrame, /downloading package/);
+  assert.match(installingFrame, /Esc to cancel/);
+  assert.doesNotMatch(installingFrame, /Update available: Codexa/);
+  assert.doesNotMatch(installingFrame, /Current version:/);
+  assert.doesNotMatch(installingFrame, /Run: npm install/);
+
+  const beforeCancel = harness.output().length;
+  harness.stdin.write("\u001b");
+  await sleep(150);
+
+  const availableAgainFrame = harness.output().slice(beforeCancel);
+  assert.equal(cancelCalls, 1);
+  assert.equal(harness.onSkipCalls(), 0);
+  assert.match(availableAgainFrame, /Update available: Codexa 1\.0\.5/);
+  assert.match(availableAgainFrame, /Current version: 1\.0\.4/);
+  assert.doesNotMatch(availableAgainFrame, /Installing Codexa/);
+  assert.doesNotMatch(availableAgainFrame, /downloading package/);
+
+  // A canceled attempt may resolve later; it must not replace the restored
+  // available state with stale success or failure UI.
+  resolvers[0]?.(makeResult());
+  await sleep();
+  assert.doesNotMatch(harness.output().slice(beforeCancel), /installed successfully/);
+
+  // The cancellation fully resets the attempt lifecycle, so retry works.
+  harness.stdin.write("\r");
+  await sleep(200);
+  assert.equal(runCalls, 2);
+  harness.stdin.write("\u001b");
+  await sleep(150);
+  assert.equal(cancelCalls, 2);
+  assert.equal(harness.onSkipCalls(), 0);
+  harness.cleanup();
+});
+
+test("Escape immediately after install starts cannot surface stale installer state", async () => {
+  let cancelCalls = 0;
+  const runUpdate: RunUpdateFn = () => ({
+    result: new Promise<CommandResult>(() => {}),
+    cancel: () => { cancelCalls += 1; },
+  });
+  const harness = renderPanel({ runUpdate });
+  await sleep();
+  const transitionStart = harness.output().length;
+
+  harness.stdin.write("\r");
+  harness.stdin.write("\u001b");
+  await sleep(180);
+
+  const transitionOutput = harness.output().slice(transitionStart);
+  assert.match(transitionOutput, /Update available: Codexa 1\.0\.5/);
+  assert.doesNotMatch(transitionOutput.slice(transitionOutput.lastIndexOf("Update available")), /Installing Codexa/);
+  assert.ok(cancelCalls <= 1, "an attempt that reached the runner is canceled at most once");
+  assert.equal(harness.onSkipCalls(), 0);
+  harness.cleanup();
 });

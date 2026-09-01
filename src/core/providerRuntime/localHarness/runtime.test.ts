@@ -56,6 +56,17 @@ function runRuntime(req: ProviderChatRequest, handlers: Partial<BackendRunHandle
 afterEach(() => resetLocalHarnessProcessForTests());
 
 describe("Local Harness provider routing", () => {
+  test("uses a stable keyed fingerprint for credential change detection", () => {
+    const first = localHarnessTestUtils.secretFingerprint("test-api-key");
+    const repeated = localHarnessTestUtils.secretFingerprint("test-api-key");
+    const changed = localHarnessTestUtils.secretFingerprint("different-api-key");
+
+    assert.equal(first, repeated);
+    assert.notEqual(first, changed);
+    assert.equal(first.includes("test-api-key"), false);
+    assert.match(first, /^[a-f0-9]{64}$/);
+  });
+
   for (const model of ["Qwen3-Coder", "Ornith-32B", "Llama-4", "Gemma-3", "DeepSeek-R1", "GLM-5", "arbitrary-compatible-model"]) {
     test(`${model} uses the generic Local Harness path`, async () => {
       const observed: ProviderChatRequest[] = [];
