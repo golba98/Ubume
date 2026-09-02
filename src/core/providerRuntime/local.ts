@@ -10,6 +10,7 @@ import type {
   ResolvedLocalAgentConfig,
 } from "./types.js";
 import { resolveModelCapabilityProfileCached, clearModelCapabilityProfileCache } from "./capabilityProfile.js";
+import { resolveDefaultMaxOutputTokens } from "./localOutputBudget.js";
 import { clearModelContextMetadataCache, resolveModelContextLengthCached } from "./contextMetadata.js";
 import { deriveLmStudioApiRoot, fetchLmStudioModels, type LmStudioModelInfo, type LmStudioModelList } from "./lmstudio.js";
 import { parseUnslothModels, resolveUnslothConnection } from "./unsloth.js";
@@ -614,7 +615,9 @@ async function resolveLocalAgentConfig(
     apiKey: config.apiKey,
     modelId,
     contextWindow: context.contextLength ?? configuredModel?.contextLength ?? 32_768,
-    maxTokens: capabilities.maxOutputTokens ?? configuredModel?.maxOutputTokens ?? 8_192,
+    maxTokens: capabilities.maxOutputTokens
+      ?? configuredModel?.maxOutputTokens
+      ?? resolveDefaultMaxOutputTokens(context.contextLength ?? configuredModel?.contextLength),
     supportsStreaming: capabilities.supportsStreaming,
     supportsToolCalls: capabilities.supportsToolCalls,
     supportsSystemPrompt: capabilities.supportsSystemPrompt,

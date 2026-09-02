@@ -215,6 +215,8 @@ Each runtime must report truthful availability, validation, models, reasoning, a
 | `src/core/providerRuntime/lmstudio.ts` | Defines LM Studio/OpenAI-compatible request and response helpers used by the local runtime. |
 | `src/core/providerRuntime/unsloth.ts` | Verifies a local Unsloth Studio instance, resolves secure API authentication, and parses loaded models. |
 | `src/core/providerRuntime/local.test.ts` | Verifies local behavior and regression contracts in the core/providerRuntime area. |
+| `src/core/providerRuntime/localOutputBudget.test.ts` | Verifies the default Local output-token budget scales with the context window inside fixed bounds. |
+| `src/core/providerRuntime/localOutputBudget.ts` | Resolves the default max output tokens for Local models that advertise no cap, so reasoning models are not cut off mid-thought. |
 | `src/core/providerRuntime/local.ts` | Checks local-server readiness, discovers models, resolves configuration, delegates active Local requests to the Harness adapter, and reports diagnostics. |
 | `src/core/providerRuntime/localHarness/` | Owns the Local-only DeepSeek Harness process, generic OpenAI-compatible profile, session lifecycle, event mapping, permissions, cancellation, and focused tests. |
 | `src/core/providerRuntime/mistralVibe.test.ts` | Verifies mistral Vibe behavior and regression contracts in the core/providerRuntime area. |

@@ -7,6 +7,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { JsonRpcLineTransport } from "@deepseek-ai/dsh-sdk-protocol";
 import type { BackendRunHandlers, ToolApprovalDecision } from "../../providers/types.js";
 import type { ProviderChatRequest } from "../types.js";
+import { resolveDefaultMaxOutputTokens } from "../localOutputBudget.js";
 import type { LocalHarnessSessionMetadata } from "../../workspace/conversationStore.js";
 import { resolveCodexaWorkspaceDataDir } from "../../workspace/appData.js";
 import { getShellWorkspaceGuardMessage, isPathInsideAllowedRoots } from "../../workspace/workspaceGuard.js";
@@ -43,6 +44,10 @@ interface HarnessRunState {
   abortCleanup: () => void;
   turnFailure?: string;
   lastUsage?: { inputTokens: number; outputTokens: number; contextTokens: number; contextWindow: number | null; exact: boolean };
+  /** Why the last model turn stopped (`max-tokens`, `stop`, `aborted`, …), from the finish chunk or turn/end. */
+  stopReason?: string;
+  /** Set once the run has sent its single "continue and act" recovery prompt. */
+  recoveryAttempted?: boolean;
 }
 
 interface HarnessConfig {
@@ -52,6 +57,16 @@ interface HarnessConfig {
   contextWindow: number;
   maxTokens: number;
   supportsVision: boolean;
+  /** Reasoning effort to request, or null when the model has not opted in. */
+  reasoningEffort: HarnessReasoningEffort | null;
+}
+
+type HarnessReasoningEffort = "low" | "medium" | "high";
+
+function resolveHarnessReasoningEffort(request: ProviderChatRequest, model: string): HarnessReasoningEffort | null {
+  if (request.localConfig?.models?.[model]?.supportsReasoningEffort !== true) return null;
+  const level = (request.runtime as { reasoningLevel?: unknown }).reasoningLevel;
+  return level === "low" || level === "medium" || level === "high" ? level : null;
 }
 
 type HarnessSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
@@ -72,7 +87,7 @@ function textFromContent(value: unknown): string {
   if (!Array.isArray(value)) return "";
   return value.flatMap((block) => {
     if (!isRecord(block)) return [];
-    if (block.type === "text" && typeof block.text === "string") return [block.text];
+    if ((block.type === "text" || block.type === "output_text") && typeof block.text === "string") return [block.text];
     if (Array.isArray(block.content)) return [textFromContent(block.content)];
     return [];
   }).join("");
@@ -91,6 +106,7 @@ function routeFingerprint(config: HarnessConfig, request: ProviderChatRequest): 
     contextWindow: config.contextWindow,
     maxTokens: config.maxTokens,
     supportsVision: config.supportsVision,
+    reasoningEffort: config.reasoningEffort,
     sandbox: resolveHarnessSandboxMode(request),
     writableRoots: request.runtime.policy.writableRoots,
   })).digest("hex");
@@ -101,6 +117,10 @@ function secretFingerprint(value: string): string {
   // salt and memory-hard KDF prevent an exposed fingerprint from becoming a
   // reusable offline API-key oracle.
   return scryptSync(value, PROCESS_FINGERPRINT_SALT, 32).toString("hex");
+}
+
+function formatTokens(value: number): string {
+  return Math.max(0, Math.round(value)).toLocaleString("en-US");
 }
 
 function yamlString(value: string): string {
@@ -131,8 +151,23 @@ function bridgePath(): string {
   return fileURLToPath(new URL("../../../../bin/codexa-local-harness-bridge.js", import.meta.url));
 }
 
-function profilePatch(supportsVision: boolean): string {
+function profilePatch(supportsVision: boolean, reasoningEffortEnabled = false): string {
   const input = supportsVision ? "[text, image]" : "[text]";
+  // pi-ai only accepts a reasoning effort for models that declare their
+  // levels, so both the declaration and the provider default are emitted only
+  // when the model opted in (supports_reasoning_effort in providers.json).
+  const providerReasoning = reasoningEffortEnabled
+    ? "\n        reasoning: !!js process.env.CODEXA_DSH_REASONING_EFFORT"
+    : "";
+  const modelReasoning = reasoningEffortEnabled
+    ? `
+            reasoningEfforts:
+              low: low
+              medium: medium
+              high: high
+            compat:
+              thinkingFormat: openai`
+    : "";
   return `- id: hmr
   disabled: true
 - id: session-telemetry-otel
@@ -164,13 +199,13 @@ function profilePatch(supportsVision: boolean): string {
           maxTokensField: max_tokens
         defaultContextWindow: !!js Number(process.env.CODEXA_DSH_CONTEXT_WINDOW)
         defaultMaxTokens: !!js Number(process.env.CODEXA_DSH_MAX_TOKENS)
-        defaultInput: ${input}
+        defaultInput: ${input}${providerReasoning}
         models:
           - id: !!js process.env.CODEXA_DSH_MODEL
             name: !!js process.env.CODEXA_DSH_MODEL
             contextWindow: !!js Number(process.env.CODEXA_DSH_CONTEXT_WINDOW)
             maxTokens: !!js Number(process.env.CODEXA_DSH_MAX_TOKENS)
-            input: ${input}
+            input: ${input}${modelReasoning}
 - id: sandbox-policy
   config:
     mode: !!js process.env.DSH_PERMISSION_MODE
@@ -220,7 +255,7 @@ function ensureProfile(workspaceRoot: string, config: HarnessConfig): string {
     private: true,
     dsh: { profile: { bundles: ["@deepseek-ai/dsh-base"] } },
   }, null, 2)}\n`, "utf8");
-  writeFileSync(join(profileDir, "cordis.patch.yml"), profilePatch(config.supportsVision), "utf8");
+  writeFileSync(join(profileDir, "cordis.patch.yml"), profilePatch(config.supportsVision, config.reasoningEffort !== null), "utf8");
   return home;
 }
 
@@ -248,8 +283,11 @@ function resolveHarnessConfig(request: ProviderChatRequest): HarnessConfig {
     apiKey: resolved?.apiKey ?? local?.apiKey ?? process.env.CODEXA_LOCAL_API_KEY ?? "lm-studio",
     model,
     contextWindow: resolved?.contextWindow ?? modelConfig?.contextLength ?? 32_768,
-    maxTokens: resolved?.maxTokens ?? modelConfig?.maxOutputTokens ?? 8_192,
+    maxTokens: resolved?.maxTokens
+      ?? modelConfig?.maxOutputTokens
+      ?? resolveDefaultMaxOutputTokens(resolved?.contextWindow ?? modelConfig?.contextLength),
     supportsVision: resolved?.supportsVision ?? modelConfig?.supportsVision === true,
+    reasoningEffort: resolveHarnessReasoningEffort(request, model),
   };
 }
 
@@ -383,6 +421,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       CODEXA_DSH_CONTEXT_WINDOW: String(config.contextWindow),
       CODEXA_DSH_MAX_TOKENS: String(config.maxTokens),
       CODEXA_DSH_VISION: config.supportsVision ? "1" : "0",
+      ...(config.reasoningEffort ? { CODEXA_DSH_REASONING_EFFORT: config.reasoningEffort } : {}),
     };
     const child = spawn(process.env.CODEXA_NODE_PATH?.trim() || "node", [resolveDshBin(), "--profile", PROFILE_NAME], {
       cwd: request.workspaceRoot,
@@ -470,6 +509,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       if (params.status === "running") state.runningSeen = true;
       if (params.status === "idle" && state.runningSeen) {
         if (state.turnFailure) this.failActive(new Error(state.turnFailure));
+        else if (this.tryRecoverExhaustedTurn(state)) return;
         else this.completeActive();
       }
       return;
@@ -504,6 +544,8 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         ].join("\n");
       } else if (reason.kind === "blocked") {
         state.turnFailure = "The Local Harness blocked this turn before completion.";
+      } else if (typeof reason.kind === "string") {
+        state.stopReason = reason.kind;
       }
       return;
     }
@@ -525,6 +567,11 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         });
       } else if (chunk.type === "usage" && isRecord(chunk.usage)) {
         this.emitUsage(state, chunk.usage);
+      } else if (chunk.type === "finish") {
+        const kind = isRecord(chunk.reason) && typeof chunk.reason.kind === "string" ? chunk.reason.kind : null;
+        const replay = isRecord(chunk.replayState) && isRecord(chunk.replayState.response) ? chunk.replayState.response : null;
+        const stopReason = kind ?? (replay?.stopReason === "length" ? "max-tokens" : typeof replay?.stopReason === "string" ? replay.stopReason : null);
+        if (stopReason) state.stopReason = stopReason;
       }
       return;
     }
@@ -631,19 +678,95 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     throw new Error(`Unknown Local Harness bridge request: ${method}`);
   }
 
+  private outputBudgetExhausted(state: HarnessRunState): boolean {
+    if (state.stopReason === "max-tokens") return true;
+    const cap = this.outputBudget(state);
+    return cap !== null && (state.lastUsage?.outputTokens ?? 0) >= cap;
+  }
+
+  private outputBudget(state: HarnessRunState): number | null {
+    try {
+      return resolveHarnessConfig(state.request).maxTokens;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * A reasoning model can spend its entire output budget thinking and end the
+   * turn without any answer or tool call. Ask it once, in the same session, to
+   * stop analysing and act; the retry completes through the normal idle path.
+   */
+  private tryRecoverExhaustedTurn(state: HarnessRunState): boolean {
+    if (state.text.trim() || state.recoveryAttempted || state.toolArguments.size > 0) return false;
+    if (!this.outputBudgetExhausted(state) || !this.transport) return false;
+    state.recoveryAttempted = true;
+    state.runningSeen = false;
+    state.stopReason = undefined;
+    state.handlers.onProgress?.({
+      id: "local-harness-output-recovery",
+      source: "transcript",
+      text: `Output limit hit while reasoning (${formatTokens(state.lastUsage?.outputTokens ?? this.outputBudget(state) ?? 0)} tokens); asking the model to continue and act.`,
+    });
+    traceLocalStream("harness.request.recovery", { sessionId: state.sessionId, outputTokens: state.lastUsage?.outputTokens ?? null });
+    void this.transport.request("session/prompt", {
+      sessionId: state.sessionId,
+      content: [
+        "Your previous turn ran out of output budget while reasoning and produced no answer.",
+        "Do not restart the analysis. Keep reasoning to a few sentences and begin the work now with tool calls, or give the answer directly.",
+      ].join(" "),
+    }).catch((error) => this.failActive(error instanceof Error ? error : new Error(String(error))));
+    return true;
+  }
+
   private completeActive(): void {
     const state = this.active;
     if (!state || state.settled) return;
     if (!state.text.trim()) {
-      this.failActive(new Error([
-        "Local agent request failed: the Harness turn completed without visible assistant output.",
-        "",
+      const backendLines = [
         `Backend: ${state.request.resolvedLocalAgentConfig?.localBackend ?? state.request.route.localBackend ?? "local"}`,
         `Model: ${state.request.route.modelId}`,
         `Endpoint: ${sanitizedEndpoint(state.request.resolvedLocalAgentConfig?.baseUrl ?? state.request.localConfig?.baseUrl ?? "")}`,
+      ];
+      const usage = state.lastUsage;
+      const usageLine = usage ? `Usage: ${formatTokens(usage.inputTokens)} input tokens, ${formatTokens(usage.outputTokens)} output tokens.` : null;
+      if (this.outputBudgetExhausted(state)) {
+        const cap = this.outputBudget(state) ?? usage?.outputTokens ?? 0;
+        this.failActive(new Error([
+          `Local agent request failed: the model used its entire output budget (${formatTokens(cap)} tokens) on reasoning and never started its answer.`,
+          "",
+          ...backendLines,
+          ...(usageLine ? [usageLine] : []),
+          "",
+          "Raise max_output_tokens for this model in providers.json, or lower its reasoning effort (set supports_reasoning_effort: true for the model and pick a lower reasoning level).",
+        ].join("\n")));
+        return;
+      }
+      if (state.reasoningText.size > 0) {
+        this.failActive(new Error([
+          "Local agent request failed: the model produced reasoning only and no answer or tool calls.",
+          "",
+          ...backendLines,
+          ...(usageLine ? [usageLine] : []),
+          "",
+          "The turn ended normally, so the server delivered no assistant text after the reasoning channel. Check the model's chat template and whether the server streams the final message.",
+        ].join("\n")));
+        return;
+      }
+      this.failActive(new Error([
+        "Local agent request failed: the Harness turn completed without visible assistant output.",
+        "",
+        ...backendLines,
         "Verify the model chat template, streaming response format, and native tool/function-calling support.",
       ].join("\n")));
       return;
+    }
+    if (state.stopReason === "max-tokens") {
+      state.handlers.onProgress?.({
+        id: "local-harness-output-truncated",
+        source: "transcript",
+        text: `Response truncated at ${formatTokens(state.lastUsage?.outputTokens ?? this.outputBudget(state) ?? 0)} output tokens (model limit).`,
+      });
     }
     state.settled = true;
     state.abortCleanup();
@@ -670,7 +793,12 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     state.settled = true;
     state.abortCleanup();
     this.active = null;
-    traceLocalStream("harness.request.error", { sessionId: state.sessionId, error: error.message });
+    traceLocalStream("harness.request.error", {
+      sessionId: state.sessionId,
+      error: error.message,
+      stopReason: state.stopReason ?? null,
+      outputTokens: state.lastUsage?.outputTokens ?? null,
+    });
     state.reject(error);
   }
 
