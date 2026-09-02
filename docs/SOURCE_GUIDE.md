@@ -411,6 +411,8 @@ Preserve cursor-safe Unicode editing, normalized shortcuts, focus routing, paste
 | `src/ui/input/rawArrowKeys.test.ts` | Verifies raw Arrow Keys behavior and regression contracts in the ui/input area. |
 | `src/ui/input/rawArrowKeys.ts` | Resolves arrow keys from raw stdin chunks so panels survive split escape sequences. |
 | `src/ui/input/slashCommands.ts` | Defines discoverable slash-command metadata, aliases, filtering, and completion behavior. |
+| `src/ui/input/useStdinRawModeLease.test.tsx` | Verifies the raw-mode lease keeps Ink's stdin readable listener attached across composer shell swaps. |
+| `src/ui/input/useStdinRawModeLease.ts` | Holds Ink's raw-mode refcount above zero for the App lifetime so shell swaps never detach the stdin readable listener. |
 
 ### `src/ui/` — Shared UI foundations
 

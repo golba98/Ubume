@@ -325,3 +325,12 @@ test("VTE terminal trace records startup root, logo branch, composer count, and 
   assert.match(clearBoundarySource, /currentRows/);
   assert.match(clearBoundarySource, /buildFrameText\(instance, output, staticOutput\)/);
 });
+
+test("App holds a process-lifetime stdin raw-mode lease so composer shell swaps never detach Ink input", () => {
+  // Without this lease, Ink's raw-mode refcount hits zero every time the
+  // composer moves between AppShell and TranscriptShell (overlay exit), which
+  // removes/re-adds its 'readable' listener; two such cycles in one tick flip
+  // stdin into flowing mode and Ink never receives input again.
+  assert.match(appSource, /import \{ useStdinRawModeLease \} from "\.\/ui\/input\/useStdinRawModeLease\.js"/);
+  assert.match(appSource, /const \{ stdin \} = useStdin\(\);\s*(?:\/\/[^\n]*\n\s*)*useStdinRawModeLease\(\);/);
+});

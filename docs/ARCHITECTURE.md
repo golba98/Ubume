@@ -255,6 +255,7 @@ Maintenance invariants:
 - Resize handling must preserve the last valid frame and avoid competing resize owners.
 - All provider and shell text crosses terminal-sanitization boundaries before rendering.
 - Terminal mode changes must have paired cleanup so crashes do not leave mouse, paste, cursor, title, or alternate-screen state behind.
+- Ink's raw-mode refcount must never reach zero while the app runs; `useStdinRawModeLease` in `App` owns that lease. Components still hold their own via `useFocus`/`useInput`, but a root-level lease prevents composer remounts (overlay exit) from detaching Ink's stdin `readable` listener, which otherwise flips stdin into flowing mode and silently kills all input.
 
 ## Configuration and persisted state
 
