@@ -3,6 +3,25 @@
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
 
+## v1.0.24 — 2026-09-03
+
+Codexa no longer slows down the longer a session runs. Typing used to get
+laggy and the terminal felt heavy after enough turns because Codexa was
+quietly rebuilding the entire visible history on every keystroke and hashing
+the whole scrollback on every screen update; both now scale with what's
+actually changing, not with how long the session has been running. Only the
+most recent 200 turns are kept fully in memory — earlier ones stay visible in
+your terminal's scrollback, so nothing is lost, but redraws after resizing the
+window only cover the recent window.
+
+Local models that think a lot before answering (reasoning models) could
+previously hit their internal output limit mid-thought and fail with a
+confusing "no visible output" error even though they were clearly working.
+Codexa now recognizes this, automatically asks the model to wrap up and
+answer, and raises the default output limit so it happens less often. If it
+still can't get an answer, the error now explains what actually happened
+instead of suggesting the model itself might be broken.
+
 ## v1.0.23 — 2026-09-03
 
 Plan mode is fixed on the Local provider. Previously the model's exploration

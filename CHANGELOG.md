@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+No changes yet.
+
+---
+
+## [1.0.24] — 2026-09-03 — Long-Session Performance and Local Reasoning Recovery
+
 ### Fixed
 
 - **Long sessions no longer get slower with every turn** — the frame boundary
