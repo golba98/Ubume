@@ -254,7 +254,9 @@ export function measureBottomComposerRows({
     value: normalizedValue,
     allowCommands,
   });
-  const transientStatusRows = visibleStatusLine.length > 0 ? 1 : 0;
+  // Parity with render: the transient status row is shown whenever input is
+  // locked, even when the status text is suppressed for a slash-command draft.
+  const transientStatusRows = visibleStatusLine.length > 0 || inputLocked ? 1 : 0;
 
   const visiblePromptRows = inputLocked ? 1 : promptViewport.visibleRows.length;
 

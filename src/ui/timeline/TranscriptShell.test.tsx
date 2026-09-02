@@ -441,6 +441,92 @@ test("commits complete history to native scrollback without clearing the termina
   );
 });
 
+function streamingRunEvent(turnId: number, prompt: string, toolCount: number, tail: string): RunEvent {
+  const toolActivities = Array.from({ length: toolCount }, (_, index) => ({
+    id: `tool-${index}`,
+    command: `cat file-${String(index).padStart(3, "0")}.txt`,
+    status: "completed" as const,
+    startedAt: turnId + index,
+    completedAt: turnId + index + 1,
+    streamSeq: index + 1,
+  }));
+  const responseSeq = toolCount + 1;
+  return {
+    ...runningRunEvent(turnId, prompt),
+    toolActivities,
+    responseSegments: [{
+      id: "response-101-tail",
+      streamSeq: responseSeq,
+      chunks: [tail],
+      status: "active",
+      startedAt: turnId,
+    }],
+    streamItems: [
+      ...toolActivities.map((tool) => ({ streamSeq: tool.streamSeq, kind: "action" as const, refId: tool.id })),
+      { streamSeq: responseSeq, kind: "response" as const, refId: "response-101-tail" },
+    ],
+    lastStreamSeq: responseSeq,
+    activeResponseSegmentId: "response-101-tail",
+  };
+}
+
+test("tail-windows a long streaming turn so it never overflows the terminal or clears scrollback", async () => {
+  const prompt = "read every file and summarize";
+  const rows = 14;
+  const uiState: UIState = { kind: "RESPONDING", turnId: 10 };
+  const { instance, getOutput } = renderTranscript([launchEvent()], {
+    activeEvents: [userPromptEvent(10, prompt), streamingRunEvent(10, prompt, 30, "Summary so far")],
+    uiState,
+    cols: 100,
+    rows,
+  });
+  await sleep();
+
+  const streamingStart = getOutput().length;
+  for (const [toolCount, tail] of [[40, "Summary so far, more"], [50, "Summary complete"]] as const) {
+    instance.rerender(transcriptNode({
+      staticEvents: [launchEvent()],
+      activeEvents: [userPromptEvent(10, prompt), streamingRunEvent(10, prompt, toolCount, tail)],
+      uiState,
+      cols: 100,
+      rows,
+    }));
+    await sleep();
+  }
+
+  const streamingOutput = getOutput().slice(streamingStart);
+  assert.doesNotMatch(streamingOutput, /\u001b\[2J|\u001b\[3J/, "streaming frames must never clear the terminal");
+  const lastFrame = stripAnsi(streamingOutput.slice(streamingOutput.lastIndexOf("\u001b[?2026h")));
+  assert.match(lastFrame, /Summary complete/);
+  assert.match(lastFrame, /file-049\.txt/);
+  assert.doesNotMatch(lastFrame, /file-000\.txt/, "the head of the live turn is windowed away while streaming");
+  const liveLineCount = lastFrame.split(/\r?\n/).length;
+  assert.ok(liveLineCount < rows, `live frame has ${liveLineCount} lines; must stay below ${rows}`);
+
+  const beforeFinalize = getOutput().length;
+  const completed: RunEvent = {
+    ...streamingRunEvent(10, prompt, 50, "Summary complete"),
+    status: "completed",
+    durationMs: 10,
+    activeResponseSegmentId: null,
+  };
+  completed.responseSegments = completed.responseSegments!.map((segment) => ({ ...segment, status: "completed" as const }));
+  instance.rerender(transcriptNode({
+    staticEvents: [launchEvent(), userPromptEvent(10, prompt), completed],
+    activeEvents: [],
+    uiState: IDLE,
+    cols: 100,
+    rows,
+  }));
+  await sleep();
+  instance.cleanup();
+
+  const finalizeOutput = getOutput().slice(beforeFinalize);
+  assert.doesNotMatch(finalizeOutput, /\u001b\[2J|\u001b\[3J/, "finalize must append to scrollback without clearing");
+  assert.match(stripAnsi(finalizeOutput), /file-000\.txt/, "finalize commits the whole turn to scrollback");
+  assert.match(stripAnsi(finalizeOutput), /Summary complete/);
+});
+
 test("hides transcript input during overlay mode and restores the owned viewport", async () => {
   const initialEvents = [launchEvent(199), systemEvent(200, "visible history")];
   const hiddenEvents = [...initialEvents, systemEvent(201, "queued while overlay is visible")];

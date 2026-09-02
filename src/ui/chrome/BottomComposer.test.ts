@@ -672,3 +672,13 @@ test("getTokenBarDisplay with isEstimated: false uses comma format (regression g
   assert.equal(display.limitText, "400,000");
   assert.equal(display.isEstimatedLimit, false);
 });
+
+test("measures the transient status row while input is locked even for a slash-command draft", () => {
+  const layout = createLayoutSnapshot(100, 30);
+  const busy = { kind: "THINKING", turnId: 1 } as const;
+  const plainDraft = measureBottomComposerRows({ layout, uiState: busy, value: "hello", cursor: 5 });
+  const commandDraft = measureBottomComposerRows({ layout, uiState: busy, value: "/model", cursor: 6 });
+
+  assert.equal(getVisibleComposerStatusLine({ uiState: busy, value: "/model", allowCommands: true }), "");
+  assert.equal(commandDraft, plainDraft);
+});
