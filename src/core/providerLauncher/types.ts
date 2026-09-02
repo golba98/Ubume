@@ -90,4 +90,6 @@ export interface ProviderModelWorkspaceOverride {
   supportsToolCalls?: boolean;
   supportsSystemPrompt?: boolean;
   supportsVision?: boolean;
+  /** Opt in to sending the active reasoning level as OpenAI `reasoning_effort` (Local harness). */
+  supportsReasoningEffort?: boolean;
 }

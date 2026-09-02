@@ -215,6 +215,8 @@ Each runtime must report truthful availability, validation, models, reasoning, a
 | `src/core/providerRuntime/lmstudio.ts` | Defines LM Studio/OpenAI-compatible request and response helpers used by the local runtime. |
 | `src/core/providerRuntime/unsloth.ts` | Verifies a local Unsloth Studio instance, resolves secure API authentication, and parses loaded models. |
 | `src/core/providerRuntime/local.test.ts` | Verifies local behavior and regression contracts in the core/providerRuntime area. |
+| `src/core/providerRuntime/localOutputBudget.test.ts` | Verifies the default Local output-token budget scales with the context window inside fixed bounds. |
+| `src/core/providerRuntime/localOutputBudget.ts` | Resolves the default max output tokens for Local models that advertise no cap, so reasoning models are not cut off mid-thought. |
 | `src/core/providerRuntime/local.ts` | Checks local-server readiness, discovers models, resolves configuration, delegates active Local requests to the Harness adapter, and reports diagnostics. |
 | `src/core/providerRuntime/localHarness/` | Owns the Local-only DeepSeek Harness process, generic OpenAI-compatible profile, session lifecycle, event mapping, permissions, cancellation, and focused tests. |
 | `src/core/providerRuntime/mistralVibe.test.ts` | Verifies mistral Vibe behavior and regression contracts in the core/providerRuntime area. |
@@ -499,6 +501,8 @@ Preserve semantic row identity, stream order, scroll anchors, follow-tail behavi
 | `src/ui/timeline/Timeline.tsx` | Builds turn/event items, manages scroll/follow-tail navigation, and renders the measured transcript viewport. |
 | `src/ui/timeline/liveViewportWindow.test.ts` | Verifies the live tail window keeps only the last rows that fit the viewport and preserves array identity when nothing is hidden. |
 | `src/ui/timeline/liveViewportWindow.ts` | Tail-windows a running turn's live rows to the conversation viewport so Ink never clears the terminal and scrollback mid-stream. |
+| `src/ui/timeline/staticTranscriptCache.test.ts` | Verifies the incremental static transcript cache reuses finalized-turn rows, rebuilds only changed turns, and keeps the Ink static item count monotonic across the retention window. |
+| `src/ui/timeline/staticTranscriptCache.ts` | Incrementally builds native rows for finalized turns keyed by event identity and opacity, and retains row objects only for the newest turns. |
 | `src/ui/timeline/TranscriptShell.test.tsx` | Verifies Transcript Shell behavior and regression contracts in the ui/timeline area. |
 | `src/ui/timeline/TranscriptShell.tsx` | Commits static transcript rows and live-tail rows while preserving native terminal scrollback behavior. |
 | `src/ui/timeline/TurnGroup.test.tsx` | Verifies Turn Group behavior and regression contracts in the ui/timeline area. |

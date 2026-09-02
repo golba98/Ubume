@@ -1126,7 +1126,12 @@ function getCachedFrozenRows(cacheKey: string, build: () => TimelineRow[]): Time
   return rows;
 }
 
-export function __clearTimelineMeasureCachesForTests(): void {
+/**
+ * Drop every module-level row cache. Called at the /clear and conversation
+ * resume boundaries: the caches are keyed by transcript item keys and would
+ * otherwise keep rows for turns that no longer exist for the whole process.
+ */
+export function resetTimelineMeasureCaches(): void {
   _streamingRowCache = null;
   _rowContentCache.clear();
   _staticRowCache.clear();
@@ -1140,8 +1145,16 @@ export function __clearTimelineMeasureCachesForTests(): void {
   _actionDisplayCache.clear();
 }
 
+export function __clearTimelineMeasureCachesForTests(): void {
+  resetTimelineMeasureCaches();
+}
+
 export function __getStreamingBlockRowCacheSizeForTests(): number {
   return _streamingBlockRowCache.size;
+}
+
+export function __getStaticRowCacheSizeForTests(): number {
+  return _staticRowCache.size;
 }
 
 export function __wrapStyledSpansForTests(spans: TimelineRowSpan[], width: number): TimelineRowSpan[][] {
@@ -2024,12 +2037,14 @@ export function buildActionEventRows(params: {
     isLive: params.isLive,
     borderTone: params.borderTone,
   });
+  // Serialized once: it feeds the cache key and every trace payload below.
+  const displayedToken = actionDisplayToken(descriptor);
   renderDebug.traceRender("ActionLog", params.event.tool.status, {
     keyPrefix: params.keyPrefix,
     streamSeq: params.event.streamSeq,
     isLive: params.isLive,
     commandLength: params.event.tool.command.length,
-    displayedToken: actionDisplayToken(descriptor),
+    displayedToken: displayedToken,
   });
 
   if (renderDebug.isPlainActionsDebugEnabled()) {
@@ -2043,14 +2058,13 @@ export function buildActionEventRows(params: {
   const cacheKey = rowCacheKey([
     "action",
     params.keyPrefix,
-    actionDisplayToken(descriptor),
+    displayedToken,
   ]);
 
   const isCompleted = tool.status !== "running";
   if (isCompleted) {
     const cached = _completedActionRowCache.get(cacheKey);
     const completedActionTokenKey = `${params.keyPrefix}:${tool.id}`;
-    const displayedToken = actionDisplayToken(descriptor);
     const previousCompletedToken = _completedActionTokenById.get(completedActionTokenKey);
     if (previousCompletedToken && previousCompletedToken !== displayedToken) {
       renderDebug.traceEvent("action", "completedSnapshotInvalidation", {
@@ -2074,7 +2088,7 @@ export function buildActionEventRows(params: {
       actionId: tool.id,
       status: tool.status,
       rowKey: params.keyPrefix,
-      displayedToken: actionDisplayToken(descriptor),
+      displayedToken: displayedToken,
     });
   }
 
@@ -2087,7 +2101,7 @@ export function buildActionEventRows(params: {
   if (isCompleted) {
     const rows = buildActionRows();
     _completedActionRowCache.set(cacheKey, rows);
-    _completedActionTokenById.set(`${params.keyPrefix}:${tool.id}`, actionDisplayToken(descriptor));
+    _completedActionTokenById.set(`${params.keyPrefix}:${tool.id}`, displayedToken);
     return rows;
   }
 
@@ -2134,16 +2148,17 @@ function buildCodexResponseRows(params: {
   isLive: boolean;
   verbose: boolean;
 }): TimelineRow[] {
+  // Join the chunks once; the trace payload below must not pay for a second join.
+  const segmentText = getResponseSegmentText(params.event.segment);
   renderDebug.traceRender("ActiveMessage", params.event.segment.status, {
     keyPrefix: params.keyPrefix,
     streamSeq: params.event.streamSeq,
     streaming: params.streaming,
     isLive: params.isLive,
     chunkCount: params.event.segment.chunks.length,
-    textLength: getResponseSegmentText(params.event.segment).length,
+    textLength: segmentText.length,
   });
 
-  const segmentText = getResponseSegmentText(params.event.segment);
   const segmentStreaming = params.event.segment.status === "active";
 
   const buildRows = (): TimelineRow[] => {
@@ -2826,6 +2841,18 @@ function wrapNativeRows(
   return wrapRows(rows, totalWidth, padded, keyPrefix, false);
 }
 
+// Counts full per-turn row builds so tests can assert that unchanged finalized
+// turns are served from the static transcript cache instead of being rebuilt.
+let _nativeTurnBuildCount = 0;
+
+export function __getNativeTurnBuildCountForTests(): number {
+  return _nativeTurnBuildCount;
+}
+
+export function __resetNativeTurnBuildCountForTests(): void {
+  _nativeTurnBuildCount = 0;
+}
+
 function appendNativeTurnParts(
   output: NativeTranscriptParts,
   item: Extract<RenderTimelineItem, { type: "turn" }>,
@@ -2835,6 +2862,7 @@ function appendNativeTurnParts(
     workspaceRoot?: string | null;
   },
 ): void {
+  _nativeTurnBuildCount += 1;
   const run = item.item.run;
   const innerWidth = Math.max(10, options.totalWidth - (item.padded ? 2 : 0));
   const verbose = options.verboseMode ?? false;

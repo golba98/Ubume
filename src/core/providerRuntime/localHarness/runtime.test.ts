@@ -100,6 +100,7 @@ describe("Local Harness provider routing", () => {
       contextWindow: 32_768,
       maxTokens: 4_096,
       supportsVision: false,
+      reasoningEffort: null,
     });
     const patch = localHarnessTestUtils.profilePatch(false);
     assert.match(patch, /codexa-local:/);
@@ -171,6 +172,7 @@ describe("Local Harness provider routing", () => {
       contextWindow: 128_000,
       maxTokens: 8_192,
       supportsVision: false,
+      reasoningEffort: null,
     });
   });
 
@@ -303,9 +305,141 @@ describe("Harness event projection and policy", () => {
       approvals: new Set(),
       resolve: () => undefined,
       reject: () => undefined,
+      abortCleanup: () => undefined,
     };
     return { process, deltas, progress, progressIds, tools, usage };
   }
+
+  function notifier(fixture: ReturnType<typeof activeProcess>) {
+    return (fixture.process as unknown as { onNotification(method: string, params: unknown): void }).onNotification.bind(fixture.process);
+  }
+
+  function attachTransport(fixture: ReturnType<typeof activeProcess>) {
+    const requests: Array<{ method: string; params: Record<string, unknown> }> = [];
+    (fixture.process as unknown as { transport: unknown }).transport = {
+      request: async (method: string, params: Record<string, unknown>) => {
+        requests.push({ method, params });
+        return {};
+      },
+      close: () => undefined,
+    };
+    return requests;
+  }
+
+  function reasoningOnlyTurn(notify: ReturnType<typeof notifier>, outputTokens: number) {
+    notify("session.event", { sessionId: "session-1", event: { seq: 1, type: "assistant/chunk", data: { chunk: { type: "reasoning-delta", index: 0, text: "We have a massive request…" } } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 2, type: "assistant/chunk", data: { chunk: { type: "usage", usage: { inputTokens: 8_570, outputTokens } } } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 3, type: "assistant/chunk", data: { chunk: { type: "finish", reason: { kind: "max-tokens" }, replayState: { response: { stopReason: "length" } } } } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 4, type: "assistant/message", data: { message: { role: "assistant", content: [{ type: "reasoning", text: "We have a massive request…" }] } } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 5, type: "turn/end", data: { turn: 1, reason: { kind: "max-tokens" } } } });
+  }
+
+  test("a turn that spends its whole output budget reasoning is retried once with a continuation prompt", () => {
+    const errors: Error[] = [];
+    const fixture = activeProcess();
+    (fixture.process as unknown as { active: { reject: (error: Error) => void } }).active.reject = (error) => errors.push(error);
+    const requests = attachTransport(fixture);
+    const notify = notifier(fixture);
+
+    reasoningOnlyTurn(notify, 4_096);
+    notify("session.status", { sessionId: "session-1", status: "idle" });
+
+    assert.equal(errors.length, 0, "the first exhaustion must not fail the run");
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.method, "session/prompt");
+    assert.match(String(requests[0]?.params.content), /ran out of output budget/i);
+    assert.ok(fixture.progress.some((text) => /asking the model to continue/i.test(text)));
+
+    // The retry exhausts the budget again: fail with a self-diagnosing message.
+    notify("session.status", { sessionId: "session-1", status: "running" });
+    reasoningOnlyTurn(notify, 4_096);
+    notify("session.status", { sessionId: "session-1", status: "idle" });
+
+    assert.equal(requests.length, 1, "only one recovery prompt per run");
+    assert.equal(errors.length, 1);
+    assert.match(errors[0]!.message, /output budget \(4,096 tokens\)/);
+    assert.match(errors[0]!.message, /reasoning/i);
+    assert.match(errors[0]!.message, /max_output_tokens/);
+    assert.match(errors[0]!.message, /outputTokens: 4,096|4,096 output tokens/);
+  });
+
+  test("a turn that produces reasoning but no answer without hitting the cap reports that distinctly", () => {
+    const errors: Error[] = [];
+    const fixture = activeProcess();
+    (fixture.process as unknown as { active: { reject: (error: Error) => void } }).active.reject = (error) => errors.push(error);
+    attachTransport(fixture);
+    const notify = notifier(fixture);
+
+    notify("session.event", { sessionId: "session-1", event: { seq: 1, type: "assistant/chunk", data: { chunk: { type: "reasoning-delta", index: 0, text: "hmm" } } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 2, type: "assistant/chunk", data: { chunk: { type: "finish", reason: { kind: "stop" } } } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 3, type: "turn/end", data: { turn: 1, reason: { kind: "completed" } } } });
+    notify("session.status", { sessionId: "session-1", status: "idle" });
+
+    assert.equal(errors.length, 1);
+    assert.match(errors[0]!.message, /reasoning .* no answer|produced reasoning only/i);
+    assert.doesNotMatch(errors[0]!.message, /output budget/);
+  });
+
+  test("assistant/message output_text parts populate the final text", () => {
+    const fixture = activeProcess();
+    const notify = notifier(fixture);
+    notify("session.event", { sessionId: "session-1", event: { seq: 1, type: "assistant/message", data: { message: { role: "assistant", content: [{ type: "reasoning", text: "thinking" }, { type: "output_text", text: "the answer" }] } } } });
+    assert.deepEqual(fixture.deltas, ["the answer"]);
+  });
+
+  test("turn/end records non-error stop reasons", () => {
+    const fixture = activeProcess();
+    const notify = notifier(fixture);
+    notify("session.event", { sessionId: "session-1", event: { seq: 1, type: "turn/end", data: { turn: 1, reason: { kind: "aborted" } } } });
+    assert.equal((fixture.process as unknown as { active: { stopReason?: string } }).active.stopReason, "aborted");
+  });
+
+  test("a truncated but non-empty answer completes and shows a truncation notice", () => {
+    const resolved: string[] = [];
+    const fixture = activeProcess();
+    (fixture.process as unknown as { active: { resolve: (text: string) => void } }).active.resolve = (text) => resolved.push(text);
+    const notify = notifier(fixture);
+    notify("session.event", { sessionId: "session-1", event: { seq: 1, type: "assistant/chunk", data: { chunk: { type: "text-delta", text: "partial answer" } } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 2, type: "assistant/chunk", data: { chunk: { type: "usage", usage: { inputTokens: 100, outputTokens: 4_096 } } } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 3, type: "turn/end", data: { turn: 1, reason: { kind: "max-tokens" } } } });
+    notify("session.status", { sessionId: "session-1", status: "idle" });
+
+    assert.deepEqual(resolved, ["partial answer"]);
+    assert.ok(fixture.progressIds.includes("local-harness-output-truncated"));
+    assert.ok(fixture.progress.some((text) => /truncated at 4,096 output tokens/i.test(text)));
+  });
+
+  test("reasoning effort reaches the Harness profile only when the model opts in", () => {
+    const plain = localHarnessTestUtils.profilePatch(false, false);
+    assert.doesNotMatch(plain, /reasoningEfforts/);
+    assert.doesNotMatch(plain, /thinkingFormat/);
+
+    const effort = localHarnessTestUtils.profilePatch(false, true);
+    assert.match(effort, /reasoningEfforts:\n\s+low: low\n\s+medium: medium\n\s+high: high/);
+    assert.match(effort, /thinkingFormat: openai/);
+    assert.match(effort, /reasoning: !!js process\.env\.CODEXA_DSH_REASONING_EFFORT/);
+
+    const req = request("gpt-oss-20b");
+    req.localConfig!.models!["gpt-oss-20b"]!.supportsReasoningEffort = true;
+    (req.runtime as unknown as { reasoningLevel: string }).reasoningLevel = "low";
+    const low = localHarnessTestUtils.resolveHarnessConfig(req);
+    assert.equal(low.reasoningEffort, "low");
+    (req.runtime as unknown as { reasoningLevel: string }).reasoningLevel = "high";
+    const high = localHarnessTestUtils.resolveHarnessConfig(req);
+    assert.equal(high.reasoningEffort, "high");
+    assert.notEqual(localHarnessTestUtils.routeFingerprint(low, req), localHarnessTestUtils.routeFingerprint(high, req));
+
+    const optedOut = request("qwen");
+    (optedOut.runtime as unknown as { reasoningLevel: string }).reasoningLevel = "high";
+    assert.equal(localHarnessTestUtils.resolveHarnessConfig(optedOut).reasoningEffort, null);
+  });
+
+  test("the default output budget follows the context window when no cap is configured", () => {
+    const req = request("big-context");
+    delete req.localConfig!.models!["big-context"]!.maxOutputTokens;
+    req.localConfig!.models!["big-context"]!.contextLength = 131_072;
+    assert.equal(localHarnessTestUtils.resolveHarnessConfig(req).maxTokens, 32_768);
+  });
 
   test("streams assistant, reasoning, usage, and tool events without replaying final text", () => {
     const fixture = activeProcess();

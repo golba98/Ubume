@@ -19,6 +19,7 @@ import {
   pageDownTimelineViewport,
   pageUpTimelineViewport,
   reflowTimelineViewport,
+  createTurnOpacityResolver,
   resolveTurnOpacity,
   scrollTimelineViewport,
   selectTimelineRows,
@@ -2201,4 +2202,16 @@ test("response completion does not jump to top when user is scrolled mid-transcr
   assert.equal(afterFinalize.anchorRow, 20, "anchor must remain at row 20");
   // Unseen rows should reflect new content
   assert.equal(afterFinalize.unseenRows, 30, "unseen rows = 80 - 50");
+});
+
+test("createTurnOpacityResolver matches resolveTurnOpacity including absent ids", () => {
+  const turnIds = [1, 2, 3, 4];
+  const cases: Array<[number, number | null]> = [
+    [1, null], [4, null], [3, 3], [2, 3], [1, 3], [4, 3], [9, 3], [2, 9], [1, 9], [3, 9],
+  ];
+  const resolver = createTurnOpacityResolver(turnIds);
+  for (const [turnId, activeTurnId] of cases) {
+    assert.equal(resolver(turnId, activeTurnId), resolveTurnOpacity(turnIds, turnId, activeTurnId), `turn ${turnId} active ${activeTurnId}`);
+  }
+  assert.equal(createTurnOpacityResolver([])(1, null), "dim");
 });

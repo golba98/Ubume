@@ -157,6 +157,7 @@ function parseProviderOverride(value: unknown): ProviderWorkspaceOverride | unde
       }
 
       for (const [camelKey, snakeKey] of [
+        ["supportsReasoningEffort", "supports_reasoning_effort"],
         ["supportsStreaming", "supports_streaming"],
         ["supportsToolCalls", "supports_tool_calls"],
         ["supportsSystemPrompt", "supports_system_prompt"],
@@ -342,6 +343,7 @@ export function serializeProviderWorkspaceConfig(config: ProviderWorkspaceConfig
               ...(model.supportsToolCalls !== undefined ? { supportsToolCalls: model.supportsToolCalls } : {}),
               ...(model.supportsSystemPrompt !== undefined ? { supportsSystemPrompt: model.supportsSystemPrompt } : {}),
               ...(model.supportsVision !== undefined ? { supportsVision: model.supportsVision } : {}),
+              ...(model.supportsReasoningEffort !== undefined ? { supportsReasoningEffort: model.supportsReasoningEffort } : {}),
             },
           ]),
         ) } : {}),

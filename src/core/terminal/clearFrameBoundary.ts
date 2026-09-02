@@ -143,7 +143,32 @@ const ANSI_SEQUENCE = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
  */
 const WIDTH_REPAINT_MAX_SUPPRESSED_FRAMES = 8;
 
+// Trace-only diagnostics. Both helpers scan their whole input, and the frame
+// text they are usually given includes Ink's entire accumulated transcript, so
+// they must only run while a trace channel is recording (see
+// renderInteractiveFrame). The counters let tests assert exactly that.
+let frameHashCount = 0;
+let markerScanCount = 0;
+
+export function __getClearFrameBoundaryTraceStatsForTests(): { frameHashCount: number; markerScanCount: number } {
+  return { frameHashCount, markerScanCount };
+}
+
+export function __resetClearFrameBoundaryTraceStatsForTests(): void {
+  frameHashCount = 0;
+  markerScanCount = 0;
+}
+
+const EMPTY_MARKER_COUNTS: FrameMarkerCounts = Object.freeze({
+  codexaLogoCount: 0,
+  providerMigratedCount: 0,
+  launchModeCount: 0,
+  composerCount: 0,
+  footerCount: 0,
+});
+
 function stableFrameHash(text: string): string {
+  frameHashCount += 1;
   return createHash("sha1").update(text, "utf8").digest("hex").slice(0, 12);
 }
 
@@ -156,6 +181,7 @@ function countMatches(text: string, pattern: RegExp): number {
 }
 
 function countFrameMarkers(text: string): FrameMarkerCounts {
+  markerScanCount += 1;
   const plainText = text.replace(ANSI_SEQUENCE, "");
   return {
     codexaLogoCount: countMatches(plainText, LOGO_LINE),
@@ -223,11 +249,10 @@ function wrapInkLogForTrace(
 
   const wrapped: InkLogLike = ((output: string) => {
     const before = { ...shadow };
-    const controlSequences = inspectControlSequences(output);
     const result = original(output);
     shadow.previousOutputLength = output.length;
     shadow.previousLineCount = lineCountForOutput(output);
-    renderDebug.traceEvent("terminal", "inkLogWrite", {
+    renderDebug.traceEventLazy("terminal", "inkLogWrite", () => ({
       source,
       outputLength: output.length,
       outputHash: stableFrameHash(output),
@@ -235,8 +260,8 @@ function wrapInkLogForTrace(
       previousLineCountBefore: before.previousLineCount,
       previousOutputLengthAfter: shadow.previousOutputLength,
       previousLineCountAfter: shadow.previousLineCount,
-      ...controlSequences,
-    });
+      ...inspectControlSequences(output),
+    }));
     return result;
   }) as InkLogLike;
 
@@ -257,19 +282,18 @@ function wrapInkLogForTrace(
 
   wrapped.sync = (output: string) => {
     const before = { ...shadow };
-    const controlSequences = inspectControlSequences(output);
     const result = original.sync?.(output);
     shadow.previousOutputLength = output.length;
     shadow.previousLineCount = lineCountForOutput(output);
-    renderDebug.traceEvent("terminal", "inkLogSync", {
+    renderDebug.traceEventLazy("terminal", "inkLogSync", () => ({
       source,
       outputLength: output.length,
       previousOutputLengthBefore: before.previousOutputLength,
       previousLineCountBefore: before.previousLineCount,
       previousOutputLengthAfter: shadow.previousOutputLength,
       previousLineCountAfter: shadow.previousLineCount,
-      ...controlSequences,
-    });
+      ...inspectControlSequences(output),
+    }));
     return result;
   };
 
@@ -604,12 +628,12 @@ export function createClearFrameBoundaryController({
         widthRepaintTargetGeneration = null;
         widthRepaintReflushRequested = false;
         commitAuthoritativeFrame(output, outputHeight, staticOutput, "transcript", "resizeRefresh");
-        renderDebug.traceEvent("terminal", "resizeRefreshCommitted", {
+        renderDebug.traceEventLazy("terminal", "resizeRefreshCommitted", () => ({
           committedGeneration,
           currentCols,
           resizeRefreshConsumed: true,
           ...countFrameMarkers(`${staticOutput}${output}`),
-        });
+        }));
         return;
       }
       if (widthRepaintSuppressedFrames <= WIDTH_REPAINT_MAX_SUPPRESSED_FRAMES) {
@@ -643,15 +667,25 @@ export function createClearFrameBoundaryController({
     const effectiveStaticOutput = isFirstPostClearCommit && !staticOutput && suppressedPostClearStaticOutput
       ? suppressedPostClearStaticOutput
       : staticOutput;
-    const frameText = isFirstPostClearCommit
-      ? `${effectiveStaticOutput}${output}`
-      : buildFrameText(instance, output, staticOutput);
-    const markerCounts = countFrameMarkers(frameText);
-    const frameHash = stableFrameHash(frameText);
+    // Trace-only: the frame text includes Ink's whole accumulated transcript,
+    // so hashing and scanning it is O(session length). Only pay for it while a
+    // trace channel is recording; the boundary's decisions never read it.
+    const traceEnabled = renderDebug.isRenderDebugEnabled();
+    let frameLength = 0;
+    let frameHash = "";
+    let markerCounts: FrameMarkerCounts = EMPTY_MARKER_COUNTS;
+    if (traceEnabled) {
+      const frameText = isFirstPostClearCommit
+        ? `${effectiveStaticOutput}${output}`
+        : buildFrameText(instance, output, staticOutput);
+      frameLength = frameText.length;
+      markerCounts = countFrameMarkers(frameText);
+      frameHash = stableFrameHash(frameText);
+    }
     const clearGenerationUsed = isFirstPostClearCommit ? pendingGeneration : committedGeneration;
     const before = snapshotFrameState(instance, logShadow);
 
-    renderDebug.traceEvent("terminal", "clearBoundaryFrame", {
+    if (traceEnabled) renderDebug.traceEvent("terminal", "clearBoundaryFrame", {
       clearPending,
       pendingGeneration,
       committedGeneration,
@@ -668,7 +702,7 @@ export function createClearFrameBoundaryController({
       currentCols,
       currentRows,
       clearGenerationUsed,
-      frameLength: frameText.length,
+      frameLength,
       frameHash,
       ...markerCounts,
       ...before,
@@ -698,14 +732,14 @@ export function createClearFrameBoundaryController({
     }
 
     const after = snapshotFrameState(instance, logShadow);
-    renderDebug.traceEvent("terminal", "clearBoundaryFrameCommitted", {
+    if (traceEnabled) renderDebug.traceEvent("terminal", "clearBoundaryFrameCommitted", {
       clearPending,
       pendingGeneration,
       committedGeneration,
       renderGeneration,
       transcriptCleared,
       frameClassification: isFirstPostClearCommit ? "post-clear-authoritative" : frameClassification,
-      frameLength: frameText.length,
+      frameLength,
       frameHash,
       ...markerCounts,
       ...after,
@@ -725,7 +759,7 @@ export function createClearFrameBoundaryController({
       clearPending = false;
       pendingGeneration = null;
       suppressedPostClearStaticOutput = "";
-      renderDebug.traceEvent("terminal", "firstCommittedPostClearFrame", {
+      if (traceEnabled) renderDebug.traceEvent("terminal", "firstCommittedPostClearFrame", {
         committedGeneration,
         frameHash,
         firstFrameAuthoritative: true,

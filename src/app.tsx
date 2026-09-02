@@ -307,6 +307,7 @@ import {
 import { isBusy as isUiBusy } from "./session/types.js";
 import { AppShell } from "./ui/chrome/AppShell.js";
 import { TranscriptShell } from "./ui/timeline/TranscriptShell.js";
+import { resetTimelineMeasureCaches } from "./ui/timeline/timelineMeasure.js";
 import type { RuntimeAvailability } from "./ui/chrome/RuntimeStatusBar.js";
 import { checkForUpdates, formatLocalDevUpdateStatus, formatUpdateInstructions, shouldRunStartupUpdateCheck, type UpdateCheckResult } from "./core/version/updateCheck.js";
 import { detectGlobalPackageManager, getUpdateCommand } from "./core/version/packageManager.js";
@@ -1590,6 +1591,7 @@ export function App({ launchArgs }: AppProps) {
     }
     activeConversationRef.current = loaded;
     setConversationChars(loaded.messages.reduce((total, message) => total + message.content.length, 0));
+    resetTimelineMeasureCaches();
     dispatchSession({
       type: "CLEAR_TRANSCRIPT",
       seedEvents: conversationMessagesToTimeline(loaded.messages, createEventId),
@@ -3617,6 +3619,8 @@ export function App({ launchArgs }: AppProps) {
     activeRunTimingRef.current = null;
     resetMistralVibeSession(workspaceRoot);
     setPlanFlow(resetPlanFlow());
+    // Row caches are keyed by transcript item keys; drop them with the transcript.
+    resetTimelineMeasureCaches();
     renderDebug.traceEvent("terminal", "clearReactStateRequested", {
       clearGeneration,
       clearPending: clearBoundaryArmed,
