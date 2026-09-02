@@ -69,6 +69,7 @@ function readDiagnosticString(
 }
 import { Box, Text, useApp, useFocusManager, useInput, useStdin, useStdout } from "ink";
 import { expandPastedContent, type PastedContentRegistry } from "./ui/input/pastedContent.js";
+import { useStdinRawModeLease } from "./ui/input/useStdinRawModeLease.js";
 import { handleCommand } from "./commands/handler.js";
 import {
   applyLayeredRuntimeOverride,
@@ -570,6 +571,10 @@ export function App({ launchArgs }: AppProps) {
   const [activeContextMetadata, setActiveContextMetadata] = useState<ModelContextMetadata | null>(null);
   const { stdout } = useStdout();
   const { stdin } = useStdin();
+  // Keep Ink's raw-mode refcount above zero for the whole session so composer
+  // remounts (overlay exit shell swap + instance key bump) never detach Ink's
+  // stdin reader; see useStdinRawModeLease.
+  useStdinRawModeLease();
   const terminalControl = useMemo(() => createTerminalModeController((chunk) => stdout.write(chunk)), [stdout]);
   // Live Ink instance behind this stdout, used to reset Ink's frame caches on
   // the /clear boundary so the next frame is authoritative (see handleClear).

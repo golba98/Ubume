@@ -3,6 +3,15 @@
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
 
+## v1.0.22 — 2026-09-02
+
+Codexa no longer goes unresponsive right after startup. Previously, once the
+startup update check finished and the main screen appeared, keyboard input
+(including Ctrl+C) could stop working entirely because moving the input box
+between screens briefly detached it from the terminal. Codexa now keeps that
+connection alive for the whole session, so typing always works after the
+updater closes.
+
 ## v1.0.21 — 2026-09-01
 
 Codexa's updater now behaves as one coherent state machine: starting an install
