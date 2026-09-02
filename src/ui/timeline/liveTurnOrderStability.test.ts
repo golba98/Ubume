@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  appendRunPlanChunk,
   appendRunResponseChunk,
   completeRunEvent,
   createRunEvent,
@@ -277,4 +278,46 @@ test("a streaming turn never reorders its live blocks; reasoning reflows in only
     ["thinking-1", "action-2", "action-3", "response-4"],
     "finalized turn shows full streamSeq order including reasoning",
   );
+});
+
+// ─── Plan-mode demotion ─────────────────────────────────────────────────────────
+//
+// In plan mode the first streamed text opens the Plan block. When a tool call
+// starts, that text is demoted in place to ordinary prose at the SAME streamSeq
+// (block id `plan-N` becomes `response-N`); the block's position never moves and
+// the next plan delta opens a fresh Plan block at the tail. The id change is the
+// one sanctioned identity change in a live turn; position (streamSeq) is stable.
+
+function blockSeqs(rows: TimelineRow[]): number[] {
+  return blockOrder(rows).map((id) => Number(id.slice(id.lastIndexOf("-") + 1)));
+}
+
+test("plan-mode demotion changes a block's kind in place without reordering live blocks", () => {
+  __clearTimelineMeasureCachesForTests();
+  const user = makeUser(TURN_ID);
+  let run = createRunEvent({
+    id: TURN_ID,
+    backendId: "codex-subprocess",
+    backendLabel: "Test",
+    runtime: TEST_RUNTIME,
+    prompt: "plan the task",
+    turnId: TURN_ID,
+    responsePresentation: "plan",
+  });
+
+  run = appendRunPlanChunk(run, "Let me look at the repository first.");
+  const beforeTool = nativeParts(run, user, "streaming").liveRows;
+  assert.deepEqual(blockOrder(beforeTool), ["plan-1"]);
+
+  run = upsertRunToolActivity(run, runningTool(1));
+  const afterTool = nativeParts(run, user, "streaming").liveRows;
+  assert.deepEqual(blockOrder(afterTool), ["response-1", "action-2"]);
+  assert.deepEqual(blockSeqs(afterTool).slice(0, 1), blockSeqs(beforeTool));
+  assert.ok(afterTool.some((row) => rowText(row).includes("Let me look at the repository first.")));
+
+  run = upsertRunToolActivity(run, completedTool(1));
+  run = appendRunPlanChunk(run, "1. Inspect\n2. Implement");
+  const afterPlan = nativeParts(run, user, "streaming").liveRows;
+  assert.deepEqual(blockOrder(afterPlan), ["response-1", "action-2", "plan-3"]);
+  assertAppendOnly(blockOrder(afterTool), blockOrder(afterPlan), "plan block re-opened at the tail");
 });

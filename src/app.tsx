@@ -3934,6 +3934,11 @@ export function App({ launchArgs }: AppProps) {
     });
 
     let streamedAssistantContent = "";
+    // Plan runs: text streamed since the last tool call. The reducer demotes
+    // pre-tool text to prose (chatLifecycle.demoteActivePlanToResponseSegment),
+    // so the plan handed to planFlow must be the same trailing section.
+    let planSectionContent = "";
+    const planSeenToolIds = new Set<string>();
     let legacyProgressSequence = 0;
     let firstRenderFired = false;
     let finalAnswerVisibleFired = false;
@@ -4064,6 +4069,9 @@ export function App({ launchArgs }: AppProps) {
             chunk: safeChunk,
           });
           streamedAssistantContent += safeChunk;
+          if (lifecycle.responsePresentation === "plan") {
+            planSectionContent += safeChunk;
+          }
           if (geminiBoundary) {
             appDiagLog(`GEMINI_APP_BOUNDARY: onAssistantDelta assistantAppendCalled=yes queuedLength=${safeChunk.length} totalStreamedLength=${streamedAssistantContent.length} runId=${runId} turnId=${turnId}`);
           }
@@ -4079,7 +4087,10 @@ export function App({ launchArgs }: AppProps) {
               type: "RUN_MARK_FINAL_ANSWER_OBSERVED",
               runId,
               turnId,
-              response: safeResponse.trim() ? safeResponse : undefined,
+              // Plan runs keep their text in the plan block; the reducer also
+              // guards this, but never offer text that would be synthesized
+              // into a duplicate response segment.
+              response: lifecycle.responsePresentation !== "plan" && safeResponse.trim() ? safeResponse : undefined,
             });
             perf.mark("final_answer_visible");
           };
@@ -4092,6 +4103,11 @@ export function App({ launchArgs }: AppProps) {
         },
         onToolActivity: (activity) => {
           if (!isCurrentRun(activeRunIdRef.current, runId)) return;
+          if (lifecycle.responsePresentation === "plan" && !planSeenToolIds.has(activity.id)) {
+            // First sight of a tool: mirrors the reducer's insert-only demotion.
+            planSeenToolIds.add(activity.id);
+            planSectionContent = "";
+          }
           liveScheduler.enqueue({ type: "tool", activity });
           if (activity.status === "running") {
             return;
@@ -4174,12 +4190,16 @@ export function App({ launchArgs }: AppProps) {
             const streamedNorm = normalizeWs(streamedAssistantContent);
             const responseNorm = normalizeWs(safeResponse);
             const finalResponse =
-              lifecycle.responsePresentation !== "plan" && streamedNorm && (
-                streamedNorm === responseNorm ||
-                (responseNorm.startsWith(streamedNorm) && streamedNorm.length / responseNorm.length > 0.8)
-              )
-                ? undefined
-                : safeResponse;
+              lifecycle.responsePresentation === "plan"
+                // The plan is the section streamed after the last tool call;
+                // the backend's full response also contains the pre-tool chatter.
+                ? (planSectionContent.trim() ? planSectionContent : safeResponse)
+                : streamedNorm && (
+                  streamedNorm === responseNorm ||
+                  (responseNorm.startsWith(streamedNorm) && streamedNorm.length / responseNorm.length > 0.8)
+                )
+                  ? undefined
+                  : safeResponse;
             appDiagLog(`onResponse.finalizeResponse: safeResponse.length=${safeResponse.length} streamedContent.length=${streamedAssistantContent.length} finalResponse=${finalResponse === undefined ? "undefined(use-streamed)" : `${finalResponse.length}chars`}`);
             if (geminiBoundary) {
               const extractionStatus = safeResponse.trim() || streamedAssistantContent.trim()

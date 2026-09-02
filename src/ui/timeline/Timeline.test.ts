@@ -1195,6 +1195,45 @@ test("unified stream renders generated final plan after action blocks", () => {
   assert.ok(joined.indexOf("Read file") < joined.indexOf("Render the generated plan visibly"));
 });
 
+test("unified stream renders pre-tool plan-mode prose before the action and the Plan box after", () => {
+  const joined = renderJoinedTurn(makeChronologicalTurnEvents(298, {
+    responseSegments: [{
+      id: "response-2-1",
+      streamSeq: 1,
+      chunks: ["Let me inspect the app first."],
+      status: "completed",
+      startedAt: 2,
+    }],
+    toolActivities: [{
+      id: "tool-1",
+      command: "Get-Content src/app.tsx",
+      status: "completed",
+      startedAt: 10,
+      completedAt: 40,
+      streamSeq: 2,
+    }],
+    plan: {
+      id: "plan-2",
+      streamSeq: 3,
+      chunks: ["1. Inspect the current app structure\n2. Render the generated plan visibly"],
+      status: "completed",
+      startedAt: 2,
+    },
+    streamItems: [
+      { streamSeq: 1, kind: "response", refId: "response-2-1" },
+      { streamSeq: 2, kind: "action", refId: "tool-1" },
+      { streamSeq: 3, kind: "plan", refId: "plan-2" },
+    ],
+    lastStreamSeq: 3,
+  }), 298);
+
+  assert.match(joined, /Let me inspect the app first\./);
+  assert.doesNotMatch(joined, /│ Let me inspect the app first\./);
+  assert.match(joined, /╭── Plan/);
+  assert.ok(joined.indexOf("Let me inspect the app first.") < joined.indexOf("Read file"));
+  assert.ok(joined.indexOf("Read file") < joined.indexOf("╭── Plan"));
+});
+
 test("unified stream renders approved execution plan with approved badge", () => {
   const approvedPlan = "1. Apply the selected changes\n2. Run tests";
   const turnId = 9305;
