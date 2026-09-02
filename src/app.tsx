@@ -4464,8 +4464,24 @@ export function App({ launchArgs }: AppProps) {
 
     if (!started) {
       setPlanFlow(state);
+      return;
     }
-  }, [startPromptRun]);
+
+    // Approving the plan ends plan mode for the session, not just for this
+    // run: otherwise the footer keeps showing PLAN and the next prompt plans
+    // again. The run itself already carries the override above. Not routed
+    // through setPlanModeWithNotice, which would reset planFlow mid-run.
+    updateRuntimeConfig((current) => ({
+      ...current,
+      mode: state.executionMode,
+      planMode: false,
+    }));
+    saveRuntimeModePreference(state.executionMode, false);
+    appendSystemEvent(
+      "Plan mode",
+      `Plan approved. Plan mode off · ${formatModeLabel(state.executionMode)}.`,
+    );
+  }, [appendSystemEvent, startPromptRun, updateRuntimeConfig]);
 
   const handlePlanAction = useCallback((action: PlanActionValue) => {
     if (planFlow.kind !== "awaiting_action") {

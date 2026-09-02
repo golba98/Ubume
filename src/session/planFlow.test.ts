@@ -7,6 +7,7 @@ import {
   createInitialPlanFlowState,
   finishPlanGeneration,
   resetPlanFlow,
+  resolvePlanExecutionMode,
   startPlanGeneration,
   submitPlanFeedback,
 } from "./planFlow.js";
@@ -100,4 +101,13 @@ test("approving execution moves to executing and reset returns to idle", () => {
   assert.equal(executing.executionMode, "auto-edit");
   assert.equal(executing.planFilePath, "C:\\Workspace\\.codexa\\last-plan.md");
   assert.deepEqual(resetPlanFlow(), { kind: "idle" });
+});
+
+test("plan generation upgrades a read-only suggest mode to auto-edit for execution", () => {
+  assert.equal(resolvePlanExecutionMode("suggest"), "auto-edit");
+  assert.equal(resolvePlanExecutionMode("auto-edit"), "auto-edit");
+  assert.equal(resolvePlanExecutionMode("full-auto"), "full-auto");
+
+  assert.equal(startPlanGeneration("Build it", "suggest").executionMode, "auto-edit");
+  assert.equal(startPlanGeneration("Build it", "full-auto").executionMode, "full-auto");
 });

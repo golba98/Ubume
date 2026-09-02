@@ -44,11 +44,21 @@ export function createInitialPlanFlowState(): PlanFlowState {
   return { kind: "idle" };
 }
 
+/**
+ * The mode an approved plan executes under. Plan mode is orthogonal to the
+ * execution mode, so a session in `suggest` (read-only sandbox) can enter plan
+ * mode; approving the plan is an explicit request to write, so lift it to
+ * `auto-edit`. Write-capable modes are kept as-is.
+ */
+export function resolvePlanExecutionMode(mode: AvailableMode): AvailableMode {
+  return mode === "suggest" ? "auto-edit" : mode;
+}
+
 export function startPlanGeneration(originalPrompt: string, executionMode: AvailableMode): PlanGeneratingState {
   return {
     kind: "generating",
     originalPrompt,
-    executionMode,
+    executionMode: resolvePlanExecutionMode(executionMode),
     constraints: [],
     planFilePath: null,
     currentPlan: null,
