@@ -299,6 +299,20 @@ export function traceEvent(
   writeRecord(channel, { event, count, ...fields });
 }
 
+/**
+ * Like traceEvent, but the field object is only built when tracing is on.
+ * Use it wherever computing the payload is expensive (hashing or scanning
+ * output), so a disabled trace costs nothing on the render hot path.
+ */
+export function traceEventLazy(
+  channel: string,
+  event: string,
+  buildFields: () => Record<string, unknown>,
+): void {
+  if (!isRenderDebugEnabled()) return;
+  traceEvent(channel, event, buildFields());
+}
+
 export function traceSchedulerFlush(fields: Record<string, unknown>): void {
   traceEvent("scheduler", "flush", fields);
 }

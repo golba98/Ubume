@@ -3,7 +3,11 @@ import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
-import { createClearFrameBoundaryController } from "./clearFrameBoundary.js";
+import {
+  __getClearFrameBoundaryTraceStatsForTests,
+  __resetClearFrameBoundaryTraceStatsForTests,
+  createClearFrameBoundaryController,
+} from "./clearFrameBoundary.js";
 import type { InkRenderInstance } from "./inkRenderReset.js";
 import { configureRenderDebug } from "../perf/renderDebug.js";
 
@@ -685,6 +689,46 @@ test("a width change while an overlay is open repaints the alt buffer, then re-a
     "the rebuilt transcript frame commits the repaint after the overlay exit",
   );
   assert.equal(controller.getState().widthRepaintPending, false);
+});
+
+test("does not hash or scan the accumulated transcript when tracing is disabled", () => {
+  configureRenderDebug({});
+  __resetClearFrameBoundaryTraceStatsForTests();
+  const harness = createHarness();
+  const { controller, instance, events } = harness;
+  // Ink accumulates the whole session transcript here; per-frame work must not scale with it.
+  instance.fullStaticOutput = "x".repeat(200_000);
+
+  controller.syncRenderState({
+    generation: 0,
+    staticEventsLength: 5,
+    activeEventsLength: 1,
+    transcriptCleared: false,
+    uiStateKind: "RESPONDING",
+  });
+  instance.renderInteractiveFrame?.("live-frame", 10, "");
+  instance.renderInteractiveFrame?.("live-frame-2", 11, "new static chunk\n");
+  (instance.log as { sync?: (output: string) => void }).sync?.("live-frame-2\n");
+
+  harness.stdout.columns = 160;
+  instance.renderInteractiveFrame?.("resized-frame", 11, "");
+  instance.renderInteractiveFrame?.("resized-reflush", 11, "re-flushed static\n");
+
+  controller.beginClearGeneration(1);
+  instance.renderInteractiveFrame?.("stale-frame", 10, "");
+  controller.syncRenderState({
+    generation: 1,
+    staticEventsLength: 0,
+    activeEventsLength: 0,
+    transcriptCleared: true,
+    uiStateKind: "IDLE",
+  });
+  instance.renderInteractiveFrame?.("post-clear-frame", 6, "");
+
+  assert.deepEqual(__getClearFrameBoundaryTraceStatsForTests(), { frameHashCount: 0, markerScanCount: 0 });
+  assert.ok(events.includes("write:live-frame:10:0"));
+  assert.ok(events.includes("write:post-clear-frame:6:0"));
+  assert.equal(controller.getState().clearPending, false);
 });
 
 test("logs clear generation, stale suppression, and first committed post-clear frame fields for terminal tracing", () => {
