@@ -132,6 +132,15 @@ test("TranscriptShell commits history natively and keeps only mutable rows live"
   assert.doesNotMatch(transcriptShellSource, /clearTranscript|clearViewport|resetInkOutputForFreshFrame/);
 });
 
+test("/clear and conversation resume drop the timeline row caches", () => {
+  const clearBody = appSource.match(/const handleClear = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[/);
+  assert.ok(clearBody, "handleClear should exist");
+  assert.match(clearBody[1]!, /resetTimelineMeasureCaches\(\)/);
+  const resumeBody = appSource.match(/const resumeConversation = useCallback\(\(id: string\) => \{([\s\S]*?)\n  \}, \[/);
+  assert.ok(resumeBody, "resumeConversation should exist");
+  assert.match(resumeBody[1]!, /resetTimelineMeasureCaches\(\)/);
+});
+
 test("Settings panel workspace display save path does not append Settings transcript events", () => {
   const match = appSource.match(/const saveSettingsFromPanel = useCallback\(\(nextSettings: UserSettingValues\) => \{([\s\S]*?)\n  \}, \[/);
   assert.ok(match, "saveSettingsFromPanel callback should exist");

@@ -499,6 +499,8 @@ Preserve semantic row identity, stream order, scroll anchors, follow-tail behavi
 | `src/ui/timeline/Timeline.tsx` | Builds turn/event items, manages scroll/follow-tail navigation, and renders the measured transcript viewport. |
 | `src/ui/timeline/liveViewportWindow.test.ts` | Verifies the live tail window keeps only the last rows that fit the viewport and preserves array identity when nothing is hidden. |
 | `src/ui/timeline/liveViewportWindow.ts` | Tail-windows a running turn's live rows to the conversation viewport so Ink never clears the terminal and scrollback mid-stream. |
+| `src/ui/timeline/staticTranscriptCache.test.ts` | Verifies the incremental static transcript cache reuses finalized-turn rows, rebuilds only changed turns, and keeps the Ink static item count monotonic across the retention window. |
+| `src/ui/timeline/staticTranscriptCache.ts` | Incrementally builds native rows for finalized turns keyed by event identity and opacity, and retains row objects only for the newest turns. |
 | `src/ui/timeline/TranscriptShell.test.tsx` | Verifies Transcript Shell behavior and regression contracts in the ui/timeline area. |
 | `src/ui/timeline/TranscriptShell.tsx` | Commits static transcript rows and live-tail rows while preserving native terminal scrollback behavior. |
 | `src/ui/timeline/TurnGroup.test.tsx` | Verifies Turn Group behavior and regression contracts in the ui/timeline area. |

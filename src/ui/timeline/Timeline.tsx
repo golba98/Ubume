@@ -240,18 +240,32 @@ export function buildTimelineItems(events: TimelineEvent[]): TimelineItem[] {
   return items.filter((item) => item.type === "event" || item.user !== null);
 }
 
+export type TurnOpacityResolver = (turnId: number, activeTurnId: number | null) => TurnOpacity;
+
+/**
+ * Build a resolver once per render pass so resolving every turn's opacity is
+ * O(turns) instead of O(turns²) (two indexOf scans per turn). Semantics match
+ * resolveTurnOpacity exactly, including the "absent id → index -1" behaviour.
+ */
+export function createTurnOpacityResolver(turnIds: number[]): TurnOpacityResolver {
+  const indexById = new Map<number, number>();
+  turnIds.forEach((id, index) => indexById.set(id, index));
+  const lastTurnId = turnIds[turnIds.length - 1];
+  return (turnId, activeTurnId) => {
+    if (turnIds.length === 0) return "dim";
+    if (activeTurnId === null) {
+      return turnId === lastTurnId ? "recent" : "dim";
+    }
+    const activeIndex = indexById.get(activeTurnId) ?? -1;
+    const currentIndex = indexById.get(turnId) ?? -1;
+    if (currentIndex === activeIndex) return "active";
+    if (currentIndex === activeIndex - 1) return "recent";
+    return "dim";
+  };
+}
+
 export function resolveTurnOpacity(turnIds: number[], turnId: number, activeTurnId: number | null): TurnOpacity {
-  if (turnIds.length === 0) return "dim";
-
-  if (activeTurnId === null) {
-    return turnId === turnIds[turnIds.length - 1] ? "recent" : "dim";
-  }
-
-  const activeIndex = turnIds.indexOf(activeTurnId);
-  const currentIndex = turnIds.indexOf(turnId);
-  if (currentIndex === activeIndex) return "active";
-  if (currentIndex === activeIndex - 1) return "recent";
-  return "dim";
+  return createTurnOpacityResolver(turnIds)(turnId, activeTurnId);
 }
 
 export function createFollowTailViewport(totalRows: number): TimelineViewportState {
@@ -773,6 +787,7 @@ export function buildStaticRenderItems(
   questionTurnId: number | null,
   question: string | null,
 ): RenderTimelineItem[] {
+  const resolveOpacity = createTurnOpacityResolver(turnIds);
   return items.map((item) => {
     if (item.type === "event") {
       return {
@@ -789,7 +804,7 @@ export function buildStaticRenderItems(
       padded: false,
       item,
       renderState: {
-        opacity: resolveTurnOpacity(turnIds, item.turnId, activeTurnId),
+        opacity: resolveOpacity(item.turnId, activeTurnId),
         question: questionTurnId === item.turnId ? question : null,
         runPhase: resolveTurnRunPhase(item.run, item.assistant, { kind: "IDLE" }, item.turnId),
       },
@@ -805,6 +820,7 @@ export function buildActiveRenderItems(
   const activeTurnId = getActiveTurnId(uiState);
   const questionTurnId = uiState.kind === "AWAITING_USER_ACTION" ? uiState.turnId : null;
   const question = uiState.kind === "AWAITING_USER_ACTION" ? uiState.question : null;
+  const resolveOpacity = createTurnOpacityResolver(turnIds);
 
   return items.map((item) => {
     if (item.type === "event") {
@@ -822,7 +838,7 @@ export function buildActiveRenderItems(
       padded: false,
       item,
       renderState: {
-        opacity: resolveTurnOpacity(turnIds, item.turnId, activeTurnId),
+        opacity: resolveOpacity(item.turnId, activeTurnId),
         question: questionTurnId === item.turnId ? question : null,
         runPhase: resolveTurnRunPhase(item.run, item.assistant, uiState, item.turnId),
       },

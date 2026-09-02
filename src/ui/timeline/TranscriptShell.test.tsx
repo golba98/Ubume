@@ -11,6 +11,7 @@ import { createLayoutSnapshot } from "../layout.js";
 import { LOGO_COMPACT, LOGO_LARGE } from "../render/logoVariants.js";
 import { ThemeProvider } from "../theme.js";
 import { TranscriptShell } from "./TranscriptShell.js";
+import { __getNativeTurnBuildCountForTests, __resetNativeTurnBuildCountForTests } from "./timelineMeasure.js";
 
 class TestInput extends PassThrough {
   readonly isTTY = true;
@@ -525,6 +526,43 @@ test("tail-windows a long streaming turn so it never overflows the terminal or c
   assert.doesNotMatch(finalizeOutput, /\u001b\[2J|\u001b\[3J/, "finalize must append to scrollback without clearing");
   assert.match(stripAnsi(finalizeOutput), /file-000\.txt/, "finalize commits the whole turn to scrollback");
   assert.match(stripAnsi(finalizeOutput), /Summary complete/);
+});
+
+function finalizedTurnEvents(turnId: number): TimelineEvent[] {
+  const run: RunEvent = {
+    ...runningRunEvent(turnId, `task ${turnId}`),
+    status: "completed",
+    durationMs: 5,
+    summary: "completed",
+    responseSegments: [{ id: `response-${turnId}`, streamSeq: 1, chunks: [`answer ${turnId}`], status: "completed", startedAt: turnId }],
+    streamItems: [{ streamSeq: 1, kind: "response", refId: `response-${turnId}` }],
+    lastStreamSeq: 1,
+  };
+  return [userPromptEvent(turnId, `task ${turnId}`), run];
+}
+
+test("re-rendering with a new composer element does not rebuild finalized turns", async () => {
+  const staticEvents = [launchEvent(), ...Array.from({ length: 20 }, (_, index) => finalizedTurnEvents(index + 1)).flat()];
+  const { instance, getOutput } = renderTranscript(staticEvents, { rows: 40 });
+  await sleep();
+
+  __resetNativeTurnBuildCountForTests();
+  instance.rerender(transcriptNode({ staticEvents, prompt: "UPDATED PROMPT" }));
+  await sleep();
+  assert.equal(__getNativeTurnBuildCountForTests(), 0, "a keystroke-equivalent rerender must not rebuild static turns");
+  assert.match(stripAnsi(getOutput()), /UPDATED PROMPT/);
+
+  // A streaming turn rebuilds only the live turn, never the finalized ones.
+  __resetNativeTurnBuildCountForTests();
+  instance.rerender(transcriptNode({
+    staticEvents,
+    activeEvents: [userPromptEvent(99, "live task"), runningRunEvent(99, "live task")],
+    uiState: { kind: "THINKING", turnId: 99 },
+    prompt: "UPDATED PROMPT",
+  }));
+  await sleep();
+  assert.equal(__getNativeTurnBuildCountForTests(), 1, "only the running turn is built");
+  instance.cleanup();
 });
 
 test("hides transcript input during overlay mode and restores the owned viewport", async () => {

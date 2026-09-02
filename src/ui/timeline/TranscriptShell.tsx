@@ -13,6 +13,7 @@ import {
 } from "./Timeline.js";
 import { buildNativeTranscriptParts, type NativeTranscriptRowItem, type TimelineRow } from "./timelineMeasure.js";
 import { LIVE_WINDOW_SAFETY_ROWS, windowLiveRows } from "./liveViewportWindow.js";
+import { buildStaticTranscript, createStaticTranscriptCache, type StaticTranscriptCache } from "./staticTranscriptCache.js";
 import { getShellHeight, getShellWidth, resolveStartupHeaderMode, type TerminalViewport } from "../layout.js";
 import { LOGO_COMPACT, LOGO_COMPACT_MIN_COLS, LOGO_LARGE, LOGO_MEDIUM, selectLogoVariant } from "../render/logoVariants.js";
 import { useTheme } from "../theme.js";
@@ -118,22 +119,47 @@ function TranscriptShellInner({
     width: introInnerWidth,
   });
   const startupTraceKeyRef = useRef<string | null>(null);
-  const visibleTranscriptRef = useRef({ staticEvents, activeEvents, uiState });
+  // Stable snapshot of the transcript inputs; hold the last visible one while
+  // an overlay hides the shell. Identity only changes when the reducer
+  // replaces one of these arrays, never on a keystroke or a stream flush.
+  const liveTranscript = useMemo(
+    () => ({ staticEvents, activeEvents, uiState }),
+    [staticEvents, activeEvents, uiState],
+  );
+  const visibleTranscriptRef = useRef(liveTranscript);
   if (visible) {
-    visibleTranscriptRef.current = { staticEvents, activeEvents, uiState };
+    visibleTranscriptRef.current = liveTranscript;
   }
   const renderedTranscript = visibleTranscriptRef.current;
+  const renderedStaticEvents = renderedTranscript.staticEvents;
+  const renderedActiveEvents = renderedTranscript.activeEvents;
+  const renderedUiState = renderedTranscript.uiState;
   const conversationViewportRows = Math.max(
     2,
     getShellHeight(layout.rows) - (composerRows ?? 0) - (notice ? 1 : 0),
   );
-  const nativeTranscript = useMemo(() => {
-    const staticItems = buildTimelineItems(renderedTranscript.staticEvents);
-    const activeItems = buildTimelineItems(renderedTranscript.activeEvents);
-    const allTurnIds = [...staticItems, ...activeItems]
-      .flatMap((item) => item.type === "turn" ? [item.turnId] : []);
-    const activeTurnId = activeItems.find((item) => item.type === "turn")?.turnId ?? null;
-    return buildNativeTranscriptParts(
+
+  const staticTimelineItems = useMemo(() => buildTimelineItems(renderedStaticEvents), [renderedStaticEvents]);
+  const activeTimelineItems = useMemo(() => buildTimelineItems(renderedActiveEvents), [renderedActiveEvents]);
+  const staticTurnIds = useMemo(
+    () => staticTimelineItems.flatMap((item) => item.type === "turn" ? [item.turnId] : []),
+    [staticTimelineItems],
+  );
+  const activeTurnIds = useMemo(
+    () => activeTimelineItems.flatMap((item) => item.type === "turn" ? [item.turnId] : []),
+    [activeTimelineItems],
+  );
+  const allTurnIds = useMemo(() => [...staticTurnIds, ...activeTurnIds], [staticTurnIds, activeTurnIds]);
+  const activeTurnId = activeTurnIds[0] ?? null;
+
+  // Static half: intro + finalized turns, built incrementally. The cache ref
+  // lives in this keyed instance, so /clear and width repaints (which remount
+  // the shell) start from an empty cache.
+  const staticCacheRef = useRef<StaticTranscriptCache | null>(null);
+  const staticTranscript = useMemo(() => {
+    const cache = staticCacheRef.current ?? (staticCacheRef.current = createStaticTranscriptCache());
+    return buildStaticTranscript(
+      cache,
       [
         buildIntroRenderItem({
           authState,
@@ -142,17 +168,30 @@ function TranscriptShellInner({
           providerLabel: runtimeSummary?.providerLabel ?? null,
           startupHeaderMode,
         }),
-        ...buildStaticRenderItems(staticItems, allTurnIds, activeTurnId, null, null),
-        ...buildActiveRenderItems(activeItems, allTurnIds, renderedTranscript.uiState),
+        ...buildStaticRenderItems(staticTimelineItems, allTurnIds, activeTurnId, null, null),
       ],
+      { totalWidth: shellWidth, verboseMode, workspaceRoot },
+    );
+  }, [activeTurnId, allTurnIds, authState, layout, runtimeSummary?.providerLabel, shellWidth, startupHeaderMode, staticTimelineItems, verboseMode, workspaceLabel, workspaceRoot]);
+
+  // Live half: only the running turn, rebuilt per streaming flush.
+  const activeTranscript = useMemo(
+    () => buildNativeTranscriptParts(
+      buildActiveRenderItems(activeTimelineItems, allTurnIds, renderedUiState),
       {
         totalWidth: shellWidth,
         verboseMode,
         debugLabel: "transcript-shell-native",
         workspaceRoot,
       },
-    );
-  }, [activeEvents, authState, layout, renderedTranscript, runtimeSummary?.providerLabel, shellWidth, startupHeaderMode, staticEvents, uiState, verboseMode, visible, workspaceLabel, workspaceRoot]);
+    ),
+    [activeTimelineItems, allTurnIds, renderedUiState, shellWidth, verboseMode, workspaceRoot],
+  );
+
+  const nativeTranscript = useMemo(() => ({
+    staticItems: [...staticTranscript.staticItems, ...activeTranscript.staticItems],
+    liveRows: [...staticTranscript.liveRows, ...activeTranscript.liveRows],
+  }), [activeTranscript, staticTranscript]);
   const committedRows = useMemo(
     () => nativeTranscript.staticItems.reduce((total, item) => total + item.rows.length, 0),
     [nativeTranscript.staticItems],

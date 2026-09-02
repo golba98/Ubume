@@ -5,7 +5,9 @@ import { TEST_RUNTIME } from "../../test/runtimeTestUtils.js";
 import type { RenderTimelineItem } from "./Timeline.js";
 import {
   __clearTimelineMeasureCachesForTests,
+  __getStaticRowCacheSizeForTests,
   __getStreamingBlockRowCacheSizeForTests,
+  resetTimelineMeasureCaches,
   __wrapStyledSpansForTests,
   buildActionEventRows,
   buildNativeTranscriptParts,
@@ -1083,4 +1085,22 @@ test("contiguous reasoning coalesces to one Reasoning block; a tool call splits 
   assert.equal(joined.match(/Reasoning/g)?.length, 2, "one Reasoning header per contiguous thought stream");
   assert.match(joined, /first thought\s+second thought\s+third thought/);
   assert.match(joined, /after the tool\s+one more/);
+});
+
+test("resetTimelineMeasureCaches empties the module-level row caches", () => {
+  const item: RenderTimelineItem = {
+    key: "turn-7301",
+    type: "turn",
+    padded: true,
+    item: { type: "turn", turnId: 7301, turnIndex: 1, user: null, run: makeRun("weighing options"), assistant: null },
+    renderState: { opacity: "active", question: null, runPhase: "thinking" },
+  };
+  buildTimelineSnapshot([item], { totalWidth: 100 });
+  assert.ok(__getStreamingBlockRowCacheSizeForTests() > 0);
+  assert.ok(__getStaticRowCacheSizeForTests() > 0);
+
+  resetTimelineMeasureCaches();
+
+  assert.equal(__getStreamingBlockRowCacheSizeForTests(), 0);
+  assert.equal(__getStaticRowCacheSizeForTests(), 0);
 });
