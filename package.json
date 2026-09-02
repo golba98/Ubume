@@ -1,6 +1,6 @@
 {
   "name": "@golba98/codexa",
-  "version": "1.0.21",
+  "version": "1.0.22",
   "description": "Terminal UI for Codexa — TypeScript + Bun + Ink",
   "type": "module",
   "bin": {

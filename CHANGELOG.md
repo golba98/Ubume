@@ -6,6 +6,17 @@ No changes yet.
 
 ---
 
+## [1.0.22] — 2026-09-02 — Startup Input Reliability
+
+### Fixed
+
+- **Keyboard input survives the startup update check** — the App root now holds
+  Ink's raw-mode lease for the process lifetime, so moving the composer between
+  the overlay and transcript shells no longer detaches stdin input handling
+  (typing and Ctrl+C were dead after "Checking for Codexa updates...").
+
+---
+
 ## [1.0.21] — 2026-09-01 — Reliable Updater Rendering
 
 ### Fixed
