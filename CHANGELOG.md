@@ -2,7 +2,26 @@
 
 ## Unreleased
 
-No changes yet.
+### Fixed
+
+- **Long sessions no longer get slower with every turn** — the frame boundary
+  hashed and scanned Ink's whole accumulated transcript on every frame for
+  trace payloads that were discarded when tracing was off, and the transcript
+  shell rebuilt the row model for every finalized turn on each keystroke and
+  streaming tick. Trace work now runs only while tracing is enabled, finalized
+  turns are built once and cached by event identity, and a keystroke rebuilds
+  nothing.
+- **Old history is bounded** — only the newest 200 turns keep rendered rows in
+  memory. Older turns stay in the terminal's scrollback; after a width resize
+  only the retained window is redrawn. `/clear` and conversation resume also
+  drop the row caches.
+- **Local reasoning models that exhaust their output budget while thinking are
+  recovered instead of failing with "no visible output"** — Codexa now reads
+  the harness stop reason, sends one "continue and act" prompt in the same
+  session, and otherwise reports the real cause with token counts. The default
+  output budget scales with the context window (8K–32K), and a Local model can
+  opt in to `supports_reasoning_effort` so the active reasoning level is
+  forwarded to the model.
 
 ---
 
