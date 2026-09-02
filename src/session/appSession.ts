@@ -553,7 +553,12 @@ export function reduceSessionState(state: SessionState, action: SessionAction): 
         ...state,
         activeEvents: state.activeEvents.map((event) =>
           event.id === action.runId && event.type === "run"
-            ? markResponseSegmentsCompleted(event as RunEvent, action.response)
+            ? markResponseSegmentsCompleted(
+              event as RunEvent,
+              // Plan runs keep their text in the plan block; passing the final
+              // response here would synthesize a duplicate response segment.
+              (event as RunEvent).responsePresentation === "plan" ? undefined : action.response,
+            )
             : event
         ),
         uiState: reduceTracedUIState(
@@ -602,12 +607,14 @@ export function reduceSessionState(state: SessionState, action: SessionAction): 
 
       const planPresentation = action.responsePresentation === "plan";
       if (planPresentation) {
-        const planContent = reconcileAssistantContent(
-          getRunPlanText(runEvent.plan),
-          action.response,
-          action.status,
-        );
-        const finalizedRun = finalizePlanBlock(baseFinalizedRun, planContent);
+        // The plan is the text streamed after the last tool call (earlier text
+        // was demoted to prose segments). The backend's final response contains
+        // that chatter too, so only fall back to it when nothing was streamed.
+        const streamedPlan = getRunPlanText(runEvent.plan);
+        const planContent = streamedPlan.trim()
+          ? streamedPlan
+          : reconcileAssistantContent("", action.response, action.status);
+        const finalizedRun = finalizePlanBlock(finalizeResponseSegments(baseFinalizedRun), planContent);
 
         const additions: TimelineEvent[] = [];
         if (userEvent) additions.push(userEvent);

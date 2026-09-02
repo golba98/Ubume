@@ -123,6 +123,13 @@ describe("Local Harness provider routing", () => {
     assert.equal(localHarnessTestUtils.resolveHarnessSandboxMode(req), "read-only");
   });
 
+  test("approved plan execution runs with a writable sandbox once plan mode is off", () => {
+    const req = request("Ornith-32B");
+    req.runIntent = "approved-execution";
+    req.runtime.planMode = false;
+    assert.equal(localHarnessTestUtils.resolveHarnessSandboxMode(req), "workspace-write");
+  });
+
   test("an explicitly tool-incompatible Local model fails before Harness startup", async () => {
     const req = request("plain-chat-model");
     req.localConfig!.models!["plain-chat-model"]!.supportsToolCalls = false;
@@ -321,6 +328,13 @@ describe("Harness event projection and policy", () => {
     assert.deepEqual(fixture.usage, [12]);
     assert.deepEqual(fixture.tools.map((item) => item.status), ["running", "completed", "running", "completed"]);
     assert.equal(fixture.tools[0]?.command, "git status");
+  });
+
+  test("approved plan execution asks for mutating tools instead of denying them", async () => {
+    const fixture = activeProcess();
+    (fixture.process as unknown as { active: { request: { runIntent: string } } }).active.request.runIntent = "approved-execution";
+    const bridge = (fixture.process as unknown as { onBridgeRequest(method: string, params: Record<string, unknown>): Promise<unknown> }).onBridgeRequest.bind(fixture.process);
+    assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "1", tool: "edit", arguments: { path: "src/app.tsx" } }), { kind: "ask", reason: "Allow edit src/app.tsx?" });
   });
 
   test("mutating tools use Codexa approval and dangerous commands fail closed", async () => {

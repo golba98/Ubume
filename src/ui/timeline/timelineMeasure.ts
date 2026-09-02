@@ -2864,8 +2864,13 @@ function appendNativeTurnParts(
     run.status !== "running",
   );
   events.forEach((event, eventIndex) => {
-    // Ink <Static> is append-only and cannot reflow after a terminal resize.
-    // Keep the complete active turn live, then commit it atomically on finalize.
+    // Keep the complete active turn live and commit it atomically on finalize.
+    // Ink <Static> is append-only, and finalize-time rendering differs from the
+    // live rendering (action bursts compact, deferred reasoning rows reflow in,
+    // plan-mode chatter is demoted), so committing early would leave scrollback
+    // that disagrees with the finalized turn. Width resizes remount <Static>
+    // via repaintGeneration. TranscriptShell tail-windows these rows so the
+    // live region never exceeds the terminal (Ink would clear scrollback).
     const placeAsLive = running;
     // Rendering: only the event that is currently active gets a live indicator
     // (spinner / streaming cursor). Completed events render in stable form even

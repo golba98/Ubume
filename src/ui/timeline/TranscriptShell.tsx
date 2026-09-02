@@ -12,6 +12,7 @@ import {
   TimelineRowView,
 } from "./Timeline.js";
 import { buildNativeTranscriptParts, type NativeTranscriptRowItem, type TimelineRow } from "./timelineMeasure.js";
+import { LIVE_WINDOW_SAFETY_ROWS, windowLiveRows } from "./liveViewportWindow.js";
 import { getShellHeight, getShellWidth, resolveStartupHeaderMode, type TerminalViewport } from "../layout.js";
 import { LOGO_COMPACT, LOGO_COMPACT_MIN_COLS, LOGO_LARGE, LOGO_MEDIUM, selectLogoVariant } from "../render/logoVariants.js";
 import { useTheme } from "../theme.js";
@@ -156,7 +157,18 @@ function TranscriptShellInner({
     () => nativeTranscript.staticItems.reduce((total, item) => total + item.rows.length, 0),
     [nativeTranscript.staticItems],
   );
-  const spacerRows = Math.max(0, conversationViewportRows - committedRows - nativeTranscript.liveRows.length);
+  // The whole running turn is measured live (see appendNativeTurnParts), but
+  // only its tail is rendered: Ink clears the terminal *and scrollback* on any
+  // frame whose live output exceeds the viewport, which yanks a user who
+  // scrolled up back to the bottom on every streaming tick. The full turn is
+  // committed to <Static> at finalize, so nothing is lost from scrollback.
+  const liveWindowRows = Math.max(1, conversationViewportRows - LIVE_WINDOW_SAFETY_ROWS);
+  const visibleLiveRows = useMemo(
+    () => windowLiveRows(nativeTranscript.liveRows, liveWindowRows),
+    [liveWindowRows, nativeTranscript.liveRows],
+  );
+  const liveRowsHidden = nativeTranscript.liveRows.length - visibleLiveRows.length;
+  const spacerRows = Math.max(0, conversationViewportRows - committedRows - visibleLiveRows.length);
 
   useEffect(() => {
     const nextKey = [
@@ -191,6 +203,7 @@ function TranscriptShellInner({
       homeScreenRendererUsed: homeScreenActive,
       staticItemCount: staticEvents.length,
       liveRowCount: activeEvents.length,
+      liveRowsHidden,
       clearCount,
     });
   }, [
@@ -200,6 +213,7 @@ function TranscriptShellInner({
     layout.cols,
     layout.mode,
     layout.rows,
+    liveRowsHidden,
     logoHiddenReason,
     selectedLogoVariant,
     startupHeaderMode,
@@ -214,7 +228,7 @@ function TranscriptShellInner({
         {(item: NativeTranscriptRowItem) => <NativeRowsItem key={item.key} rows={item.rows} />}
       </Static>
       {spacerRows > 0 && <Box height={spacerRows} />}
-      <NativeRowsItem rows={nativeTranscript.liveRows} />
+      <NativeRowsItem rows={visibleLiveRows} />
 
       {visible && notice && (
         <Box width="100%" paddingX={1}>

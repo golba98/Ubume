@@ -17,6 +17,7 @@ import type {
   TimelineEvent,
   UIState,
 } from "./types.js";
+import { getRunPlanText } from "./types.js";
 
 // ─── Types & constants ────────────────────────────────────────────────────────
 
@@ -219,6 +220,7 @@ export function createRunEvent(params: {
     activeResponseSegmentId: null,
     plan,
     approvedPlan: params.approvedPlan,
+    responsePresentation: params.responsePresentation ?? "assistant",
   };
 }
 
@@ -316,11 +318,51 @@ export function finalizePlanBlock(event: RunEvent, finalPlan?: string): RunEvent
   };
 }
 
+/**
+ * Plan-mode runs stream every assistant delta into the run's single plan block.
+ * When a tool call starts while that block is still active, the text streamed
+ * so far was the model's exploration commentary, not the plan. Demote it in
+ * place into a completed ordinary response segment (same streamSeq, so the
+ * transcript does not reorder) and drop the plan block; the next plan delta
+ * then opens a fresh block at the tail. Approved plans are never demoted.
+ */
+export function demoteActivePlanToResponseSegment(event: RunEvent): RunEvent {
+  const plan = event.plan;
+  if (!plan || plan.status !== "active" || event.approvedPlan) return event;
+
+  const streamItems = (event.streamItems ?? []).filter((item) =>
+    !(item.kind === "plan" && item.refId === plan.id)
+  );
+  const text = getRunPlanText(plan);
+  if (!text.trim()) {
+    return { ...event, plan: null, streamItems, activeResponseSegmentId: null };
+  }
+
+  const id = `response-${event.id}-${plan.streamSeq}`;
+  renderDebug.traceEvent("action", "planDemoted", {
+    runId: event.id,
+    turnId: event.turnId,
+    streamSeq: plan.streamSeq,
+    chars: text.length,
+  });
+  return {
+    ...event,
+    plan: null,
+    responseSegments: [
+      ...(event.responseSegments ?? []),
+      { id, streamSeq: plan.streamSeq, chunks: [text], status: "completed", startedAt: plan.startedAt },
+    ],
+    streamItems: appendStreamItem(streamItems, { streamSeq: plan.streamSeq, kind: "response", refId: id }),
+    activeResponseSegmentId: null,
+  };
+}
+
 // ─── Tool activities ─────────────────────────────────────────────────────────
 
-export function upsertRunToolActivity(event: RunEvent, activity: RunToolActivity): RunEvent {
-  const existingIndex = event.toolActivities.findIndex((item) => item.id === activity.id);
+export function upsertRunToolActivity(inputEvent: RunEvent, activity: RunToolActivity): RunEvent {
+  const existingIndex = inputEvent.toolActivities.findIndex((item) => item.id === activity.id);
   if (existingIndex < 0) {
+    const event = demoteActivePlanToResponseSegment(inputEvent);
     const streamSeq = (event.lastStreamSeq ?? 0) + 1;
     const enriched: RunToolActivity = { ...activity, streamSeq };
     renderDebug.traceEvent("action", "normalized", {
@@ -347,6 +389,7 @@ export function upsertRunToolActivity(event: RunEvent, activity: RunToolActivity
     };
   }
 
+  const event = inputEvent;
   const existing = event.toolActivities[existingIndex]!;
   const merged: RunToolActivity = {
     ...existing,

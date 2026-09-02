@@ -160,6 +160,7 @@ export function buildPlanningPrompt({
     "Under Assumptions, capture reasonable inferences you are making.",
     "Under Risks, note obvious risks, confirmations, or scope boundaries.",
     "Keep the plan focused and actionable. Do not ask for approval inside the plan.",
+    "Your final message must contain only the plan. Do any exploration and commentary before your last tool call; do not add a preamble, summary, or closing remarks around the plan.",
     "",
     "Task:",
     task.trim(),

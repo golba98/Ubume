@@ -3,6 +3,22 @@
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
 
+## v1.0.23 — 2026-09-03
+
+Plan mode is fixed on the Local provider. Previously the model's exploration
+commentary could open the plan panel above the tool calls it ran and end up
+mixed into the plan text; now that commentary renders as normal conversation
+and the plan panel only ever holds the plan itself, placed after the tool
+calls. Pressing "Implement" on an approved plan now reliably writes the
+changes instead of just producing more text and leaving you stuck in plan
+mode — approving a plan turns plan mode off and switches to a mode that can
+actually edit files.
+
+Scrolling up in the terminal while Codexa is streaming a response no longer
+gets yanked back down to the bottom. You can now read earlier output while a
+long response keeps streaming, the same way any normal terminal program
+behaves.
+
 ## v1.0.22 — 2026-09-02
 
 Codexa no longer goes unresponsive right after startup. Previously, once the

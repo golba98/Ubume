@@ -63,3 +63,11 @@ test("approval visibility requires a non-empty finalized transcript plan", () =>
     true,
   );
 });
+
+test("approval visibility matches the transcript plan under whitespace normalization", () => {
+  assert.equal(
+    hasFinalizedTranscriptPlan([makeRun()], "1. Inspect\r\n\r\n2. Update  "),
+    true,
+  );
+  assert.equal(hasFinalizedTranscriptPlan([makeRun()], "1. Inspect\n2. Update the cache"), false);
+});

@@ -216,6 +216,8 @@ export interface RunEvent extends TimelineBaseEvent {
   plan?: RunPlanBlock | null;
   /** The approved plan text, injected at the start of execution turns. */
   approvedPlan?: string;
+  /** How the final assistant text of this run is presented. Set at run creation. */
+  responsePresentation?: "assistant" | "plan";
 }
 
 export interface ShellEvent extends TimelineBaseEvent {

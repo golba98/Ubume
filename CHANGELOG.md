@@ -6,6 +6,28 @@ No changes yet.
 
 ---
 
+## [1.0.23] — 2026-09-03 — Plan Mode and Streaming Scroll Fixes
+
+### Fixed
+
+- **Plan mode no longer shows the model's exploration chatter inside the plan
+  box, or above the tool calls it ran to build the plan** — text streamed
+  before a tool call is now rendered as ordinary prose in place, and the plan
+  panel only ever contains the section generated after the last tool call, at
+  the end of the transcript. The planning prompt also now asks for a final
+  message that is only the plan.
+- **Scrolling up while a response streams no longer snaps back to the
+  bottom** — the live transcript region is tail-windowed to the terminal
+  height so Ink never has to clear the scrollback mid-stream; the complete
+  turn is still committed to scrollback once it finishes.
+- **Pressing "Implement" on an approved plan now actually writes files
+  instead of producing text and staying in plan mode** — approving a plan
+  upgrades a read-only execution mode to a writable one and turns plan mode
+  off for the session, so the local provider's sandbox can perform the
+  approved changes and the footer reflects the new mode.
+
+---
+
 ## [1.0.22] — 2026-09-02 — Startup Input Reliability
 
 ### Fixed

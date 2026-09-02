@@ -170,6 +170,13 @@ test("builds a planning prompt that stays plan-only and includes constraints", (
   assert.match(prompt, /Task:/i);
 });
 
+test("planning prompt asks for a final message that contains only the plan", () => {
+  const prompt = buildPlanningPrompt({ task: "Add a --json flag." });
+
+  assert.match(prompt, /final message must contain only the plan/i);
+  assert.match(prompt, /before your last tool call/i);
+});
+
 test("builds an approved-plan execution prompt that tells codexa to implement now", () => {
   const prompt = buildPlanExecutionPrompt({
     task: "Delete everything in hello.py and replace it with a starter hello_world.py script.",

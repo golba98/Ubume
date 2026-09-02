@@ -373,26 +373,24 @@ test("RUN_MARK_FINAL_ANSWER_OBSERVED completes visible answer without thinking a
   assert.equal(run.responseSegments?.[0]?.status, "completed");
 });
 
-test("plan deltas update one plan block and FINALIZE_RUN does not create assistant response", () => {
+function makePlanRunEvent(turnId: number): RunEvent {
+  return {
+    ...makeRunEvent(turnId),
+    responsePresentation: "plan",
+    streamItems: [],
+    responseSegments: [],
+    lastStreamSeq: 0,
+    activeResponseSegmentId: null,
+    plan: null,
+  };
+}
+
+test("plan-mode chatter before a tool is demoted to prose and the plan block re-opens after the tool", () => {
   const turnId = 37;
   let state = createInitialSessionState();
-  const run: RunEvent = {
-    ...makeRunEvent(turnId),
-    plan: {
-      id: "plan-2",
-      streamSeq: 1,
-      chunks: [],
-      status: "active",
-      startedAt: 2,
-    },
-    streamItems: [{ streamSeq: 1, kind: "plan", refId: "plan-2" }],
-    responseSegments: [],
-    lastStreamSeq: 1,
-    activeResponseSegmentId: null,
-  };
   state = {
     ...state,
-    activeEvents: [makeUserEvent(turnId), run],
+    activeEvents: [makeUserEvent(turnId), makePlanRunEvent(turnId)],
   };
   state = reduceSessionState(state, {
     type: "UI_ACTION",
@@ -403,13 +401,7 @@ test("plan deltas update one plan block and FINALIZE_RUN does not create assista
     type: "RUN_APPEND_PLAN_DELTA",
     turnId,
     runId: 2,
-    chunk: "1. Inspect\n",
-  });
-  state = reduceSessionState(state, {
-    type: "RUN_APPEND_PLAN_DELTA",
-    turnId,
-    runId: 2,
-    chunk: "2. Render panel",
+    chunk: "Let me check.",
   });
   state = reduceSessionState(state, {
     type: "RUN_UPSERT_TOOL_ACTIVITY",
@@ -423,9 +415,28 @@ test("plan deltas update one plan block and FINALIZE_RUN does not create assista
     },
   });
 
-  const activeRun = state.activeEvents.find((event): event is RunEvent => event.type === "run");
+  let activeRun = state.activeEvents.find((event): event is RunEvent => event.type === "run");
   assert.ok(activeRun);
-  assert.deepEqual(activeRun.streamItems?.map((item) => item.kind), ["plan", "action"]);
+  assert.deepEqual(activeRun.streamItems?.map((item) => item.kind), ["response", "action"]);
+  assert.equal(activeRun.plan, null);
+  assert.equal(activeRun.responseSegments?.[0]?.chunks.join(""), "Let me check.");
+
+  state = reduceSessionState(state, {
+    type: "RUN_APPEND_PLAN_DELTA",
+    turnId,
+    runId: 2,
+    chunk: "1. Inspect\n",
+  });
+  state = reduceSessionState(state, {
+    type: "RUN_APPEND_PLAN_DELTA",
+    turnId,
+    runId: 2,
+    chunk: "2. Render panel",
+  });
+
+  activeRun = state.activeEvents.find((event): event is RunEvent => event.type === "run");
+  assert.ok(activeRun);
+  assert.deepEqual(activeRun.streamItems?.map((item) => item.kind), ["response", "action", "plan"]);
   assert.equal(getRunPlanText(activeRun.plan), "1. Inspect\n2. Render panel");
 
   state = reduceSessionState(state, {
@@ -433,7 +444,7 @@ test("plan deltas update one plan block and FINALIZE_RUN does not create assista
     runId: 2,
     turnId,
     status: "completed",
-    response: "1. Inspect\n2. Render panel",
+    response: "Let me check.\n1. Inspect\n2. Render panel",
     responsePresentation: "plan",
     assistantFactory: () => makeAssistantEvent(turnId, "should not render"),
   });
@@ -442,9 +453,84 @@ test("plan deltas update one plan block and FINALIZE_RUN does not create assista
   assert.ok(finalizedRun);
   assert.equal(finalizedRun.plan?.status, "completed");
   assert.equal(getRunPlanText(finalizedRun.plan), "1. Inspect\n2. Render panel");
-  assert.deepEqual(finalizedRun.streamItems?.map((item) => item.kind), ["action", "plan"]);
-  assert.deepEqual(finalizedRun.streamItems?.map((item) => item.streamSeq), [2, 3]);
+  assert.deepEqual(finalizedRun.streamItems?.map((item) => item.kind), ["response", "action", "plan"]);
+  assert.deepEqual(finalizedRun.streamItems?.map((item) => item.streamSeq), [1, 2, 4]);
+  assert.equal(finalizedRun.responseSegments?.[0]?.chunks.join(""), "Let me check.");
   assert.equal(state.staticEvents.some((event) => event.type === "assistant"), false);
+});
+
+test("RUN_MARK_FINAL_ANSWER_OBSERVED on a plan run does not synthesize a response segment", () => {
+  const turnId = 40;
+  let state = createInitialSessionState();
+  state = {
+    ...state,
+    activeEvents: [makeUserEvent(turnId), makePlanRunEvent(turnId)],
+  };
+  state = reduceSessionState(state, {
+    type: "UI_ACTION",
+    action: { type: "PROMPT_RUN_STARTED", turnId },
+  });
+  state = reduceSessionState(state, {
+    type: "RUN_APPEND_PLAN_DELTA",
+    turnId,
+    runId: 2,
+    chunk: "1. Inspect",
+  });
+  state = reduceSessionState(state, {
+    type: "RUN_MARK_FINAL_ANSWER_OBSERVED",
+    runId: 2,
+    turnId,
+    response: "1. Inspect",
+  });
+
+  const activeRun = state.activeEvents.find((event): event is RunEvent => event.type === "run");
+  assert.ok(activeRun);
+  assert.deepEqual(activeRun.responseSegments, []);
+  assert.deepEqual(activeRun.streamItems?.map((item) => item.kind), ["plan"]);
+  assert.equal(getRunPlanText(activeRun.plan), "1. Inspect");
+});
+
+test("RUN_MARK_FINAL_ANSWER_OBSERVED on a plan run keeps demoted chatter intact", () => {
+  const turnId = 41;
+  let state = createInitialSessionState();
+  state = {
+    ...state,
+    activeEvents: [makeUserEvent(turnId), makePlanRunEvent(turnId)],
+  };
+  state = reduceSessionState(state, {
+    type: "UI_ACTION",
+    action: { type: "PROMPT_RUN_STARTED", turnId },
+  });
+  state = reduceSessionState(state, {
+    type: "RUN_APPEND_PLAN_DELTA",
+    turnId,
+    runId: 2,
+    chunk: "Let me check.",
+  });
+  state = reduceSessionState(state, {
+    type: "RUN_UPSERT_TOOL_ACTIVITY",
+    runId: 2,
+    activity: { id: "tool-1", command: "ls", status: "completed", startedAt: 10, completedAt: 20 },
+  });
+  state = reduceSessionState(state, {
+    type: "RUN_APPEND_PLAN_DELTA",
+    turnId,
+    runId: 2,
+    chunk: "1. Inspect",
+  });
+  state = reduceSessionState(state, {
+    type: "RUN_MARK_FINAL_ANSWER_OBSERVED",
+    runId: 2,
+    turnId,
+    response: "Let me check.\n1. Inspect",
+  });
+
+  const activeRun = state.activeEvents.find((event): event is RunEvent => event.type === "run");
+  assert.ok(activeRun);
+  assert.equal(activeRun.responseSegments?.length, 1);
+  assert.equal(activeRun.responseSegments?.[0]?.chunks.join(""), "Let me check.");
+  assert.deepEqual(activeRun.streamItems?.map((item) => item.kind), ["response", "action", "plan"]);
+  assert.equal(getRunPlanText(activeRun.plan), "1. Inspect");
 });
 
 test("FINALIZE_RUN with plan presentation creates visible plan from final response without deltas", () => {

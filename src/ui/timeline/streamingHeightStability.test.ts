@@ -20,6 +20,12 @@ import {
 // timeline viewport re-reveal already-scrolled-off content — the "old states
 // come back" glitch. The dominant shrink source was `compactActionBursts`
 // collapsing a burst of same-label action cards while the run was still live.
+//
+// One sanctioned exception: plan-mode demotion (chatLifecycle
+// `demoteActivePlanToResponseSegment`) turns a bordered Plan card into plain
+// prose at the same streamSeq when the first tool call starts, which drops the
+// card's border rows. TranscriptShell tail-windows live rows to the terminal
+// height, so that shrink can no longer re-reveal scrolled-off content.
 
 function makeUser(turnId: number): UserPromptEvent {
   return { id: turnId, type: "user", createdAt: 1, prompt: "read files", turnId };
