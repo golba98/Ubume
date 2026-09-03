@@ -8,6 +8,7 @@ export interface CodexCliCapabilities {
   sandbox: boolean;
   config: boolean;
   fullAuto: boolean;
+  image?: boolean;
 }
 
 const capabilityCache = new Map<string, Promise<CodexCliCapabilities>>();
@@ -41,6 +42,7 @@ export function parseCodexCliCapabilities(
     sandbox: hasCliToken(execHelp, "--sandbox"),
     config: hasCliToken(execHelp, "--config") || hasCliToken(execHelp, "-c"),
     fullAuto: hasCliToken(execHelp, "--full-auto"),
+    image: hasCliToken(execHelp, "--image") || hasCliToken(execHelp, "-i"),
   };
 }
 

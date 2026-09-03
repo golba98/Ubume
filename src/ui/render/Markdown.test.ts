@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseMarkdown } from "./Markdown.js";
+import { isShellCodeLanguage, parseMarkdown } from "./Markdown.js";
 import type { ParaSegment, CodeSegment, Segment } from "./Markdown.js";
 
 const SAMPLE = [
@@ -154,4 +154,11 @@ test("code blocks are not rewritten by terminal answer cleanup", () => {
     "C:/Users/Example/Project/src/App.tsx#L22",
     "[README.md](file:///C:/Project/README.md)",
   ]);
+});
+
+test("recognizes executable shell fence languages without treating ordinary code as shell", () => {
+  for (const language of ["bash", "sh", "shell", "zsh", "fish", "powershell", "pwsh", "cmd", "bat", "batch"]) {
+    assert.equal(isShellCodeLanguage(language), true);
+  }
+  assert.equal(isShellCodeLanguage("typescript"), false);
 });

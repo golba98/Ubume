@@ -4,7 +4,7 @@ import { parseCodexCliCapabilities } from "./codexCapabilities.js";
 
 test("detects exec help flags and strips ANSI noise", () => {
   const capabilities = parseCodexCliCapabilities(
-    "\u001B[32mOptions:\u001B[0m\n  --ask-for-approval <policy>\n  --sandbox <mode>\n  -c, --config <key=value>\n",
+    "\u001B[32mOptions:\u001B[0m\n  --ask-for-approval <policy>\n  --sandbox <mode>\n  -c, --config <key=value>\n  -i, --image <file>\n",
     "Global options:\n  --ask-for-approval <policy>\n",
   );
 
@@ -13,6 +13,7 @@ test("detects exec help flags and strips ANSI noise", () => {
     sandbox: true,
     config: true,
     fullAuto: false,
+    image: true,
   });
 });
 
@@ -27,6 +28,7 @@ test("does not promote top-level approval flags into exec capabilities", () => {
     sandbox: true,
     config: false,
     fullAuto: true,
+    image: false,
   });
 });
 
@@ -41,5 +43,6 @@ test("requires exact option tokens instead of prose guesses", () => {
     sandbox: false,
     config: false,
     fullAuto: false,
+    image: false,
   });
 });

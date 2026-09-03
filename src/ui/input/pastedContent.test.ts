@@ -31,3 +31,17 @@ test("cursor movement and deletion treat a pasted label as an atomic span", () =
   assert.deepEqual(deleteAdjacentPastedContent(value, 1 + label.length, "backward"), { value: "ab", cursorOffset: 1 });
   assert.deepEqual(deleteAdjacentPastedContent(value, 1, "forward"), { value: "ab", cursorOffset: 1 });
 });
+
+test("cursor movement and deletion treat image attachment chips atomically", () => {
+  const token = `[Image: clipboard-image.png]\u2063\uFE01\u2063`;
+  const value = `before ${token} after`;
+  const tokenStart = value.indexOf("[Image:");
+  const tokenEnd = tokenStart + token.length;
+
+  assert.equal(moveAcrossPastedContent(value, tokenStart + 3, "left"), tokenStart);
+  assert.equal(moveAcrossPastedContent(value, tokenStart + 3, "right"), tokenEnd);
+  assert.deepEqual(deleteAdjacentPastedContent(value, tokenEnd, "backward"), {
+    value: "before  after",
+    cursorOffset: tokenStart,
+  });
+});

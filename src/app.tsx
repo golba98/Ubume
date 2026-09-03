@@ -69,6 +69,7 @@ function readDiagnosticString(
 }
 import { Box, Text, useApp, useFocusManager, useInput, useStdin, useStdout } from "ink";
 import { expandPastedContent, type PastedContentRegistry } from "./ui/input/pastedContent.js";
+import { createImageAttachmentToken, selectImageAttachments, type ImageAttachmentRegistry } from "./ui/input/imageAttachments.js";
 import { useStdinRawModeLease } from "./ui/input/useStdinRawModeLease.js";
 import { handleCommand } from "./commands/handler.js";
 import {
@@ -138,6 +139,7 @@ import {
   probeCodexAuthStatus,
 } from "./core/auth/codexAuth.js";
 import { copyToClipboard } from "./core/shared/clipboard.js";
+import { readClipboardImage } from "./core/shared/clipboardImage.js";
 import { normalizePlanReviewMarkdown, savePlan, readPlan } from "./core/workspace/planStorage.js";
 import { getBlockedCleanupFailure } from "./core/shared/cleanupFastFail.js";
 import { runShellCommand, summarizeCommandResult } from "./core/process/CommandRunner.js";
@@ -187,6 +189,7 @@ import {
   importExternalFile,
   isImageFile,
   rewritePromptWithImportedPaths,
+  saveClipboardImage,
 } from "./core/shared/attachments.js";
 import { loadProjectInstructions } from "./core/workspace/projectInstructions.js";
 import { isNoiseLine } from "./core/providers/codexTranscript.js";
@@ -400,6 +403,7 @@ interface PromptRunLifecycle {
   submitTiming?: PromptRunTiming;
   commitPrompt?: boolean;
   runIntent?: "normal" | "plan" | "approved-execution";
+  imageAttachments?: readonly import("./core/providerRuntime/types.js").ProviderImageAttachment[];
   onCompleted?: (result: { response: string; turnId: number; runId: number }) => void;
   onFailed?: (result: { message: string; turnId: number; runId: number }) => void;
   onCanceled?: (result: { turnId: number; runId: number }) => void;
@@ -532,6 +536,7 @@ export function App({ launchArgs }: AppProps) {
     attachmentsDir: string;
   } | null>(null);
   const pastedContentRegistryRef = useRef<PastedContentRegistry>(new Map());
+  const imageAttachmentRegistryRef = useRef<ImageAttachmentRegistry>(new Map());
   const [toolApproval, setToolApproval] = useState<ToolApprovalRequest | null>(null);
   const toolApprovalResolverRef = useRef<((decision: ToolApprovalDecision) => void) | null>(null);
   const [registryNonce, setRegistryNonce] = useState(0);
@@ -1347,6 +1352,7 @@ export function App({ launchArgs }: AppProps) {
             runIntent: options.runIntent,
             conversationHistory: options.conversationHistory,
             localContextCheckpoint: options.localContextCheckpoint,
+            imageAttachments: options.imageAttachments,
             localHarnessSession: activeProviderRoute.providerId === "local"
               ? activeConversationRef.current?.metadata.localHarnessSession
               : undefined,
@@ -3597,6 +3603,32 @@ export function App({ launchArgs }: AppProps) {
     pastedContentRegistryRef.current.set(label, [...current, content]);
   }, []);
 
+  const handlePasteImage = useCallback(async (replaceCommand = false) => {
+    if (busyRef.current) return;
+    try {
+      const clipboardImage = await readClipboardImage();
+      const attachmentsDir = resolveCodexaAttachmentDir(workspaceRoot, runtimeConfig.policy.attachmentDir);
+      const imagePath = await saveClipboardImage(clipboardImage.data, attachmentsDir);
+      const attachment = {
+        path: imagePath,
+        mediaType: clipboardImage.mediaType,
+        name: path.basename(imagePath),
+        bytes: clipboardImage.data.length,
+      } as const;
+      const token = createImageAttachmentToken(attachment);
+      imageAttachmentRegistryRef.current.set(token, attachment);
+      const currentValue = replaceCommand ? "" : inputValueRef.current;
+      const currentCursor = replaceCommand ? 0 : cursorRef.current;
+      const separator = currentValue && currentCursor > 0 && !/\s$/.test(currentValue.slice(0, currentCursor)) ? " " : "";
+      const inserted = `${separator}${token}`;
+      const nextValue = currentValue.slice(0, currentCursor) + inserted + currentValue.slice(currentCursor);
+      const nextCursor = currentCursor + inserted.length;
+      dispatchSession({ type: "SET_INPUT", value: nextValue, cursor: nextCursor });
+    } catch (error) {
+      appendErrorEvent("Clipboard image unavailable", error instanceof Error ? error.message : "Could not read an image from the clipboard.");
+    }
+  }, [appendErrorEvent, dispatchSession, runtimeConfig.policy.attachmentDir, workspaceRoot]);
+
   const handleChangeValue = useCallback((value: string) => {
     const safeValue = sanitizeTerminalInput(value);
     dispatchSession({ type: "SET_INPUT", value: safeValue, cursor: Math.min(cursorRef.current, safeValue.length) });
@@ -3823,6 +3855,19 @@ export function App({ launchArgs }: AppProps) {
       return false;
     }
 
+    const imageAttachments = lifecycle.imageAttachments ?? [];
+    if (imageAttachments.length > 0) {
+      const supportsImages = activeProviderRoute.providerId === "openai"
+        || (activeProviderRoute.providerId === "local" && activeRouteProvider?.capabilityProfile?.supportsVision === true);
+      if (!supportsImages) {
+        const detail = activeProviderRoute.providerId === "local"
+          ? "The active Local model is not configured with supports_vision: true. Switch to a vision model or remove the image."
+          : `${formatRuntimeProviderLabel(activeProviderRoute.providerId)} does not have verified image transport in Codexa yet. Switch to Codexa/OpenAI or a vision-enabled Local model.`;
+        appendErrorEvent("Image not supported", detail);
+        return false;
+      }
+    }
+
     const requestedRuntime = mergeRuntimeConfig(runtimeConfig, lifecycle.runtimeOverride ?? {});
     const requestedMode = requestedRuntime.mode;
     const executionModeDecision = lifecycle.disableModeAutoUpgrade
@@ -4047,6 +4092,7 @@ export function App({ launchArgs }: AppProps) {
             localContextCheckpoint: activeProviderRoute.providerId === "local" || activeProviderRoute.providerId === "codexa-native"
               ? activeConversationRef.current?.metadata.localContextCheckpoint
               : undefined,
+            imageAttachments,
           },
           {
         onAssistantDelta: (chunk) => {
@@ -4350,6 +4396,8 @@ export function App({ launchArgs }: AppProps) {
 
     return true;
   }, [
+    activeProviderRoute,
+    activeRouteProvider,
     activeContextMetadata,
     appendConversationMessage,
     appendErrorEvent,
@@ -4396,6 +4444,7 @@ export function App({ launchArgs }: AppProps) {
     displayPrompt: string,
     submitTiming?: PromptRunTiming,
     commitPrompt = false,
+    imageAttachments: readonly import("./core/providerRuntime/types.js").ProviderImageAttachment[] = [],
   ) => {
     const started = startPromptRun(
       displayPrompt,
@@ -4416,6 +4465,7 @@ export function App({ launchArgs }: AppProps) {
         runIntent: "plan",
         submitTiming,
         commitPrompt,
+        imageAttachments,
         onCompleted: ({ response }) => {
           const nextPlan = response.trim();
           if (!nextPlan) {
@@ -4913,6 +4963,9 @@ export function App({ launchArgs }: AppProps) {
         case "copy":
           void handleCopy();
           return;
+        case "paste_image":
+          void handlePasteImage(true);
+          return;
         case "workspace_relaunch":
           if (commandResult.value) {
             handleWorkspaceRelaunch(commandResult.value);
@@ -4983,6 +5036,7 @@ export function App({ launchArgs }: AppProps) {
 
     // ========== NORMAL PROMPT SUBMISSION (after command routing) ==========
     const providerValue = expandPastedContent(value, pastedContentRegistryRef.current);
+    const imageAttachments = selectImageAttachments(value, imageAttachmentRegistryRef.current);
     // Check for follow-up answer submission
     if (uiState.kind === "AWAITING_USER_ACTION") {
       const originalUserEvent = findUserPromptForTurn(uiState.turnId);
@@ -4997,7 +5051,7 @@ export function App({ launchArgs }: AppProps) {
         originalPrompt: originalUserEvent.prompt,
         assistantQuestion: uiState.question,
         userAnswer: providerValue,
-      }), { submitTiming, commitPrompt: true });
+      }), { submitTiming, commitPrompt: true, imageAttachments });
       return;
     }
 
@@ -5039,10 +5093,10 @@ export function App({ launchArgs }: AppProps) {
     if (planMode) {
       const nextPlanState = startPlanGeneration(providerValue, mode);
       setPlanFlow(nextPlanState);
-      runPlanGeneration(nextPlanState, value, submitTiming, true);
+      runPlanGeneration(nextPlanState, value, submitTiming, true, imageAttachments);
       return;
     }
-    startPromptRun(value, providerValue, { submitTiming, commitPrompt: true });
+    startPromptRun(value, providerValue, { submitTiming, commitPrompt: true, imageAttachments });
   }, [
     allowedWritableRoots,
     appendErrorEvent,
@@ -5055,6 +5109,7 @@ export function App({ launchArgs }: AppProps) {
     focusManager,
     globalPackageManager,
     handleCopy,
+    handlePasteImage,
     handleClear,
     handleQuit,
     handleShellExecute,
@@ -5179,6 +5234,7 @@ export function App({ launchArgs }: AppProps) {
         cursor={cursor}
         onChangeInput={handleChangeInput}
         onRegisterPaste={handleRegisterPaste}
+        onPasteImage={() => { void handlePasteImage(); }}
         onSubmit={handleSubmit}
         onCancel={handleCancel}
         onChangeValue={handleChangeValue}
@@ -5224,6 +5280,7 @@ export function App({ launchArgs }: AppProps) {
     cursor,
     handleChangeInput,
     handleRegisterPaste,
+    handlePasteImage,
     handleSubmit,
     handleChangeValue,
     handleChangeCursor,

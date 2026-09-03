@@ -1,6 +1,8 @@
 export const LARGE_PASTE_THRESHOLD = 1_000;
 
 export const PASTED_CONTENT_PATTERN = /\[Pasted Content ([\d,]+) chars\](?:\u2063[\uFE00-\uFE09]+\u2063)?/g;
+export const IMAGE_ATTACHMENT_PATTERN = /\[Image: ([^\]\n]+)\](?:\u2063[\uFE00-\uFE09]+\u2063)?/g;
+const ATOMIC_CONTENT_PATTERN = /(?:\[Pasted Content [\d,]+ chars\]|\[Image: [^\]\n]+\])(?:\u2063[\uFE00-\uFE09]+\u2063)?/g;
 
 let nextPasteId = 1;
 
@@ -16,10 +18,13 @@ function encodeInvisibleId(value: number): string {
   return String(value).split("").map((digit) => String.fromCharCode(0xFE00 + Number(digit))).join("");
 }
 
-export function createPastedContentToken(value: string): string {
-  const label = createPastedContentLabel(value);
+export function createAtomicContentToken(label: string): string {
   const id = encodeInvisibleId(nextPasteId++);
   return `${label}\u2063${id}\u2063`;
+}
+
+export function createPastedContentToken(value: string): string {
+  return createAtomicContentToken(createPastedContentLabel(value));
 }
 
 export function isLargePaste(value: string): boolean {
@@ -39,8 +44,8 @@ export function expandPastedContent(value: string, registry: PastedContentRegist
 }
 
 export function findPastedContentSpan(value: string, cursor: number) {
-  PASTED_CONTENT_PATTERN.lastIndex = 0;
-  for (const match of value.matchAll(PASTED_CONTENT_PATTERN)) {
+  ATOMIC_CONTENT_PATTERN.lastIndex = 0;
+  for (const match of value.matchAll(ATOMIC_CONTENT_PATTERN)) {
     const start = match.index ?? 0;
     const end = start + match[0].length;
     if (cursor >= start && cursor <= end) return { start, end };
@@ -57,8 +62,8 @@ export function moveAcrossPastedContent(value: string, cursor: number, direction
 }
 
 export function deleteAdjacentPastedContent(value: string, cursor: number, direction: "backward" | "forward") {
-  PASTED_CONTENT_PATTERN.lastIndex = 0;
-  for (const match of value.matchAll(PASTED_CONTENT_PATTERN)) {
+  ATOMIC_CONTENT_PATTERN.lastIndex = 0;
+  for (const match of value.matchAll(ATOMIC_CONTENT_PATTERN)) {
     const start = match.index ?? 0;
     const end = start + match[0].length;
     const adjacent = direction === "backward" ? cursor === end : cursor === start;

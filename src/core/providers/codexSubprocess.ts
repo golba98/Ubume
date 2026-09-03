@@ -71,6 +71,7 @@ export const codexSubprocessProvider: BackendProvider = {
           cwd: options.workspaceRoot,
           structuredOutput,
           probeCapabilities,
+          imageAttachments: options.imageAttachments,
           codexCommandPath: options.runtime.codexCommandPath,
         },
         import.meta.url,

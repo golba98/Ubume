@@ -71,6 +71,7 @@ export type CommandAction =
   | "theme"
   | "help"
   | "copy"
+  | "paste_image"
   | "backends"
   | "models"
   | "workspace"
@@ -391,6 +392,7 @@ function buildHelpMessage(context: CommandContext): string {
     `  Current reasoning: ${formatReasoningLabel(context.runtime.reasoningLevel)}`,
     `  Current plan mode: ${context.runtime.planMode ? "Enabled" : "Disabled"}`,
     "  /copy              Copy last response to clipboard",
+    "  /paste-image       Attach the image currently on the clipboard",
     "  /update [status]   Check for updates and install the latest Codexa (status: cached result only)",
     "  /help              Show this help",
     "",
@@ -404,6 +406,7 @@ function buildHelpMessage(context: CommandContext): string {
     "  Shift+Tab Rotate Plan → Read-only → Auto → Full Access",
     "  Ctrl+Alt+P Open provider picker",
     "  Ctrl+A    Open auth panel",
+    "  Ctrl+V    Attach clipboard image (when forwarded by the terminal)",
     "  Ctrl+L    Clear chat and cancel active run",
     "  Esc       Cancel active run or shell command",
     "  Ctrl+Y    Cycle execution mode",
@@ -814,6 +817,9 @@ export function handleCommand(text: string, context: CommandContext): CommandRes
 
       case "copy":
         return { action: "copy" };
+
+      case "paste-image":
+        return { action: "paste_image" };
 
       case "resume":
         return { action: "resume" };

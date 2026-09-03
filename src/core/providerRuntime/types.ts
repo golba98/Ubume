@@ -100,6 +100,7 @@ export interface ProviderRouteValidationResult {
 
 export interface ProviderChatRequest {
   prompt: string;
+  imageAttachments?: readonly ProviderImageAttachment[];
   route: ProviderRoute;
   runtime: ResolvedRuntimeConfig;
   workspaceRoot: string;
@@ -110,6 +111,13 @@ export interface ProviderChatRequest {
   conversationHistory?: readonly ConversationMessage[];
   localContextCheckpoint?: ConversationContextCheckpoint;
   localHarnessSession?: LocalHarnessSessionMetadata;
+}
+
+export interface ProviderImageAttachment {
+  path: string;
+  mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif";
+  name: string;
+  bytes: number;
 }
 
 export interface ProviderChatResponse {

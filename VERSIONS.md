@@ -3,6 +3,14 @@
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
 
+## v1.0.26 — 2026-09-03
+
+Shell command blocks are now deliberately plain and copy-ready: the commands
+have no line numbers, border text, or fake copy control. Clipboard screenshots
+and images can also be attached with Ctrl+V or `/paste-image` when using Codex
+CLI or a vision-enabled Local model; unsupported routes are blocked without
+discarding the draft.
+
 ## v1.0.25 — 2026-09-03
 
 Long Local responses no longer stop abruptly when a model fills one output

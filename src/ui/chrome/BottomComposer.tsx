@@ -119,6 +119,7 @@ interface BottomComposerProps {
   cursor: number;
   onChangeInput: (value: string, cursor: number) => void;
   onRegisterPaste?: (label: string, content: string) => void;
+  onPasteImage?: () => void;
   onSubmit: () => void;
   onCancel: () => void;
   onChangeValue: (value: string) => void;
@@ -411,6 +412,7 @@ export function BottomComposer({
   cursor,
   onChangeInput,
   onRegisterPaste,
+  onPasteImage,
   onSubmit,
   onCancel,
   onChangeValue,
@@ -791,6 +793,7 @@ export function BottomComposer({
           }
           return;
         case "m": onOpenModelPicker(); return;
+        case "v": onPasteImage?.(); return;
         case "o":
           traceInputDebug("ctrl_o_received", {
             handler: "BottomComposer.useInput",

@@ -10,6 +10,7 @@ const MODERN_CODEX_CLI_CAPABILITIES: CodexCliCapabilities = {
   sandbox: false,
   config: true,
   fullAuto: false,
+  image: true,
 };
 
 export interface PreparedCodexExecLaunch {

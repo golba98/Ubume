@@ -6,6 +6,28 @@ No changes yet.
 
 ---
 
+## [1.0.26] — 2026-09-03 — Image Paste and Copy-Ready Commands
+
+### Added
+
+- **Clipboard images can be attached to supported models** — press `Ctrl+V` or
+  use `/paste-image` to add an attachment chip. Codexa forwards images through
+  Codex CLI and vision-enabled Local Harness models, and preserves the draft
+  with an actionable error when the selected route cannot accept images.
+
+### Fixed
+
+- **Shell commands are copy-ready** — shell fences now use a small comment-style
+  language label followed by raw, unnumbered commands, without a decorative box
+  or a misleading `Copy Code` title becoming part of the terminal selection.
+
+### Maintenance
+
+- Added coverage for clipboard capture, atomic image chips, Codex image
+  arguments, Local Harness image content blocks, and `/paste-image` routing.
+
+---
+
 ## [1.0.25] — 2026-09-03 — Automatic Local Output Continuation
 
 ### Fixed
