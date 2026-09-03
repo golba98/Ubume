@@ -260,6 +260,7 @@ import {
 } from "./session/chatLifecycle.js";
 import { findUserPrompt, useAppSessionState } from "./session/appSession.js";
 import { conversationMessagesToTimeline, selectConversationContext } from "./session/conversation.js";
+import { selectPersistedAssistantResponse } from "./session/persistedResponse.js";
 import { createLiveRenderScheduler, type LiveRenderUpdate } from "./session/liveRenderScheduler.js";
 import { hasFinalizedTranscriptPlan } from "./session/planTranscript.js";
 import { schedulePromptRunStartAfterVisibleCommit } from "./session/promptRunSchedule.js";
@@ -3288,6 +3289,7 @@ export function App({ launchArgs }: AppProps) {
     status: "completed" | "failed" | "canceled",
     message?: string,
     response?: string,
+    persistedResponse?: string,
   ) => {
     if (!isCurrentRun(activeRunIdRef.current, runId)) {
       appDiagLog(`FINALIZE_RUN_BOUNDARY: ignored stale runId=${runId} turnId=${turnId} status=${status} activeRunId=${activeRunIdRef.current}`);
@@ -3343,8 +3345,12 @@ export function App({ launchArgs }: AppProps) {
         ? extractAssistantActionRequired(safeResponse)
         : { content: safeResponse, question: null as string | null }
       : { content: safeResponse, question: null as string | null };
-    if (status === "completed" && parsed.content?.trim()) {
-      appendConversationMessage({ role: "assistant", content: parsed.content });
+    const safePersistedResponse = persistedResponse != null
+      ? sanitizeTerminalOutput(persistedResponse, { preserveTabs: false, tabSize: 2 })
+      : undefined;
+    const conversationResponse = selectPersistedAssistantResponse(parsed.content, safePersistedResponse);
+    if (status === "completed" && conversationResponse?.trim()) {
+      appendConversationMessage({ role: "assistant", content: conversationResponse });
     }
     appDiagLog([
       "FINALIZE_RUN_PAYLOAD:",
@@ -4223,7 +4229,7 @@ export function App({ launchArgs }: AppProps) {
               ].join(" "));
             }
             traceLiveRunDiagnostics("completed");
-            void finalizePromptRun(runId, turnId, "completed", undefined, finalResponse);
+            void finalizePromptRun(runId, turnId, "completed", undefined, finalResponse, safeResponse);
           };
 
           if (flushedLiveUpdates) {
@@ -5623,4 +5629,3 @@ export function App({ launchArgs }: AppProps) {
     </ThemeProvider>
   );
 }
-

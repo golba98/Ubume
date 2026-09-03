@@ -3,6 +3,19 @@
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
 
+## v1.0.25 — 2026-09-03
+
+Long Local responses no longer stop abruptly when a model fills one output
+window. Codexa now continues the same task automatically in the same Harness
+session, keeping the composer locked and preserving the accumulated answer,
+tool work, approvals, context compaction, and workspace state until the model
+actually finishes. The result is saved as one complete assistant message.
+
+Continuation stays bounded when a model stalls: Codexa allows any number of
+windows that produce text or tool progress, but stops with an actionable error
+after two consecutive windows do neither. Canceling a run also prevents another
+continuation from starting.
+
 ## v1.0.24 — 2026-09-03
 
 Codexa no longer slows down the longer a session runs. Typing used to get
