@@ -37,6 +37,14 @@ export type ListSegment = { type: "list"; ordered: boolean; items: ListItem[] };
 export type ParaSegment = { type: "para"; lines: InlinePart[][] };
 export type Segment = CodeSegment | HeaderSegment | ListSegment | ParaSegment;
 
+const SHELL_CODE_LANGUAGES = new Set([
+  "bash", "sh", "shell", "zsh", "fish", "powershell", "pwsh", "cmd", "bat", "batch",
+]);
+
+export function isShellCodeLanguage(language: string): boolean {
+  return SHELL_CODE_LANGUAGES.has(language.trim().toLowerCase());
+}
+
 const FENCE_RE = /^```(.*)$/;
 const HEADER_RE = /^(#{1,3})\s+(.+)/;
 const BULLET_RE = /^\s*[-*]\s+(.+)/;
@@ -220,9 +228,22 @@ export function RenderMessage({ segments, width, brightHeadings = false }: { seg
             codeLines = codeLines.slice(1);
           }
 
-          const rightTitle = segment.lang ? `${segment.lang.toUpperCase()} ⎘ Copy Code` : "⎘ Copy Code";
           const panelWidth = Math.max(10, width);
           const diffLines = maybeRenderDiff(codeLines.join("\n"), { force: lang === "diff" });
+
+          if (isShellCodeLanguage(lang)) {
+            const marker = lang === "cmd" || lang === "bat" || lang === "batch"
+              ? `REM ${lang}`
+              : `# ${lang}`;
+            return (
+              <Box key={index} marginTop={marginTop} flexDirection="column" paddingLeft={2} width="100%">
+                <Text color={theme.textDim}>{marker}</Text>
+                {codeLines.map((line, lineIndex) => (
+                  <Text key={lineIndex} color={theme.textMuted} wrap="wrap">{line || " "}</Text>
+                ))}
+              </Box>
+            );
+          }
 
           return (
             <Box
@@ -232,7 +253,7 @@ export function RenderMessage({ segments, width, brightHeadings = false }: { seg
               paddingLeft={2}
               width="100%"
             >
-              <Panel cols={panelWidth} title={title} rightTitle={rightTitle}>
+              <Panel cols={panelWidth} title={title}>
                 {diffLines
                   ? diffLines.map((line, lineIndex) => (
                     <Text key={lineIndex} color={getDiffColor(line.type, theme)} wrap="wrap">

@@ -1,4 +1,4 @@
-import { access, copyFile, mkdir, stat } from "node:fs/promises";
+import { access, copyFile, mkdir, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import {
@@ -71,6 +71,13 @@ export async function importExternalFile(
   await mkdir(attachmentsDir, { recursive: true });
   const destPath = await resolveAttachmentDestPath(normalized, attachmentsDir);
   await copyFile(normalized, destPath);
+  return destPath;
+}
+
+export async function saveClipboardImage(data: Uint8Array, attachmentsDir: string): Promise<string> {
+  await mkdir(attachmentsDir, { recursive: true });
+  const destPath = await resolveAttachmentDestPath("clipboard-image.png", attachmentsDir);
+  await writeFile(destPath, data, { mode: 0o600 });
   return destPath;
 }
 

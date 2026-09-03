@@ -6,6 +6,7 @@ import { afterEach, describe, test } from "node:test";
 import { getProviderRuntime } from "../registry.js";
 import { localRuntime } from "../local.js";
 import {
+  buildLocalHarnessPromptContentBlocks,
   LocalHarnessProcess,
   localHarnessTestUtils,
   resetLocalHarnessProcessForTests,
@@ -56,6 +57,28 @@ function runRuntime(req: ProviderChatRequest, handlers: Partial<BackendRunHandle
 afterEach(() => resetLocalHarnessProcessForTests());
 
 describe("Local Harness provider routing", () => {
+  test("converts prompt images into Harness content blocks", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "codexa-harness-image-"));
+    const imagePath = join(tempDir, "clipboard.png");
+    writeFileSync(imagePath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
+    try {
+      const blocks = await buildLocalHarnessPromptContentBlocks(tempDir, "describe this", [{
+        path: imagePath,
+        mediaType: "image/png",
+        name: "clipboard.png",
+        bytes: 68,
+      }]);
+      assert.deepEqual(blocks[0], { type: "text", text: "describe this" });
+      assert.equal(blocks[1]?.type, "image");
+      if (blocks[1]?.type === "image") {
+        assert.equal(blocks[1].attachment.mediaType, "image/png");
+        assert.ok(blocks[1].attachment.attachmentId.length > 0);
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   test("uses a stable salted fingerprint for credential change detection", () => {
     const first = localHarnessTestUtils.secretFingerprint("test-api-key");
     const repeated = localHarnessTestUtils.secretFingerprint("test-api-key");
@@ -355,7 +378,7 @@ describe("Harness event projection and policy", () => {
     assert.equal(errors.length, 0, "the first exhaustion must not fail the run");
     assert.equal(requests.length, 1);
     assert.equal(requests[0]?.method, "session/prompt");
-    assert.match(String(requests[0]?.params.content), /ran out of output budget/i);
+    assert.match(JSON.stringify(requests[0]?.params.contentBlocks), /ran out of output budget/i);
     assert.ok(fixture.progress.some((text) => /continuing automatically/i.test(text)));
 
     // The retry exhausts the budget again: fail with a self-diagnosing message.
@@ -414,7 +437,7 @@ describe("Harness event projection and policy", () => {
     assert.deepEqual(resolved, []);
     assert.equal(requests.length, 1);
     assert.equal(requests[0]?.method, "session/prompt");
-    assert.match(String(requests[0]?.params.content), /exactly where the previous response stopped/i);
+    assert.match(JSON.stringify(requests[0]?.params.contentBlocks), /exactly where the previous response stopped/i);
     assert.ok(fixture.progressIds.includes("local-harness-output-recovery"));
     assert.ok(fixture.progress.some((text) => /window 2/i.test(text)));
     assert.ok(fixture.progress.every((text) => !/response truncated/i.test(text)));

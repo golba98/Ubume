@@ -1,10 +1,12 @@
 import type { ResolvedRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { CodexCliCapabilities } from "../models/codexCapabilities.js";
+import type { ProviderImageAttachment } from "../providerRuntime/types.js";
 
 export interface BuildCodexExecArgsOptions {
   runtime: ResolvedRuntimeConfig;
   cwd: string;
   structuredOutput?: boolean;
+  imageAttachments?: readonly ProviderImageAttachment[];
 }
 
 export type CodexLaunchStrategy =
@@ -98,6 +100,14 @@ export function buildCodexExecArgs(
   const { runtime } = options;
   const args: string[] = ["exec"];
 
+  if ((options.imageAttachments?.length ?? 0) > 0 && capabilities.image === false) {
+    return {
+      ok: false,
+      strategy: "fail",
+      error: "Installed Codex CLI does not support image attachments. Update Codex or remove the image from the prompt.",
+    };
+  }
+
   if (options.structuredOutput ?? true) {
     args.push("--experimental-json");
   }
@@ -130,6 +140,10 @@ export function buildCodexExecArgs(
   }
 
   args.push(...policyArgs.args);
+
+  for (const attachment of options.imageAttachments ?? []) {
+    args.push("--image", attachment.path);
+  }
 
   if (runtime.policy.networkAccess) {
     args.push("--config", `sandbox_workspace_write.network_access=${JSON.stringify(runtime.policy.networkAccess)}`);

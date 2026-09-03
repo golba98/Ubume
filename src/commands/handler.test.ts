@@ -616,6 +616,10 @@ test("parses /diagnose providers command", () => {
   assert.equal(result?.action, "diagnose_providers");
 });
 
+test("parses /paste-image as a clipboard image attachment action", () => {
+  assert.equal(runCommand("/paste-image")?.action, "paste_image");
+});
+
 test("unknown commands show /help suggestion", () => {
   const result = runCommand("/unknown-cmd-123");
   assert.equal(result?.action, "unknown");

@@ -9,7 +9,34 @@ const fullCapabilities: CodexCliCapabilities = {
   sandbox: true,
   config: true,
   fullAuto: true,
+  image: true,
 };
+
+test("adds ordered image arguments before the stdin prompt marker", () => {
+  const result = buildCodexExecArgs({
+    runtime: resolveRuntimeConfig(normalizeRuntimeConfig({ model: "gpt-5.4" })),
+    cwd: "/repo",
+    imageAttachments: [
+      { path: "/images/one.png", mediaType: "image/png", name: "one.png", bytes: 10 },
+      { path: "/images/two.png", mediaType: "image/png", name: "two.png", bytes: 20 },
+    ],
+  }, fullCapabilities);
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.args.slice(-5), ["--image", "/images/one.png", "--image", "/images/two.png", "-"]);
+});
+
+test("rejects images when the installed Codex CLI has no image option", () => {
+  const result = buildCodexExecArgs({
+    runtime: resolveRuntimeConfig(normalizeRuntimeConfig({ model: "gpt-5.4" })),
+    cwd: "/repo",
+    imageAttachments: [{ path: "/images/one.png", mediaType: "image/png", name: "one.png", bytes: 10 }],
+  }, { ...fullCapabilities, image: false });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.match(result.error, /does not support image attachments/i);
+});
 
 test("uses dedicated runtime policy flags when supported", () => {
   const result = buildCodexExecArgs({

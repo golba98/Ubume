@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID, scryptSync } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
@@ -13,9 +14,52 @@ import { resolveCodexaWorkspaceDataDir } from "../../workspace/appData.js";
 import { getShellWorkspaceGuardMessage, isPathInsideAllowedRoots } from "../../workspace/workspaceGuard.js";
 import { isDangerousShellCommand } from "../../agent/tools.js";
 import { traceLocalStream } from "../../debug/localStreamDebug.js";
+import {
+  DEFAULT_MAX_IMAGE_BYTES,
+  DEFAULT_MAX_IMAGE_DIMENSION,
+  DEFAULT_MAX_IMAGE_PIXELS,
+  DEFAULT_MAX_IMAGES_PER_MESSAGE,
+  DEFAULT_MAX_MESSAGE_IMAGE_BYTES,
+  DEFAULT_NORMALIZED_IMAGE_MAX_BYTES,
+  DEFAULT_NORMALIZED_IMAGE_MAX_DIMENSION,
+  saveImageFile,
+} from "@deepseek-ai/dsh-attachment-local";
+import type { ContentBlock } from "@deepseek-ai/dsh-llm";
 
 const HARNESS_VERSION = "0.1.1-rc.2";
 const PROFILE_NAME = "codexa-local";
+
+export async function buildLocalHarnessPromptContentBlocks(
+  dshHome: string,
+  prompt: string,
+  attachments: readonly NonNullable<ProviderChatRequest["imageAttachments"]>[number][],
+): Promise<ContentBlock[]> {
+  const blocks: ContentBlock[] = [{ type: "text", text: prompt }];
+  if (attachments.length === 0) return blocks;
+  if (!dshHome) throw new Error("Local Harness image storage is unavailable.");
+  const limits = {
+    maxImageBytes: DEFAULT_MAX_IMAGE_BYTES,
+    maxImagesPerMessage: DEFAULT_MAX_IMAGES_PER_MESSAGE,
+    maxMessageImageBytes: DEFAULT_MAX_MESSAGE_IMAGE_BYTES,
+    maxImagePixels: DEFAULT_MAX_IMAGE_PIXELS,
+    maxImageDimension: DEFAULT_MAX_IMAGE_DIMENSION,
+    mediaTypes: ["image/png", "image/jpeg", "image/webp", "image/gif"] as const,
+  };
+  if (attachments.length > limits.maxImagesPerMessage) {
+    throw new Error(`Local Harness accepts at most ${limits.maxImagesPerMessage} images in one prompt.`);
+  }
+  for (const attachment of attachments) {
+    const data = await readFile(attachment.path);
+    const ref = await saveImageFile(
+      join(dshHome, "attachments", "v1"),
+      { data, mediaType: attachment.mediaType, name: attachment.name },
+      limits,
+      { maxDimension: DEFAULT_NORMALIZED_IMAGE_MAX_DIMENSION, maxBytes: DEFAULT_NORMALIZED_IMAGE_MAX_BYTES },
+    );
+    blocks.push({ type: "image", attachment: ref });
+  }
+  return blocks;
+}
 const INTERNAL_PROVIDER = "codexa-local";
 const require = createRequire(import.meta.url);
 const PROCESS_FINGERPRINT_SALT = randomBytes(16);
@@ -339,6 +383,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
   private active: HarnessRunState | null = null;
   private stderr = "";
   private redactions: string[] = [];
+  private dshHome = "";
 
   async run(request: ProviderChatRequest, handlers: BackendRunHandlers, signal: AbortSignal): Promise<string> {
     const config = resolveHarnessConfig(request);
@@ -421,7 +466,8 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
           text: "Restored visible Codexa history into a new Local Harness session; prior ephemeral tool state was not available.",
         });
       }
-      void this.transport!.request("session/prompt", { sessionId, content: promptContent }, signal)
+      void buildLocalHarnessPromptContentBlocks(this.dshHome, promptContent, request.imageAttachments ?? [])
+        .then((contentBlocks) => this.transport!.request("session/prompt", { sessionId, contentBlocks }, signal))
         .catch((error) => this.failActive(error instanceof Error ? error : new Error(String(error))));
     });
   }
@@ -431,6 +477,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     await this.shutdown();
     handlers.onProcessLifecycle?.("before-spawn");
     const dshHome = ensureProfile(request.workspaceRoot, config);
+    this.dshHome = dshHome;
     const harnessSandboxMode = resolveHarnessSandboxMode(request);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -768,17 +815,20 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     });
     void this.transport.request("session/prompt", {
       sessionId: state.sessionId,
-      content: reasoningOnly
-        ? [
+      contentBlocks: [{
+        type: "text",
+        text: reasoningOnly
+          ? [
           "Your previous turn ran out of output budget while reasoning and produced no answer.",
           "Do not restart the analysis. Keep reasoning to a few sentences and begin the work now with tool calls, or give the answer directly.",
-        ].join(" ")
-        : [
+          ].join(" ")
+          : [
           "Continue the current task exactly where the previous response stopped.",
           "Do not repeat text already emitted or mention output limits or continuation.",
           "If work remains, perform it with tools instead of describing what you will do.",
           "Finish validation and give the final result only when the task is complete.",
-        ].join(" "),
+          ].join(" "),
+      }],
     }).catch((error) => this.failActive(error instanceof Error ? error : new Error(String(error))));
     return true;
   }
@@ -865,6 +915,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     this.transport = null;
     this.child = null;
     this.fingerprint = "";
+    this.dshHome = "";
     if (!child) return;
     traceLocalStream("harness.shutdown", {});
     try {

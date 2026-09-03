@@ -3,6 +3,7 @@ import type { ResolvedRuntimeConfig } from "../../config/runtimeConfig.js";
 import type { ProjectInstructions } from "../workspace/projectInstructions.js";
 import type { RunProgressSource, RunToolActivity } from "../../session/types.js";
 import type { ConversationContextCheckpoint, ConversationMessage, LocalHarnessSessionMetadata } from "../workspace/conversationStore.js";
+import type { ProviderImageAttachment } from "../providerRuntime/types.js";
 
 export interface ProviderContextUsage {
   inputTokens: number;
@@ -83,6 +84,7 @@ export interface BackendProvider {
       runIntent?: "normal" | "plan" | "approved-execution";
       conversationHistory?: readonly ConversationMessage[];
       localContextCheckpoint?: ConversationContextCheckpoint;
+      imageAttachments?: readonly ProviderImageAttachment[];
     },
     handlers: BackendRunHandlers,
   ) => () => void;

@@ -12,7 +12,7 @@ import { formatTerminalAnswerInline } from "../render/terminalAnswerFormat.js";
 import { RUN_OUTPUT_TRUNCATION_NOTICE } from "../../session/chatLifecycle.js";
 import { sanitizeTerminalLines, sanitizeTerminalOutput } from "../../core/terminal/terminalSanitize.js";
 import { clampVisualText, transcriptContentIndent } from "../layout.js";
-import type { Segment } from "../render/Markdown.js";
+import { isShellCodeLanguage, type Segment } from "../render/Markdown.js";
 import { classifyOutput, formatForBox, normalizeOutput, sanitizeOutput, sanitizeStreamChunk } from "../render/outputPipeline.js";
 import { maybeRenderDiff, type DiffRenderLineType } from "../render/diffRenderer.js";
 import {
@@ -905,9 +905,21 @@ function buildCodePanelRows(keyPrefix: string, segment: Extract<Segment, { type:
     codeLines = codeLines.slice(1);
   }
 
-  const rightTitle = segment.lang ? `${segment.lang.toUpperCase()} ⎘ Copy Code` : "⎘ Copy Code";
   const panelWidth = Math.max(10, width - 2);
   const panelContentWidth = Math.max(1, panelWidth - 4);
+
+  if (isShellCodeLanguage(segment.lang)) {
+    const lang = segment.lang.toLowerCase();
+    const marker = lang === "cmd" || lang === "bat" || lang === "batch"
+      ? `REM ${lang}`
+      : `# ${lang}`;
+    return [marker, ...codeLines].flatMap((line, index) => (
+      wrapPlainText(line, Math.max(1, width - 2)).map((wrapped) => [
+        createSpan("  "),
+        createSpan(wrapped || " ", index === 0 ? "dim" : "muted"),
+      ])
+    ));
+  }
 
   const diffLines = maybeRenderDiff(codeLines.join("\n"), {
     force: segment.lang.toLowerCase() === "diff",
@@ -936,7 +948,6 @@ function buildCodePanelRows(keyPrefix: string, segment: Extract<Segment, { type:
     keyPrefix,
     width: panelWidth,
     title,
-    rightTitle,
     contentRows,
   });
 
