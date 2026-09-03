@@ -303,6 +303,14 @@ describe("Harness event projection and policy", () => {
       toolArguments: new Map(),
       reasoningText: new Map(),
       approvals: new Set(),
+      continuationCount: 0,
+      windowStartTextLength: 0,
+      windowStartToolEventCount: 0,
+      toolEventCount: 0,
+      reasoningEventCount: 0,
+      windowStartReasoningEventCount: 0,
+      consecutiveNoProgressWindows: 0,
+      cancelled: false,
       resolve: () => undefined,
       reject: () => undefined,
       abortCleanup: () => undefined,
@@ -334,7 +342,7 @@ describe("Harness event projection and policy", () => {
     notify("session.event", { sessionId: "session-1", event: { seq: 5, type: "turn/end", data: { turn: 1, reason: { kind: "max-tokens" } } } });
   }
 
-  test("a turn that spends its whole output budget reasoning is retried once with a continuation prompt", () => {
+  test("reasoning-only output exhaustion is continued and stops after two no-progress windows", () => {
     const errors: Error[] = [];
     const fixture = activeProcess();
     (fixture.process as unknown as { active: { reject: (error: Error) => void } }).active.reject = (error) => errors.push(error);
@@ -348,19 +356,17 @@ describe("Harness event projection and policy", () => {
     assert.equal(requests.length, 1);
     assert.equal(requests[0]?.method, "session/prompt");
     assert.match(String(requests[0]?.params.content), /ran out of output budget/i);
-    assert.ok(fixture.progress.some((text) => /asking the model to continue/i.test(text)));
+    assert.ok(fixture.progress.some((text) => /continuing automatically/i.test(text)));
 
     // The retry exhausts the budget again: fail with a self-diagnosing message.
     notify("session.status", { sessionId: "session-1", status: "running" });
     reasoningOnlyTurn(notify, 4_096);
     notify("session.status", { sessionId: "session-1", status: "idle" });
 
-    assert.equal(requests.length, 1, "only one recovery prompt per run");
+    assert.equal(requests.length, 1, "the stalled second window must not enqueue another prompt");
     assert.equal(errors.length, 1);
-    assert.match(errors[0]!.message, /output budget \(4,096 tokens\)/);
-    assert.match(errors[0]!.message, /reasoning/i);
+    assert.match(errors[0]!.message, /two output windows made no visible progress/i);
     assert.match(errors[0]!.message, /max_output_tokens/);
-    assert.match(errors[0]!.message, /outputTokens: 4,096|4,096 output tokens/);
   });
 
   test("a turn that produces reasoning but no answer without hitting the cap reports that distinctly", () => {
@@ -394,19 +400,99 @@ describe("Harness event projection and policy", () => {
     assert.equal((fixture.process as unknown as { active: { stopReason?: string } }).active.stopReason, "aborted");
   });
 
-  test("a truncated but non-empty answer completes and shows a truncation notice", () => {
+  test("a truncated non-empty answer continues without completing the logical run", () => {
     const resolved: string[] = [];
     const fixture = activeProcess();
     (fixture.process as unknown as { active: { resolve: (text: string) => void } }).active.resolve = (text) => resolved.push(text);
+    const requests = attachTransport(fixture);
     const notify = notifier(fixture);
     notify("session.event", { sessionId: "session-1", event: { seq: 1, type: "assistant/chunk", data: { chunk: { type: "text-delta", text: "partial answer" } } } });
     notify("session.event", { sessionId: "session-1", event: { seq: 2, type: "assistant/chunk", data: { chunk: { type: "usage", usage: { inputTokens: 100, outputTokens: 4_096 } } } } });
     notify("session.event", { sessionId: "session-1", event: { seq: 3, type: "turn/end", data: { turn: 1, reason: { kind: "max-tokens" } } } });
     notify("session.status", { sessionId: "session-1", status: "idle" });
 
-    assert.deepEqual(resolved, ["partial answer"]);
-    assert.ok(fixture.progressIds.includes("local-harness-output-truncated"));
-    assert.ok(fixture.progress.some((text) => /truncated at 4,096 output tokens/i.test(text)));
+    assert.deepEqual(resolved, []);
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.method, "session/prompt");
+    assert.match(String(requests[0]?.params.content), /exactly where the previous response stopped/i);
+    assert.ok(fixture.progressIds.includes("local-harness-output-recovery"));
+    assert.ok(fixture.progress.some((text) => /window 2/i.test(text)));
+    assert.ok(fixture.progress.every((text) => !/response truncated/i.test(text)));
+  });
+
+  test("tool activity is productive rollover progress and stays in the same run", () => {
+    const fixture = activeProcess();
+    const requests = attachTransport(fixture);
+    const notify = notifier(fixture);
+
+    notify("session.event", { sessionId: "session-1", event: { seq: 1, type: "tool/call", data: { callId: "call-1", name: "bash", arguments: "{\"command\":\"git status\"}" } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 2, type: "tool/result", data: { message: { source: { callId: "call-1" }, content: [{ type: "text", text: "clean" }] } } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 3, type: "turn/end", data: { reason: { kind: "max-tokens" } } } });
+    notify("session.status", { sessionId: "session-1", status: "idle" });
+
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.params.sessionId, "session-1");
+    assert.deepEqual(fixture.tools.map((event) => event.status), ["running", "completed"]);
+    assert.equal((fixture.process as unknown as { active: { consecutiveNoProgressWindows: number } }).active.consecutiveNoProgressWindows, 0);
+  });
+
+  test("a cancelled rollover cannot enqueue another prompt or finalize", () => {
+    const resolved: string[] = [];
+    const observedFinalAnswers: string[] = [];
+    const fixture = activeProcess({ onFinalAnswerObserved: (text) => observedFinalAnswers.push(text) });
+    const active = (fixture.process as unknown as { active: { cancelled: boolean; resolve: (text: string) => void } }).active;
+    active.cancelled = true;
+    active.resolve = (text) => resolved.push(text);
+    const requests = attachTransport(fixture);
+    const notify = notifier(fixture);
+
+    notify("session.event", { sessionId: "session-1", event: { seq: 1, type: "assistant/chunk", data: { chunk: { type: "text-delta", text: "partial" } } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 2, type: "turn/end", data: { reason: { kind: "max-tokens" } } } });
+    (fixture.process as unknown as { failActive(error: Error): void }).failActive(new DOMException("Local request cancelled.", "AbortError"));
+    notify("session.status", { sessionId: "session-1", status: "idle" });
+
+    assert.equal(requests.length, 0);
+    assert.deepEqual(resolved, []);
+    assert.deepEqual(observedFinalAnswers, []);
+  });
+
+  test("multiple productive output windows accumulate into one final response", () => {
+    const resolved: string[] = [];
+    const observedFinalAnswers: string[] = [];
+    const finalMetadata: Array<{ throughMessageCount: number; transcriptHash: string }> = [];
+    const fixture = activeProcess({
+      onFinalAnswerObserved: (text) => observedFinalAnswers.push(text),
+      onLocalHarnessSession: (metadata) => finalMetadata.push(metadata),
+    });
+    const active = (fixture.process as unknown as { active: { resolve: (text: string) => void } }).active;
+    active.resolve = (text) => resolved.push(text);
+    const requests = attachTransport(fixture);
+    const notify = notifier(fixture);
+
+    for (const [index, text] of ["part one ", "part two "].entries()) {
+      notify("session.status", { sessionId: "session-1", status: "running" });
+      notify("session.event", { sessionId: "session-1", event: { seq: index * 3 + 1, type: "assistant/chunk", data: { chunk: { type: "text-delta", text } } } });
+      notify("session.event", { sessionId: "session-1", event: { seq: index * 3 + 2, type: "assistant/chunk", data: { chunk: { type: "usage", usage: { inputTokens: 100, outputTokens: 4_096 } } } } });
+      notify("session.event", { sessionId: "session-1", event: { seq: index * 3 + 3, type: "turn/end", data: { reason: { kind: "max-tokens" } } } });
+      notify("session.status", { sessionId: "session-1", status: "idle" });
+    }
+
+    notify("session.status", { sessionId: "session-1", status: "running" });
+    notify("session.event", { sessionId: "session-1", event: { seq: 7, type: "assistant/message", data: { message: { role: "assistant", content: [{ type: "output_text", text: "done" }] } } } });
+    notify("session.event", { sessionId: "session-1", event: { seq: 8, type: "turn/end", data: { reason: { kind: "completed" } } } });
+    notify("session.status", { sessionId: "session-1", status: "idle" });
+
+    assert.equal(requests.length, 2);
+    assert.deepEqual(fixture.deltas, ["part one ", "part two ", "done"]);
+    assert.deepEqual(resolved, ["part one part two done"]);
+    assert.deepEqual(observedFinalAnswers, ["part one part two done"]);
+    assert.equal(finalMetadata.length, 1);
+    assert.equal(finalMetadata[0]?.throughMessageCount, 2);
+    assert.match(finalMetadata[0]?.transcriptHash ?? "", /^[a-f0-9]{64}$/);
+    assert.deepEqual(fixture.progress.filter((text) => /continuing automatically/i.test(text)), [
+      "Output window reached; continuing automatically (window 2).",
+      "Output window reached; continuing automatically (window 3).",
+    ]);
   });
 
   test("reasoning effort reaches the Harness profile only when the model opts in", () => {

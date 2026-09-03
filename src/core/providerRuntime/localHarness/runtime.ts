@@ -46,8 +46,22 @@ interface HarnessRunState {
   lastUsage?: { inputTokens: number; outputTokens: number; contextTokens: number; contextWindow: number | null; exact: boolean };
   /** Why the last model turn stopped (`max-tokens`, `stop`, `aborted`, …), from the finish chunk or turn/end. */
   stopReason?: string;
-  /** Set once the run has sent its single "continue and act" recovery prompt. */
-  recoveryAttempted?: boolean;
+  /** Number of output-window continuations issued inside this logical Codexa run. */
+  continuationCount: number;
+  /** Assistant-text length at the start of the current model turn. */
+  windowStartTextLength: number;
+  /** Tool-event count at the start of the current model turn. */
+  windowStartToolEventCount: number;
+  /** Run-wide count used to detect useful progress across output windows. */
+  toolEventCount: number;
+  /** Run-wide reasoning delta count, used to select the corrective continuation prompt. */
+  reasoningEventCount: number;
+  /** Reasoning delta count at the start of the current model turn. */
+  windowStartReasoningEventCount: number;
+  /** Consecutive max-token windows that produced neither assistant text nor tool activity. */
+  consecutiveNoProgressWindows: number;
+  /** Prevents a cancellation race from enqueueing another continuation prompt. */
+  cancelled: boolean;
 }
 
 interface HarnessConfig {
@@ -367,6 +381,14 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         toolArguments: new Map(),
         reasoningText: new Map(),
         approvals: new Set(),
+        continuationCount: 0,
+        windowStartTextLength: 0,
+        windowStartToolEventCount: 0,
+        toolEventCount: 0,
+        reasoningEventCount: 0,
+        windowStartReasoningEventCount: 0,
+        consecutiveNoProgressWindows: 0,
+        cancelled: false,
         sessionMetadata,
         resolve: resolveRun,
         reject: rejectRun,
@@ -375,6 +397,8 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       this.active = state;
       const abort = () => {
         traceLocalStream("harness.request.cancel", { sessionId });
+        state.cancelled = true;
+        this.failActive(new DOMException("Local request cancelled.", "AbortError"));
         void this.transport?.request("session/cancel", { sessionId }).catch(() => this.terminate());
       };
       signal.addEventListener("abort", abort, { once: true });
@@ -503,6 +527,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         startedAt: Date.now(),
         ...(finished ? { completedAt: Date.now() } : {}),
       });
+      state.toolEventCount += 1;
       return;
     }
     if (method === "session.status") {
@@ -555,6 +580,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         state.text += chunk.text;
         state.handlers.onAssistantDelta?.(chunk.text);
       } else if (chunk.type === "reasoning-delta" && typeof chunk.text === "string") {
+        state.reasoningEventCount += 1;
         const step = typeof data.step === "number" ? data.step : 0;
         const index = typeof chunk.index === "number" ? chunk.index : 0;
         const reasoningKey = `${step}:${index}`;
@@ -577,10 +603,13 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     }
     if (event.type === "assistant/message") {
       if (isRecord(data.usage)) this.emitUsage(state, data.usage);
-      if (!state.text && isRecord(data.message)) {
+      // Some compatible servers emit only a final assistant/message for a turn.
+      // Append it when this window has not already streamed text, while avoiding
+      // replay of the same turn after text-delta chunks.
+      if (state.text.length === state.windowStartTextLength && isRecord(data.message)) {
         const finalText = textFromContent(data.message.content);
         if (finalText) {
-          state.text = finalText;
+          state.text += finalText;
           state.handlers.onAssistantDelta?.(finalText);
         }
       }
@@ -592,6 +621,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       let args: Record<string, unknown> = {};
       try { args = normalizedArgs(JSON.parse(String(data.arguments ?? "{}"))); } catch { /* malformed args stay empty */ }
       state.toolArguments.set(callId, { tool, arguments: args });
+      state.toolEventCount = (state.toolEventCount ?? 0) + 1;
       traceLocalStream("harness.tool.call", { sessionId: state.sessionId, callId, tool, arguments: args });
       state.handlers.onToolActivity?.({
         id: `local-tool-${callId}`,
@@ -614,6 +644,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         completedAt: Date.now(),
         summary: textFromContent(data.message.content).slice(0, 2_000) || (failed ? "Tool failed" : "Tool completed"),
       });
+      state.toolEventCount += 1;
     }
   }
 
@@ -692,29 +723,62 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     }
   }
 
-  /**
-   * A reasoning model can spend its entire output budget thinking and end the
-   * turn without any answer or tool call. Ask it once, in the same session, to
-   * stop analysing and act; the retry completes through the normal idle path.
-   */
+  /** Continue max-token turns inside the same Harness session and Codexa run. */
   private tryRecoverExhaustedTurn(state: HarnessRunState): boolean {
-    if (state.text.trim() || state.recoveryAttempted || state.toolArguments.size > 0) return false;
-    if (!this.outputBudgetExhausted(state) || !this.transport) return false;
-    state.recoveryAttempted = true;
+    if (state.cancelled || !this.outputBudgetExhausted(state) || !this.transport) return false;
+
+    const textProgress = state.text.length > (state.windowStartTextLength ?? 0);
+    const toolProgress = (state.toolEventCount ?? 0) > (state.windowStartToolEventCount ?? 0);
+    state.consecutiveNoProgressWindows = textProgress || toolProgress
+      ? 0
+      : (state.consecutiveNoProgressWindows ?? 0) + 1;
+    if (state.consecutiveNoProgressWindows >= 2) {
+      this.failActive(new Error([
+        "Local agent request failed: automatic continuation stopped after two output windows made no visible progress.",
+        "",
+        `Backend: ${state.request.resolvedLocalAgentConfig?.localBackend ?? state.request.route.localBackend ?? "local"}`,
+        `Model: ${state.request.route.modelId}`,
+        `Endpoint: ${sanitizedEndpoint(state.request.resolvedLocalAgentConfig?.baseUrl ?? state.request.localConfig?.baseUrl ?? "")}`,
+        "",
+        "The partial response remains visible. Lower the reasoning effort or raise max_output_tokens if the model supports a larger per-request limit.",
+      ].join("\n")));
+      return true;
+    }
+
+    state.continuationCount = (state.continuationCount ?? 0) + 1;
+    state.windowStartTextLength = state.text.length;
+    state.windowStartToolEventCount = state.toolEventCount ?? 0;
+    const reasoningProgress = state.reasoningEventCount > state.windowStartReasoningEventCount;
+    state.windowStartReasoningEventCount = state.reasoningEventCount;
     state.runningSeen = false;
     state.stopReason = undefined;
+    state.turnFailure = undefined;
+    state.lastUsage = undefined;
+    const reasoningOnly = !textProgress && !toolProgress && reasoningProgress;
     state.handlers.onProgress?.({
       id: "local-harness-output-recovery",
       source: "transcript",
-      text: `Output limit hit while reasoning (${formatTokens(state.lastUsage?.outputTokens ?? this.outputBudget(state) ?? 0)} tokens); asking the model to continue and act.`,
+      text: `Output window reached; continuing automatically (window ${state.continuationCount + 1}).`,
     });
-    traceLocalStream("harness.request.recovery", { sessionId: state.sessionId, outputTokens: state.lastUsage?.outputTokens ?? null });
+    traceLocalStream("harness.request.recovery", {
+      sessionId: state.sessionId,
+      continuationCount: state.continuationCount,
+      responseCharacters: state.text.length,
+      reasoningOnly,
+    });
     void this.transport.request("session/prompt", {
       sessionId: state.sessionId,
-      content: [
-        "Your previous turn ran out of output budget while reasoning and produced no answer.",
-        "Do not restart the analysis. Keep reasoning to a few sentences and begin the work now with tool calls, or give the answer directly.",
-      ].join(" "),
+      content: reasoningOnly
+        ? [
+          "Your previous turn ran out of output budget while reasoning and produced no answer.",
+          "Do not restart the analysis. Keep reasoning to a few sentences and begin the work now with tool calls, or give the answer directly.",
+        ].join(" ")
+        : [
+          "Continue the current task exactly where the previous response stopped.",
+          "Do not repeat text already emitted or mention output limits or continuation.",
+          "If work remains, perform it with tools instead of describing what you will do.",
+          "Finish validation and give the final result only when the task is complete.",
+        ].join(" "),
     }).catch((error) => this.failActive(error instanceof Error ? error : new Error(String(error))));
     return true;
   }
@@ -760,13 +824,6 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         "Verify the model chat template, streaming response format, and native tool/function-calling support.",
       ].join("\n")));
       return;
-    }
-    if (state.stopReason === "max-tokens") {
-      state.handlers.onProgress?.({
-        id: "local-harness-output-truncated",
-        source: "transcript",
-        text: `Response truncated at ${formatTokens(state.lastUsage?.outputTokens ?? this.outputBudget(state) ?? 0)} output tokens (model limit).`,
-      });
     }
     state.settled = true;
     state.abortCleanup();

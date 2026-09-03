@@ -6,6 +6,31 @@ No changes yet.
 
 ---
 
+## [1.0.25] — 2026-09-03 — Automatic Local Output Continuation
+
+### Fixed
+
+- **Long Local Harness responses now continue automatically across output
+  windows** — reaching a model's per-request output-token limit sends a focused
+  continuation prompt through the existing Harness session instead of
+  finalizing a truncated answer. Assistant text, tool state, approvals, context
+  compaction, and workspace tracking remain part of one logical Codexa run.
+- **Continued responses persist as one complete assistant message** — streamed
+  display content and the final conversation payload are tracked separately so
+  the saved history contains the entire answer without duplicate rendering.
+- **Stalled continuations fail safely** — productive text and tool activity may
+  roll over without a fixed limit, while two consecutive windows with no
+  visible progress return an actionable error. Cancellation prevents further
+  continuation prompts or final callbacks.
+
+### Maintenance
+
+- Added Local Harness regression coverage for multi-window output, reasoning-only
+  exhaustion, tool progress, cancellation, stable progress updates, final
+  session metadata, and single-response finalization.
+
+---
+
 ## [1.0.24] — 2026-09-03 — Long-Session Performance and Local Reasoning Recovery
 
 ### Fixed
