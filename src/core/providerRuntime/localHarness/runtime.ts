@@ -28,6 +28,26 @@ import type { ContentBlock } from "@deepseek-ai/dsh-llm";
 
 const HARNESS_VERSION = "0.1.1-rc.2";
 const PROFILE_NAME = "codexa-local";
+const HARNESS_MAX_RSS_BYTES = 1024 * 1024 * 1024;
+const HARNESS_HEAP_LIMIT_MIB = 768;
+const HARNESS_MEMORY_POLL_MS = 500;
+const MAX_DISPLAY_REASONING_CHARS = 32_768;
+const REASONING_TRUNCATED_PREFIX = "… Earlier reasoning omitted for memory safety.\n";
+
+function readLinuxProcessRssBytes(pid: number): number | null {
+  if (process.platform !== "linux") return null;
+  try {
+    const status = readFileSync(`/proc/${pid}/status`, "utf8");
+    const match = /^VmRSS:\s+(\d+) kB$/m.exec(status);
+    return match ? Number(match[1]) * 1024 : null;
+  } catch {
+    return null;
+  }
+}
+
+function harnessMemoryLimitMessage(): string {
+  return "Local Harness hit a RAM safety limit (1 GiB process RAM or 768 MiB Node heap). The turn was stopped to protect your system. The partial response remains visible; your next prompt will start a fresh Harness session.";
+}
 
 export async function buildLocalHarnessPromptContentBlocks(
   dshHome: string,
@@ -384,8 +404,23 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
   private stderr = "";
   private redactions: string[] = [];
   private dshHome = "";
+  private memoryPoll: ReturnType<typeof setInterval> | null = null;
+  private failedSessionCleanup: Promise<void> = Promise.resolve();
+
+  private stopMemoryPoll(): void {
+    if (this.memoryPoll) clearInterval(this.memoryPoll);
+    this.memoryPoll = null;
+  }
+
+  private checkMemory(child: ChildProcessWithoutNullStreams, rssBytes: number | null): void {
+    if (this.child !== child || rssBytes === null || rssBytes < HARNESS_MAX_RSS_BYTES) return;
+    this.failActive(new Error(harnessMemoryLimitMessage()));
+    this.terminate();
+  }
 
   async run(request: ProviderChatRequest, handlers: BackendRunHandlers, signal: AbortSignal): Promise<string> {
+    await this.failedSessionCleanup;
+    if (signal.aborted) throw new DOMException("Local request cancelled.", "AbortError");
     const config = resolveHarnessConfig(request);
     const fingerprint = routeFingerprint(config, request);
     const processFingerprint = `${fingerprint}:${secretFingerprint(config.apiKey)}`;
@@ -413,7 +448,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       transcriptHash: transcriptHash(request),
       updatedAt: new Date().toISOString(),
     };
-    handlers.onLocalHarnessSession?.(sessionMetadata);
+    handlers.onLocalHarnessSession?.(sessionMetadata, sessionId);
 
     return new Promise<string>((resolveRun, rejectRun) => {
       const state: HarnessRunState = {
@@ -481,6 +516,8 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     const harnessSandboxMode = resolveHarnessSandboxMode(request);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      NODE_OPTIONS: [process.env.NODE_OPTIONS?.trim(), `--max-old-space-size=${HARNESS_HEAP_LIMIT_MIB}`].filter(Boolean).join(" "),
+      CODEXA_DSH_MAX_RSS_BYTES: String(HARNESS_MAX_RSS_BYTES),
       DSH_HOME: dshHome,
       DSH_TELEMETRY_DISABLED: "1",
       DSH_PERMISSION_MODE: harnessSandboxMode,
@@ -500,6 +537,11 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.child = child;
+    this.stopMemoryPoll();
+    if (child.pid && process.platform === "linux") {
+      this.memoryPoll = setInterval(() => this.checkMemory(child, readLinuxProcessRssBytes(child.pid!)), HARNESS_MEMORY_POLL_MS);
+      this.memoryPoll.unref?.();
+    }
     traceLocalStream("harness.start", { model: config.model, endpoint: sanitizedEndpoint(config.baseUrl), workspaceRoot: request.workspaceRoot });
     this.stderr = "";
     this.redactions = [config.apiKey].filter((value) => value.length >= 6);
@@ -524,6 +566,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     });
     child.once("exit", (code) => {
       if (this.child !== child) return;
+      this.stopMemoryPoll();
       handlers.onProcessLifecycle?.("exit");
       this.child = null;
       this.transport?.close();
@@ -531,12 +574,18 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       if (!startupSettled) rejectStartup(new Error(`Local Harness exited during startup (${code ?? "signal"}).`));
       if (this.active && !this.active.settled) {
         const safeStderr = this.redactions.reduce((text, secret) => text.split(secret).join("[redacted]"), this.stderr).trim();
-        this.failActive(new Error(`Local Harness exited unexpectedly (${code ?? "signal"}).${safeStderr ? `\n${safeStderr}` : ""}`));
+        const memoryFailure = code === 85 || /heap out of memory|allocation failed.*heap/i.test(safeStderr);
+        const backpressureFailure = code === 86;
+        this.failActive(new Error(memoryFailure
+          ? harnessMemoryLimitMessage()
+          : backpressureFailure
+            ? "Local Harness output exceeded its 16 MiB safety buffer. The turn was stopped; your next prompt will start a fresh Harness session."
+            : `Local Harness exited unexpectedly (${code ?? "signal"}).${safeStderr ? `\n${safeStderr}` : ""}`));
       }
     });
     const transport = new JsonRpcLineTransport(child.stdout, child.stdin);
     this.transport = transport;
-    transport.onNotification((method, params) => this.onNotification(method, params as HarnessNotification));
+    transport.onNotification((method, params) => this.onNotification(method, params as HarnessNotification, child));
     transport.onRequest((method, params) => this.onBridgeRequest(method, params));
     transport.start();
     try {
@@ -560,7 +609,14 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     }
   }
 
-  private onNotification(method: string, params: HarnessNotification): void {
+  private onNotification(method: string, params: HarnessNotification, sourceChild?: ChildProcessWithoutNullStreams): void {
+    if (sourceChild && sourceChild !== this.child) return;
+    if (method === "harness.memory") {
+      if (this.child && typeof (params as { rssBytes?: unknown }).rssBytes === "number") {
+        this.checkMemory(this.child, (params as { rssBytes: number }).rssBytes);
+      }
+      return;
+    }
     const state = this.active;
     const ownsNotification = params.sessionId === state?.sessionId || params.parentSessionId === state?.sessionId;
     if (!state || !ownsNotification || state.settled) return;
@@ -631,7 +687,14 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         const step = typeof data.step === "number" ? data.step : 0;
         const index = typeof chunk.index === "number" ? chunk.index : 0;
         const reasoningKey = `${step}:${index}`;
-        const text = `${state.reasoningText.get(reasoningKey) ?? ""}${chunk.text}`;
+        const previousDisplay = state.reasoningText.get(reasoningKey) ?? "";
+        const previous = previousDisplay.startsWith(REASONING_TRUNCATED_PREFIX)
+          ? previousDisplay.slice(REASONING_TRUNCATED_PREFIX.length)
+          : previousDisplay;
+        const combined = `${previous}${chunk.text}`;
+        const text = combined.length > MAX_DISPLAY_REASONING_CHARS
+          ? `${REASONING_TRUNCATED_PREFIX}${combined.slice(-MAX_DISPLAY_REASONING_CHARS)}`
+          : combined;
         state.reasoningText.set(reasoningKey, text);
         state.handlers.onProgress?.({
           id: `local-reasoning-${state.sessionId}-${step}-${index}`,
@@ -692,6 +755,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         summary: textFromContent(data.message.content).slice(0, 2_000) || (failed ? "Tool failed" : "Tool completed"),
       });
       state.toolEventCount += 1;
+      state.toolArguments.delete(callId);
     }
   }
 
@@ -890,7 +954,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       throughMessageCount: completedMessages.length,
       transcriptHash: createHash("sha256").update(JSON.stringify(completedMessages)).digest("hex"),
       updatedAt: new Date().toISOString(),
-    });
+    }, state.sessionId);
     state.handlers.onFinalAnswerObserved?.(state.text);
     traceLocalStream("harness.request.complete", { sessionId: state.sessionId, responseCharacters: state.text.length });
     state.resolve(state.text);
@@ -902,6 +966,25 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     state.settled = true;
     state.abortCleanup();
     this.active = null;
+    state.handlers.onLocalHarnessSession?.(null, state.sessionId);
+    const child = this.child;
+    const transport = this.transport;
+    if (child && transport) {
+      this.failedSessionCleanup = new Promise<void>((resolveCleanup) => {
+        const timer = setTimeout(() => {
+          if (this.child === child) void this.shutdown().then(resolveCleanup, resolveCleanup);
+          else resolveCleanup();
+        }, 1_500);
+        void transport.request("session/close", { sessionId: state.sessionId }).then(() => {
+          clearTimeout(timer);
+          resolveCleanup();
+        }).catch(() => {
+          clearTimeout(timer);
+          if (this.child === child) void this.shutdown().then(resolveCleanup, resolveCleanup);
+          else resolveCleanup();
+        });
+      });
+    }
     traceLocalStream("harness.request.error", {
       sessionId: state.sessionId,
       error: error.message,
@@ -912,6 +995,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
   }
 
   async shutdown(): Promise<void> {
+    this.stopMemoryPoll();
     const transport = this.transport;
     const child = this.child;
     this.transport = null;
@@ -948,6 +1032,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
   }
 
   terminate(): void {
+    this.stopMemoryPoll();
     this.transport?.close();
     this.transport = null;
     if (this.child?.exitCode === null && this.child.signalCode === null) this.child.kill("SIGTERM");
