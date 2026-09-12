@@ -1259,6 +1259,32 @@ test("unified stream renders approved execution plan with approved badge", () =>
   assert.doesNotMatch(joined, /Implementation Plan/);
 });
 
+test("plan card rows carry frame metadata so the live window cannot slice them open", () => {
+  const turnId = 9307;
+  const events = makeChronologicalTurnEvents(turnId, {
+    plan: {
+      id: "plan-2",
+      streamSeq: 1,
+      chunks: ["1. Apply the selected changes\n2. Run tests"],
+      status: "completed",
+      startedAt: 2,
+    },
+    streamItems: [{ streamSeq: 1, kind: "plan", refId: "plan-2" }],
+    lastStreamSeq: 1,
+  });
+  const renderItems = buildStaticRenderItems(buildTimelineItems(events), [turnId], null, null, null);
+  const rows = buildTimelineSnapshot(renderItems, { totalWidth: 90 }).rows;
+
+  const framed = rows.filter((row) => row.frame);
+  const planFrameId = framed.find((row) => row.spans.map((span) => span.text).join("").includes("\u256d\u2500\u2500 Plan"))?.frame?.id;
+  assert.ok(planFrameId, "the Plan card should expose a frame id");
+
+  const planRows = framed.filter((row) => row.frame?.id === planFrameId);
+  assert.equal(planRows[0]!.frame?.role, "top");
+  assert.equal(planRows.at(-1)!.frame?.role, "bottom");
+  assert.ok(planRows.slice(1, -1).every((row) => row.frame?.role === "content"));
+});
+
 test("unified stream hides workspace paths in finalized plan snapshots", () => {
   const turnId = 9306;
   const joined = renderJoinedTurn(makeChronologicalTurnEvents(turnId, {

@@ -2,7 +2,27 @@
 
 ## Unreleased
 
-No changes yet.
+### Fixed
+
+- **The approved plan is no longer printed twice** — pressing `Implement
+  changes` seeded the execution run with the approved plan, which re-rendered
+  the entire `Plan` card directly under the `Plan approved. Plan mode off` line.
+  The plan is already finalized in the transcript whenever that picker is shown,
+  so the echo was always a duplicate. The provider still receives the plan
+  through the execution prompt.
+- **A live card taller than the viewport keeps its frame** — the live-row
+  window sliced the running turn from the end without regard for card
+  boundaries, leaving a borderless box that began mid-sentence. When a cut lands
+  inside a bordered card, the card is now re-capped with its own top border plus
+  an `⋯ N rows hidden` notice, still within the row budget that keeps Ink from
+  wiping the scrollback.
+
+### Maintenance
+
+- Timeline rows carry optional frame metadata (`top`/`content`/`bottom`) set by
+  the two box builders and preserved through row wrapping, with coverage for
+  card-aware windowing, padded-card alignment, and the narrow-terminal label
+  fallback.
 
 ---
 

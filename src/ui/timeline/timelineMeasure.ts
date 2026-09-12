@@ -54,9 +54,19 @@ export interface TimelineRowSpan {
   backgroundTone?: TimelineTone;
 }
 
+/**
+ * Marks a row as part of one bordered card so the live-region window can tell
+ * whether a slice lands inside a frame. `id` is shared by every row of a card.
+ */
+export interface TimelineRowFrame {
+  id: string;
+  role: "top" | "content" | "bottom";
+}
+
 export interface TimelineRow {
   key: string;
   spans: TimelineRowSpan[];
+  frame?: TimelineRowFrame;
 }
 
 export interface BuiltTimelineItem {
@@ -230,9 +240,10 @@ function rememberRow(cacheKey: string, row: TimelineRow): TimelineRow {
   return row;
 }
 
-function createRow(key: string, spans: TimelineRowSpan[], width: number): TimelineRow {
+function createRow(key: string, spans: TimelineRowSpan[], width: number, frame?: TimelineRowFrame): TimelineRow {
   const paddedSpans = padSpansToWidth(spans, width);
-  const cacheKey = `${key}:${width}:${paddedSpans.map(spanCacheToken).join("\u001e")}`;
+  const frameToken = frame ? `${frame.id}\u001f${frame.role}` : "";
+  const cacheKey = `${key}:${width}:${frameToken}:${paddedSpans.map(spanCacheToken).join("\u001e")}`;
   const cached = _rowContentCache.get(cacheKey);
   if (cached) {
     _rowContentCache.delete(cacheKey);
@@ -240,10 +251,9 @@ function createRow(key: string, spans: TimelineRowSpan[], width: number): Timeli
     return cached;
   }
 
-  return rememberRow(cacheKey, {
-    key,
-    spans: paddedSpans,
-  });
+  return rememberRow(cacheKey, frame
+    ? { key, spans: paddedSpans, frame }
+    : { key, spans: paddedSpans });
 }
 
 const _blankRowCache = new Map<string, TimelineRow>();
@@ -464,7 +474,10 @@ function buildDashCardRows(params: {
     return { ...span, tone: borderTone };
   });
 
-  const rows: TimelineRow[] = [createRow(`${params.keyPrefix}-top`, fitSpansToWidth(topRow, width), width)];
+  const frameId = params.keyPrefix;
+  const rows: TimelineRow[] = [
+    createRow(`${params.keyPrefix}-top`, fitSpansToWidth(topRow, width), width, { id: frameId, role: "top" }),
+  ];
 
   params.contentRows.forEach((row, index) => {
     rows.push(createRow(
@@ -475,6 +488,7 @@ function buildDashCardRows(params: {
         createSpan(" │", borderTone),
       ],
       width,
+      { id: frameId, role: "content" },
     ));
   });
 
@@ -482,9 +496,46 @@ function buildDashCardRows(params: {
     `${params.keyPrefix}-bottom`,
     [createSpan(`╰${"─".repeat(Math.max(1, width - 2))}╯`, borderTone)],
     width,
+    { id: frameId, role: "bottom" },
   ));
 
   return rows;
+}
+
+/**
+ * Rebuild a card's elision notice for the live-row window: when the window cuts
+ * into a card, the frame is re-capped with its own top border plus this row so
+ * the viewer sees a complete box that says how much was dropped, never a
+ * headless box starting mid-sentence.
+ */
+export function buildFrameElisionRow(frameTopRow: TimelineRow, hiddenRows: number): TimelineRow {
+  const rowWidth = Math.max(4, getSpansWidth(frameTopRow.spans));
+  // The top row may already be wrapped with outer padding (wrapRows), so locate
+  // the corner glyph rather than assuming the box starts at column 0.
+  const rowText = frameTopRow.spans.map((span) => span.text).join("");
+  const cornerIndex = rowText.indexOf("╭");
+  const leftPad = cornerIndex > 0 ? getTextWidth(rowText.slice(0, cornerIndex)) : 0;
+  const borderTone = frameTopRow.spans.find((span) => span.text.includes("╭"))?.tone ?? "borderSubtle";
+  const boxWidth = Math.max(4, rowWidth - leftPad * 2);
+  const contentWidth = Math.max(1, boxWidth - 4);
+
+  const fullLabel = `⋯ ${hiddenRows} row${hiddenRows === 1 ? "" : "s"} hidden`;
+  // Narrow terminals would clip "rows hidden" to a misleading fragment.
+  const label = getTextWidth(fullLabel) <= contentWidth ? fullLabel : `⋯ ${hiddenRows}`;
+
+  const pad = leftPad > 0 ? [createSpan(" ".repeat(leftPad))] : [];
+  return createRow(
+    `${frameTopRow.key}-elided`,
+    [
+      ...pad,
+      createSpan("│ ", borderTone),
+      ...fitSpansToWidth([createSpan(label, "dim")], contentWidth),
+      createSpan(" │", borderTone),
+      ...pad,
+    ],
+    rowWidth,
+    frameTopRow.frame ? { id: frameTopRow.frame.id, role: "content" } : undefined,
+  );
 }
 
 function buildPanelRows(params: {
@@ -498,6 +549,7 @@ function buildPanelRows(params: {
   const leftLabel = ` ${params.title} `;
   const rightLabel = params.rightTitle ? ` ${params.rightTitle} ` : "";
   const dashCount = Math.max(0, width - 3 - getTextWidth(leftLabel) - getTextWidth(rightLabel));
+  const frameId = params.keyPrefix;
   const rows: TimelineRow[] = [
     createRow(
       `${params.keyPrefix}-top`,
@@ -509,6 +561,7 @@ function buildPanelRows(params: {
         createSpan("╮", "borderActive"),
       ],
       width,
+      { id: frameId, role: "top" },
     ),
   ];
 
@@ -522,6 +575,7 @@ function buildPanelRows(params: {
         createSpan(" │", "borderActive"),
       ],
       width,
+      { id: frameId, role: "content" },
     ));
   });
 
@@ -529,6 +583,7 @@ function buildPanelRows(params: {
     `${params.keyPrefix}-bottom`,
     [createSpan(`╰${"─".repeat(Math.max(1, width - 2))}╯`, "borderActive")],
     width,
+    { id: frameId, role: "bottom" },
   ));
 
   return rows;
@@ -2512,6 +2567,9 @@ function wrapRows(
         ...(leftPad > 0 ? [createSpan(" ".repeat(leftPad))] : []),
       ],
       totalWidth,
+      // Frame metadata must survive wrapping: the live-row window reads it to
+      // avoid slicing a card open.
+      row.frame,
     );
     rowCache.set(cacheKey, wrapped);
     return wrapped;

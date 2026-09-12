@@ -4503,7 +4503,13 @@ export function App({ launchArgs }: AppProps) {
         constraints: state.constraints,
       }),
       {
-        approvedPlan: state.currentPlan,
+        // No `approvedPlan` here on purpose: it would seed a second, completed
+        // plan block on the execution run and re-print the whole plan directly
+        // under the "Plan approved" line. This path is only reachable from
+        // PlanActionPicker, which mounts only when hasFinalizedTranscriptPlan
+        // already found this exact plan in the transcript, so the echo is
+        // always a duplicate. The provider still receives it via
+        // buildPlanExecutionPrompt above.
         runIntent: "approved-execution",
         submitTiming,
         runtimeOverride: {
