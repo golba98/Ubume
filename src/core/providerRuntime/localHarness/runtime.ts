@@ -696,6 +696,8 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
   }
 
   private emitUsage(state: HarnessRunState, usage: Record<string, unknown>): void {
+    // Usage without token counts (e.g. a failed request) would reset the context meter to 0.
+    if (typeof usage.inputTokens !== "number" && typeof usage.outputTokens !== "number") return;
     const inputTokens = typeof usage.inputTokens === "number" ? usage.inputTokens : 0;
     const outputTokens = typeof usage.outputTokens === "number" ? usage.outputTokens : 0;
     const normalized = {

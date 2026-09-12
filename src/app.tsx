@@ -214,7 +214,7 @@ import {
   validateProviderRouteActivation,
 } from "./core/providerRuntime/registry.js";
 import { hasGeminiApiKey, runGeminiDiagnostics } from "./core/providerRuntime/gemini.js";
-import { checkLocalProvider, runLocalDiagnostics, setLocalProviderConfig } from "./core/providerRuntime/local.js";
+import { discoverLocalModels, checkLocalProvider, runLocalDiagnostics, setLocalProviderConfig } from "./core/providerRuntime/local.js";
 import { closeLocalHarnessSession, shutdownLocalHarness } from "./core/providerRuntime/localHarness/runtime.js";
 import {
   detectVibeActiveModel,
@@ -262,8 +262,8 @@ import {
   isCurrentRun,
 } from "./session/chatLifecycle.js";
 import { findUserPrompt, useAppSessionState } from "./session/appSession.js";
-import { conversationMessagesToTimeline, selectConversationContext } from "./session/conversation.js";
-import { selectPersistedAssistantResponse } from "./session/persistedResponse.js";
+import { buildResumedProviderRoute, conversationMessagesToTimeline, toProviderConversationHistory, selectConversationContext } from "./session/conversation.js";
+import { buildPersistedAssistantMessage, type PersistedFileActivity, type PersistedRunStatus } from "./session/persistedResponse.js";
 import { createLiveRenderScheduler, type LiveRenderUpdate } from "./session/liveRenderScheduler.js";
 import { hasFinalizedTranscriptPlan } from "./session/planTranscript.js";
 import { schedulePromptRunStartAfterVisibleCommit } from "./session/promptRunSchedule.js";
@@ -558,6 +558,14 @@ export function App({ launchArgs }: AppProps) {
     [workspaceRoot],
   );
   const activeConversationRef = useRef<ConversationRecord | null>(null);
+  // What the active run has produced so far, saved with its reply even when the
+  // run is canceled, fails, or the app quits mid-run (so /resume keeps it).
+  const activeRunCaptureRef = useRef<{
+    runId: number;
+    text: string;
+    tools: Map<string, string>;
+    files: Map<string, PersistedFileActivity>;
+  } | null>(null);
   const [conversationRouteOverride, setConversationRouteOverride] = useState<import("./core/providerRuntime/types.js").ProviderRoute | null>(null);
   const [resumeConversations, setResumeConversations] = useState<ConversationListEntry[]>([]);
   const [authStatus, setAuthStatus] = useState<CodexAuthProbeResult>(createInitialAuthStatus());
@@ -1575,6 +1583,53 @@ export function App({ launchArgs }: AppProps) {
     }
   }, [activeProviderRoute, conversationStore]);
 
+  const persistRunConversationMessage = useCallback((
+    runId: number,
+    status: PersistedRunStatus,
+    response: { renderedResponse?: string; completeResponse?: string; errorMessage?: string } = {},
+  ) => {
+    const capture = activeRunCaptureRef.current?.runId === runId ? activeRunCaptureRef.current : null;
+    if (capture) activeRunCaptureRef.current = null;
+    const message = buildPersistedAssistantMessage({
+      status,
+      ...response,
+      streamedText: capture?.text ?? "",
+      toolCommands: capture ? [...capture.tools.values()] : [],
+      fileActivity: capture ? [...capture.files.values()] : [],
+    });
+    if (message) appendConversationMessage(message);
+  }, [appendConversationMessage]);
+
+  // Transcript swaps (/clear, /resume) must physically clear the screen with the
+  // frame that carries the new transcript; otherwise the remounted <Static>
+  // re-prints the intro logo beneath the old transcript.
+  const armTranscriptReplacement = useCallback((source: string) => {
+    const clearGeneration = sessionState.clearEpoch + 1;
+    const clearBoundaryArmed = clearFrameBoundaryController?.beginClearGeneration(clearGeneration) ?? false;
+    renderDebug.traceEvent("terminal", "clearCommandReceived", {
+      source,
+      clearGeneration,
+      clearPending: clearBoundaryArmed,
+      liveInkInstanceResolved: Boolean(inkInstance),
+    });
+    return {
+      clearGeneration,
+      clearBoundaryArmed,
+      /** Call after dispatching the transcript swap. */
+      finish: () => {
+        if (clearBoundaryArmed) return;
+        // Fallback path (unexpected Ink mismatch): clear imperatively.
+        terminalControl.clearTranscript(`${source}:fallback`);
+        resetInkOutputForFreshFrame({ instance: inkInstance, columns: stdout.columns });
+        renderDebug.traceEvent("terminal", "clearBoundaryFallback", {
+          source,
+          clearGeneration,
+          liveInkInstanceResolved: Boolean(inkInstance),
+        });
+      },
+    };
+  }, [clearFrameBoundaryController, inkInstance, sessionState.clearEpoch, stdout.columns, terminalControl]);
+
   const openResumePicker = useCallback(() => {
     if (busy) {
       appendSystemEvent("Resume unavailable", "Finish the active run before switching conversations.");
@@ -1596,29 +1651,28 @@ export function App({ launchArgs }: AppProps) {
     if (previousHarnessSessionId && previousHarnessSessionId !== loaded.metadata.localHarnessSession?.sessionId) {
       void closeLocalHarnessSession(previousHarnessSessionId);
     }
+    const replacement = armTranscriptReplacement("src/app.tsx:resumeConversation");
     activeConversationRef.current = loaded;
     setConversationChars(loaded.messages.reduce((total, message) => total + message.content.length, 0));
     resetTimelineMeasureCaches();
     dispatchSession({
       type: "CLEAR_TRANSCRIPT",
-      seedEvents: conversationMessagesToTimeline(loaded.messages, createEventId),
+      seedEvents: conversationMessagesToTimeline(loaded.messages, createEventId, createTurnId),
     });
+    replacement.finish();
     const routeProvider = typeof loaded.metadata.providerId === "string" && isKnownProviderId(loaded.metadata.providerId)
       ? loaded.metadata.providerId
       : null;
     if (routeProvider) {
-      const discovery = discoverProviderModels(routeProvider);
+      const route = buildResumedProviderRoute(loaded.metadata, routeProvider, getProviderRuntime(routeProvider).backendKind);
+      // Local discovery is per backend; checking the default backend would mark
+      // an Unsloth-served model unavailable and drop the saved route.
+      const discovery = routeProvider === "local"
+        ? discoverLocalModels(undefined, route.localBackend)
+        : discoverProviderModels(routeProvider);
       const modelUnavailable = discovery.status === "ready"
         && discovery.models.length > 0
         && !discovery.models.some((model) => model.modelId === loaded.metadata.modelId || model.id === loaded.metadata.modelId);
-      const route = {
-        providerId: routeProvider,
-        modelId: loaded.metadata.modelId,
-        backendKind: loaded.metadata.backendKind && loaded.metadata.backendKind !== "unavailable"
-          ? loaded.metadata.backendKind as import("./core/providerRuntime/types.js").ProviderBackendKind
-          : getProviderRuntime(routeProvider).backendKind,
-        ...(loaded.metadata.reasoning ? { reasoning: loaded.metadata.reasoning } : {}),
-      } satisfies import("./core/providerRuntime/types.js").ProviderRoute;
       setConversationRouteOverride(modelUnavailable ? null : route);
       if (!isProviderRoutableInCodexa(routeProvider) || modelUnavailable) {
         const reason = !isProviderRoutableInCodexa(routeProvider)
@@ -1634,7 +1688,7 @@ export function App({ launchArgs }: AppProps) {
     dispatchSession({ type: "RESET_INPUT" });
     intendedFocusTargetRef.current = FOCUS_IDS.composer;
     focusManager.focus(FOCUS_IDS.composer);
-  }, [appendErrorEvent, appendSystemEvent, conversationStore, dispatchSession, focusManager]);
+  }, [appendErrorEvent, appendSystemEvent, armTranscriptReplacement, conversationStore, dispatchSession, focusManager]);
 
   useEffect(() => {
     const notice = providerWorkspaceConfig.migrationNotice;
@@ -3354,10 +3408,11 @@ export function App({ launchArgs }: AppProps) {
     const safePersistedResponse = persistedResponse != null
       ? sanitizeTerminalOutput(persistedResponse, { preserveTabs: false, tabSize: 2 })
       : undefined;
-    const conversationResponse = selectPersistedAssistantResponse(parsed.content, safePersistedResponse);
-    if (status === "completed" && conversationResponse?.trim()) {
-      appendConversationMessage({ role: "assistant", content: conversationResponse });
-    }
+    persistRunConversationMessage(runId, status, {
+      renderedResponse: parsed.content,
+      completeResponse: safePersistedResponse,
+      errorMessage: safeMessage,
+    });
     appDiagLog([
       "FINALIZE_RUN_PAYLOAD:",
       `provider=${activeProviderRoute.providerId}`,
@@ -3415,7 +3470,7 @@ export function App({ launchArgs }: AppProps) {
     }
 
     return true;
-  }, [activeProviderRoute.providerId, appendConversationMessage, dispatchSession, focusManager]);
+  }, [activeProviderRoute.providerId, dispatchSession, focusManager, persistRunConversationMessage]);
 
   const cancelActiveRun = useCallback((retainHistory = true) => {
     const runId = activeRunIdRef.current;
@@ -3465,6 +3520,7 @@ export function App({ launchArgs }: AppProps) {
         }
       }
     } else {
+      persistRunConversationMessage(runId, "canceled");
       if (promptTurnId !== null) {
         lifecycle?.onCanceled?.({ turnId: promptTurnId, runId });
       }
@@ -3484,7 +3540,7 @@ export function App({ launchArgs }: AppProps) {
     }
 
     return true;
-  }, [activeEvents, dispatchSession, finalizePromptRun, focusManager, uiState.kind]);
+  }, [activeEvents, dispatchSession, finalizePromptRun, focusManager, persistRunConversationMessage, uiState.kind]);
 
   const handleCancel = useCallback(() => {
     if (busy) {
@@ -3507,8 +3563,9 @@ export function App({ launchArgs }: AppProps) {
   }, [appendSystemEvent, busy, cancelActiveRun, dispatchSession, planFlow.kind, resetComposer, uiState.kind]);
 
   const handleQuit = useCallback(() => {
-    saveActiveConversation();
+    // Cancel first so the interrupted reply is part of the saved conversation.
     cancelActiveRun(false);
+    saveActiveConversation();
     exit();
   }, [cancelActiveRun, exit, saveActiveConversation]);
 
@@ -3640,13 +3697,7 @@ export function App({ launchArgs }: AppProps) {
   }, [dispatchSession]);
 
   const handleClear = useCallback(() => {
-    const clearGeneration = sessionState.clearEpoch + 1;
-    const clearBoundaryArmed = clearFrameBoundaryController?.beginClearGeneration(clearGeneration) ?? false;
-    renderDebug.traceEvent("terminal", "clearCommandReceived", {
-      clearGeneration,
-      clearPending: clearBoundaryArmed,
-      liveInkInstanceResolved: Boolean(inkInstance),
-    });
+    const replacement = armTranscriptReplacement("src/app.tsx:handleClear");
     cancelActiveRun(false);
     saveActiveConversation();
     void closeLocalHarnessSession(activeConversationRef.current?.metadata.localHarnessSession?.sessionId);
@@ -3660,22 +3711,14 @@ export function App({ launchArgs }: AppProps) {
     // Row caches are keyed by transcript item keys; drop them with the transcript.
     resetTimelineMeasureCaches();
     renderDebug.traceEvent("terminal", "clearReactStateRequested", {
-      clearGeneration,
-      clearPending: clearBoundaryArmed,
+      clearGeneration: replacement.clearGeneration,
+      clearPending: replacement.clearBoundaryArmed,
     });
     resetToHomeScreen(createStartupStaticEvents({
       providerWorkspaceConfig,
     }));
-    if (!clearBoundaryArmed) {
-      // Fallback path (unexpected Ink mismatch): preserve /clear semantics.
-      terminalControl.clearTranscript("src/app.tsx:handleClear:fallback");
-      resetInkOutputForFreshFrame({ instance: inkInstance, columns: stdout.columns });
-      renderDebug.traceEvent("terminal", "clearBoundaryFallback", {
-        clearGeneration,
-        liveInkInstanceResolved: Boolean(inkInstance),
-      });
-    }
-  }, [cancelActiveRun, clearFrameBoundaryController, inkInstance, launchContext, providerWorkspaceConfig, resetToHomeScreen, saveActiveConversation, sessionState.clearEpoch, stdout.columns, terminalControl, workspaceRoot]);
+    replacement.finish();
+  }, [armTranscriptReplacement, cancelActiveRun, launchContext, providerWorkspaceConfig, resetToHomeScreen, saveActiveConversation, workspaceRoot]);
 
   const handleShellExecute = useCallback((command: string) => {
     const safeCommand = sanitizeTerminalInput(command).trim();
@@ -3929,7 +3972,11 @@ export function App({ launchArgs }: AppProps) {
     }
 
     const turnId = createTurnId();
-    const storedConversation = activeConversationRef.current?.messages ?? [];
+    // Local Harness session reuse hashes the history, so local requests get the
+    // exact saved reply text; other providers also see what earlier runs did.
+    const storedConversation = toProviderConversationHistory(activeConversationRef.current?.messages ?? [], {
+      includeActivitySummaries: activeProviderRoute.providerId !== "local",
+    });
     // Local models own request-window compaction so they can create a semantic
     // checkpoint before sliding old messages out. Other providers retain the
     // existing tail-selection behavior.
@@ -3950,6 +3997,7 @@ export function App({ launchArgs }: AppProps) {
     setConversationChars((count) => count + safeProviderPrompt.length);
 
     const runId = createEventId();
+    activeRunCaptureRef.current = { runId, text: "", tools: new Map(), files: new Map() };
     // A failed or canceled rollover must not reduce the next response's
     // accounting. Each provider run starts with no response text covered.
     rolloverResponseCharsRef.current = 0;
@@ -3998,6 +4046,15 @@ export function App({ launchArgs }: AppProps) {
     let firstRenderFired = false;
     let finalAnswerVisibleFired = false;
     let blockedCleanupFailureSurfaced = false;
+    const captureFileActivity = (activity: readonly PersistedFileActivity[]) => {
+      const capture = activeRunCaptureRef.current;
+      if (capture?.runId !== runId) return;
+      for (const entry of activity) {
+        const previous = capture.files.get(entry.path);
+        if (previous?.operation === "created" && entry.operation === "modified") continue;
+        capture.files.set(entry.path, { path: entry.path, operation: entry.operation });
+      }
+    };
 
     let preRunSnapshot: ReturnType<typeof captureWorkspaceSnapshot> | null = null;
     let finalWorkspacePollDone = false;
@@ -4075,6 +4132,7 @@ export function App({ launchArgs }: AppProps) {
           initialSnapshot: preRunSnapshot,
           onActivity: (activity) => {
             if (!isCurrentRun(activeRunIdRef.current, runId)) return;
+            captureFileActivity(activity);
             liveScheduler.enqueue({ type: "activity", activity });
           },
         });
@@ -4125,6 +4183,7 @@ export function App({ launchArgs }: AppProps) {
             chunk: safeChunk,
           });
           streamedAssistantContent += safeChunk;
+          if (activeRunCaptureRef.current?.runId === runId) activeRunCaptureRef.current.text += safeChunk;
           if (lifecycle.responsePresentation === "plan") {
             planSectionContent += safeChunk;
           }
@@ -4159,6 +4218,7 @@ export function App({ launchArgs }: AppProps) {
         },
         onToolActivity: (activity) => {
           if (!isCurrentRun(activeRunIdRef.current, runId)) return;
+          if (activeRunCaptureRef.current?.runId === runId) activeRunCaptureRef.current.tools.set(activity.id, activity.command);
           if (lifecycle.responsePresentation === "plan" && !planSeenToolIds.has(activity.id)) {
             // First sight of a tool: mirrors the reducer's insert-only demotion.
             planSeenToolIds.add(activity.id);
@@ -4209,6 +4269,7 @@ export function App({ launchArgs }: AppProps) {
               perf.mark("snapshot_end");
               const lateActivity = diffWorkspaceSnapshots(preRunSnapshot, finalSnapshot);
               if (lateActivity.length > 0) {
+                captureFileActivity(lateActivity);
                 liveScheduler.enqueue({ type: "activity", activity: lateActivity });
               }
             } catch {
@@ -4364,6 +4425,8 @@ export function App({ launchArgs }: AppProps) {
         },
         onContextUsage: (usage) => {
           if (!isCurrentRun(activeRunIdRef.current, runId)) return;
+          // A failed turn can report zero usage; keep the known conversation size.
+          if (usage.contextTokens <= 0) return;
           setConversationChars(Math.max(0, usage.contextTokens * 4));
         },
       },

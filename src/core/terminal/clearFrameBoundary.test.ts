@@ -642,6 +642,48 @@ test("holds transcript static flushed during an overlay and replays it into the 
   assert.equal(controller.getState().overlayActive, false);
 });
 
+test("a clear armed while an overlay is open replaces the pre-overlay transcript instead of restoring it (resume)", () => {
+  let overlayActive = false;
+  const harness = createHarness({ isOverlayActive: () => overlayActive });
+  const { controller, instance, events } = harness;
+
+  const oldStatic = "Codexa logo\nold chat\n";
+  controller.syncRenderState({ generation: 0, staticEventsLength: 2, activeEventsLength: 0, transcriptCleared: false, uiStateKind: "IDLE" });
+  instance.fullStaticOutput = oldStatic;
+  instance.renderInteractiveFrame?.("main-frame", 4, oldStatic);
+
+  overlayActive = true;
+  instance.renderInteractiveFrame?.("resume-picker", 40, "");
+  events.length = 0;
+
+  // Resume arms the clear, then swaps the transcript and closes the picker in one commit.
+  assert.equal(controller.beginClearGeneration(1), true);
+  const resumedStatic = "Codexa logo\nresumed chat\n";
+  overlayActive = false;
+  instance.fullStaticOutput = `${instance.fullStaticOutput ?? ""}${resumedStatic}`;
+  instance.renderInteractiveFrame?.("composer", 5, resumedStatic);
+
+  const repaintRequested = controller.syncRenderState({
+    generation: 1,
+    staticEventsLength: 2,
+    activeEventsLength: 0,
+    transcriptCleared: false,
+    clearGenerationReady: true,
+    uiStateKind: "IDLE",
+  });
+  assert.equal(repaintRequested, true);
+  instance.renderInteractiveFrame?.("composer", 5, "");
+
+  assert.equal(events.some((entry) => entry.startsWith("log.sync:")), false, "the pre-overlay frame must not be restored");
+  const clearIndex = events.findIndex((entry) => entry.startsWith("clear:test:clearBoundary:"));
+  const committedWrites = events.filter((entry) => entry.startsWith("write:composer"));
+  assert.ok(clearIndex >= 0, "the transcript is physically cleared before the resumed frame");
+  assert.equal(committedWrites.length, 1, "exactly one authoritative resumed frame is written");
+  assert.equal(committedWrites[0], `write:composer:5:${resumedStatic.length}`, "the resumed static (one logo) is written once");
+  assert.equal(controller.getState().committedGeneration, 1);
+  assert.equal(controller.getState().overlayActive, false);
+});
+
 test("a width change while an overlay is open repaints the alt buffer, then re-arms the transcript repaint on exit", () => {
   let overlayActive = false;
   let renderedGeneration = 0;
