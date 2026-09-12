@@ -153,3 +153,22 @@ test("ConversationStore does not leave temporary files after a successful atomic
     assert.equal(existsSync(join(rootDir, created.metadata.id, "messages.json.tmp")), false);
     assert.equal(existsSync(join(rootDir, created.metadata.id, "metadata.json.tmp")), false);
 });
+
+test("ConversationStore round-trips assistant activity summaries and loads messages saved without them", () => {
+  const conversations = store("2026-09-12T10:00:00.000Z", "activity-summary");
+  const created = conversations.createConversation({ providerId: "local", modelId: "qwen", backendKind: "local-openai-compatible" });
+  created.messages.push(
+    { role: "user", content: "Build it" },
+    { role: "assistant", content: "Done.", activitySummary: "Files changed: index.html (created)" },
+    { role: "user", content: "Thanks" },
+  );
+  conversations.save(created);
+
+  const loaded = conversations.load(created.metadata.id);
+  assert.deepEqual(loaded?.messages, [
+    { role: "user", content: "Build it" },
+    { role: "assistant", content: "Done.", activitySummary: "Files changed: index.html (created)" },
+    { role: "user", content: "Thanks" },
+  ]);
+  assert.equal("activitySummary" in (loaded?.messages[0] ?? {}), false);
+});

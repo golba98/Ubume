@@ -18,6 +18,8 @@ export type ConversationMessageRole = "user" | "assistant";
 export interface ConversationMessage {
   role: ConversationMessageRole;
   content: string;
+  /** Files changed / commands run during the run that produced this reply. */
+  activitySummary?: string;
 }
 
 export interface ConversationContextCheckpoint {
@@ -147,7 +149,10 @@ function parseMessages(value: unknown): ConversationMessage[] | null {
     const role = item.role;
     const content = item.content;
     if ((role !== "user" && role !== "assistant") || typeof content !== "string") return null;
-    messages.push({ role, content });
+    const activitySummary = typeof item.activitySummary === "string" && item.activitySummary.trim()
+      ? item.activitySummary
+      : null;
+    messages.push({ role, content, ...(activitySummary ? { activitySummary } : {}) });
   }
   return messages;
 }
@@ -249,7 +254,11 @@ export class ConversationStore {
   save(record: ConversationRecord): void {
     const dir = this.conversationDir(record.metadata.id);
     mkdirSync(dir, { recursive: true });
-    const messages = record.messages.map((message) => ({ role: message.role, content: message.content }));
+    const messages = record.messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+      ...(message.activitySummary ? { activitySummary: message.activitySummary } : {}),
+    }));
     const metadata: ConversationMetadata = {
       ...record.metadata,
       title: record.metadata.title === "Untitled conversation" ? titleFromMessages(record.messages) : record.metadata.title,

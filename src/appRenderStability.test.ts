@@ -221,19 +221,36 @@ test("/clear resolves the live Ink instance behind stdout and memoizes it", () =
 });
 
 test("/clear arms a fresh render generation before transcript reset", () => {
+  const armMatch = appSource.match(/const armTranscriptReplacement = useCallback\(\(source: string\) => \{([\s\S]*?)\n  \}, \[/);
+  assert.ok(armMatch, "shared transcript-replacement arming should exist");
+  assert.ok((armMatch[1] ?? "").includes("beginClearGeneration(clearGeneration)"), "arming should begin a clear generation");
   const handleClearMatch = appSource.match(/const handleClear = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[/);
   assert.ok(handleClearMatch, "handleClear callback should exist");
   const body = handleClearMatch[1] ?? "";
-  const armBoundaryIndex = body.indexOf("beginClearGeneration(clearGeneration)");
+  const armBoundaryIndex = body.indexOf('armTranscriptReplacement("src/app.tsx:handleClear")');
   const seedEventsIndex = body.indexOf("createStartupStaticEvents({");
   const resetToHomeIndex = body.indexOf("resetToHomeScreen(createStartupStaticEvents({");
+  const finishIndex = body.indexOf("replacement.finish()");
   assert.ok(armBoundaryIndex >= 0, "handleClear should arm clear-generation boundary");
   assert.ok(seedEventsIndex >= 0, "handleClear should create fresh home-screen seed events");
   assert.ok(resetToHomeIndex >= 0, "handleClear should reset through the shared home-screen path");
   assert.ok(armBoundaryIndex < resetToHomeIndex, "clear generation should be armed before transcript reset");
+  assert.ok(finishIndex > resetToHomeIndex, "the fallback check runs after the transcript reset");
   assert.match(appSource, /const resetToHomeScreen = useCallback/);
   assert.match(appSource, /type: "CLEAR_TRANSCRIPT",\s*seedEvents/s, "home reset should seed the transcript reset");
   assert.match(appSource, /focusManager\.focus\(FOCUS_IDS\.composer\)/, "clear should return focus to the prompt");
+});
+
+test("/resume arms the clear boundary before swapping the transcript so the logo is not printed twice", () => {
+  const resumeMatch = appSource.match(/const resumeConversation = useCallback\(\(id: string\) => \{([\s\S]*?)\n  \}, \[/);
+  assert.ok(resumeMatch, "resumeConversation callback should exist");
+  const body = resumeMatch[1] ?? "";
+  const armIndex = body.indexOf('armTranscriptReplacement("src/app.tsx:resumeConversation")');
+  const swapIndex = body.indexOf('type: "CLEAR_TRANSCRIPT"');
+  const finishIndex = body.indexOf("replacement.finish()");
+  assert.ok(armIndex >= 0, "resume should arm the clear boundary");
+  assert.ok(swapIndex > armIndex, "the clear must be armed before the transcript swap");
+  assert.ok(finishIndex > swapIndex, "the fallback check runs after the transcript swap");
 });
 
 test("Ink render-cache reset is reserved for explicit transcript clear", () => {
@@ -272,11 +289,11 @@ test("Width resize repaints the transcript through the frame boundary", () => {
 });
 
 test("/clear fallback preserves clear-then-reset ordering when boundary cannot arm", () => {
-  const handleClearMatch = appSource.match(/const handleClear = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[/);
-  assert.ok(handleClearMatch, "handleClear callback should exist");
-  const body = handleClearMatch[1] ?? "";
-  const fallbackIndex = body.indexOf("if (!clearBoundaryArmed) {");
-  const clearIndex = body.indexOf('terminalControl.clearTranscript("src/app.tsx:handleClear:fallback")');
+  const armMatch = appSource.match(/const armTranscriptReplacement = useCallback\(\(source: string\) => \{([\s\S]*?)\n  \}, \[/);
+  assert.ok(armMatch, "shared transcript-replacement arming should exist");
+  const body = armMatch[1] ?? "";
+  const fallbackIndex = body.indexOf("if (clearBoundaryArmed) return;");
+  const clearIndex = body.indexOf("terminalControl.clearTranscript(`${source}:fallback`)");
   const resetIndex = body.indexOf("resetInkOutputForFreshFrame({ instance: inkInstance");
   assert.ok(fallbackIndex >= 0, "fallback block should exist for unresolved Ink boundary");
   assert.ok(clearIndex > fallbackIndex, "fallback should physically clear the terminal");

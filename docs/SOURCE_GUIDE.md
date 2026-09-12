@@ -305,7 +305,7 @@ Normalize paths consistently, keep mutable Codexa state outside projects, honor 
 | `src/core/workspace/appData.test.ts` | Verifies app Data behavior and regression contracts in the core/workspace area. |
 | `src/core/workspace/appData.ts` | Resolves platform-specific Codexa data, workspace, conversation, cache, attachment, and debug paths. |
 | `src/core/workspace/conversationStore.test.ts` | Verifies conversation creation, sorting, malformed-record isolation, and atomic persistence. |
-| `src/core/workspace/conversationStore.ts` | Persists workspace-scoped conversation metadata and canonical messages with atomic JSON writes. |
+| `src/core/workspace/conversationStore.ts` | Persists workspace-scoped conversation metadata and canonical messages (with optional per-reply activity summaries) with atomic JSON writes. |
 | `src/core/workspace/launchContext.test.ts` | Verifies launch Context behavior and regression contracts in the core/workspace area. |
 | `src/core/workspace/launchContext.ts` | Describes installed/dev launch context and builds guarded workspace relaunch commands. |
 | `src/core/workspace/planStorage.test.ts` | Verifies plan Storage behavior and regression contracts in the core/workspace area. |
@@ -339,12 +339,13 @@ Reducers are the lifecycle source of truth. Preserve run/turn identity, stream o
 | `src/session/appSession.test.ts` | Verifies app Session behavior and regression contracts in the session area. |
 | `src/session/appSession.ts` | Defines the aggregate session reducer and hook for transcript events, input history, active runs, clear epochs, and UI lifecycle. |
 | `src/session/conversation.test.ts` | Verifies restored timeline events, bounded context selection, and provider history formatting. |
-| `src/session/conversation.ts` | Converts durable dialogue into timeline events and bounded provider request context. |
+| `src/session/conversation.ts` | Converts durable dialogue into timeline events (including saved activity summaries) and plain role/content provider request history. |
 | `src/session/chatLifecycle.test.ts` | Verifies chat Lifecycle behavior and regression contracts in the session area. |
 | `src/session/chatLifecycle.ts` | Implements pure lifecycle/event reducers for progress, thinking, tools, response segments, plans, completion, failure, and cancellation. |
 | `src/session/liveRenderScheduler.test.ts` | Verifies live Render Scheduler behavior and regression contracts in the session area. |
 | `src/session/liveRenderScheduler.ts` | Batches provider deltas and progress updates at separate cadences before session dispatch. |
 | `src/session/planFlow.test.ts` | Verifies plan Flow behavior and regression contracts in the session area. |
+| `src/session/persistedResponse.ts` | Builds the assistant message saved for each run (completed, canceled, failed) with a compact files-changed / commands-run summary for `/resume`. |
 | `src/session/planFlow.ts` | Models plan-mode transitions, approval/revision decisions, and execution hand-off. |
 | `src/session/planTranscript.test.ts` | Verifies plan Transcript behavior and regression contracts in the session area. |
 | `src/session/planTranscript.ts` | Extracts, normalizes, and reconciles plan content from streamed and finalized responses. |
