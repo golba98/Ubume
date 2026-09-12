@@ -6,6 +6,42 @@ No changes yet.
 
 ---
 
+## [1.0.28] — 2026-09-12 — Resume Reliability
+
+### Fixed
+
+- **Resumed conversations keep every reply** — the assistant message was saved
+  only when a run completed, so canceled or failed runs, and quitting mid-run,
+  dropped everything the model had streamed. Resuming a Local conversation
+  after an approved plan showed only the plan. Every run outcome is now saved:
+  interrupted replies keep their partial text plus a `[Run canceled before
+  finishing]` / `[Run failed: …]` note.
+- **Replies record what the run did** — each saved reply carries a compact
+  `Files changed` / `Commands run` summary that `/resume` shows under the
+  reply. Completed replies keep their exact content (the summary is stored
+  separately) so Local Harness session reuse still matches.
+- **`/resume` no longer prints the Codexa logo twice** — resume remounted the
+  transcript without arming the clear-frame boundary that `/clear` uses, so
+  the pre-resume screen was restored and a second logo stacked beneath it.
+- **Resumed Local conversations use their saved backend** — the restored route
+  dropped `localBackend` and fell back to LM Studio's default endpoint, so an
+  Unsloth-served model failed with `Connection error` even while loaded.
+  Model availability on resume is also checked against the saved backend.
+- **New prompts no longer merge into restored turns** — restored turns were
+  numbered from 1 while live turns use a separate counter, so a new prompt
+  could replace a restored prompt and attach its run to that old turn,
+  duplicating or misplacing blocks. Restored turns now share the live counter.
+- **The context meter no longer resets to 0 after a failed turn** — zero
+  usage reports are ignored.
+
+### Maintenance
+
+- `/clear` and `/resume` share one clear-boundary arming helper.
+- New coverage for persisted reply building, conversation store round-trips,
+  resumed routes and turn ids, and a clear armed while an overlay is open.
+
+---
+
 ## [1.0.27] — 2026-09-12 — Plan Approval Cleanup
 
 ### Fixed

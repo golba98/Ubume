@@ -3,6 +3,17 @@
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
 
+## v1.0.28 — 2026-09-12
+
+`/resume` now brings back the whole conversation. Replies from runs you
+interrupted, runs that failed, or runs still going when you quit are saved
+instead of lost, and each reply notes which files changed and which commands
+ran. Resuming also no longer prints the Codexa logo twice, new prompts no
+longer get mixed into restored messages, and the context meter keeps its value
+after a failed request. Resumed Local chats reconnect to the backend they were
+using, so an Unsloth model no longer fails with a connection error because
+Codexa tried LM Studio instead.
+
 ## v1.0.27 — 2026-09-12
 
 Approving a plan no longer prints the whole plan a second time underneath the
