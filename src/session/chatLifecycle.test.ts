@@ -89,6 +89,19 @@ test("createRunEvent stores responsePresentation on the run event", () => {
   assert.equal(makePlanRun({ responsePresentation: undefined }).responsePresentation, "assistant");
 });
 
+test("an execution run seeded without approvedPlan carries no plan block to re-render", () => {
+  // Approved-plan execution deliberately omits `approvedPlan` (see
+  // startApprovedPlanExecution): the plan is already finalized in the
+  // transcript, so seeding one here would print the whole plan a second time
+  // directly under the "Plan approved" line.
+  const run = makePlanRun({ responsePresentation: undefined, approvedPlan: undefined });
+
+  assert.equal(run.plan, null);
+  assert.equal(run.approvedPlan, undefined);
+  assert.deepEqual(run.streamItems, []);
+  assert.equal(run.lastStreamSeq, 0);
+});
+
 test("a tool insert demotes an active plan block into a completed response segment at the same streamSeq", () => {
   let run = appendRunPlanChunk(makePlanRun(), "Let me look");
   run = upsertRunToolActivity(run, runningTool("tool-1"));
