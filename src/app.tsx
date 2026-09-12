@@ -4409,12 +4409,14 @@ export function App({ launchArgs }: AppProps) {
             appDiagLog(`CONVERSATION_STORE: checkpoint save failed: ${error instanceof Error ? error.message : "filesystem error"}`);
           }
         },
-        onLocalHarnessSession: (session) => {
+        onLocalHarnessSession: (session, sessionId) => {
           const current = activeConversationRef.current;
-          if (!current || activeProviderRoute.providerId !== "local") return;
+          if (!current || activeProviderRoute.providerId !== "local" || !isCurrentRun(activeRunIdRef.current, runId)) return;
+          if (!session && current.metadata.localHarnessSession?.sessionId !== sessionId) return;
+          const { localHarnessSession: _previousSession, ...metadata } = current.metadata;
           const next: ConversationRecord = {
             ...current,
-            metadata: { ...current.metadata, localHarnessSession: session },
+            metadata: session ? { ...metadata, localHarnessSession: session } : metadata,
           };
           activeConversationRef.current = next;
           try {

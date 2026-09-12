@@ -5,6 +5,107 @@ import { carrierKeyOf } from "@deepseek-ai/dsh-scope";
 
 export const name = "codexa-local-harness-bridge";
 export const inject = ["agents"];
+const MAX_PENDING_STDOUT_BYTES = 16 * 1024 * 1024;
+const MAX_TOOL_ARGUMENT_CHARS = 2_000;
+const MAX_TOOL_RESULT_CHARS = 2_000;
+const configuredMaxRssBytes = Number(process.env.CODEXA_DSH_MAX_RSS_BYTES);
+const maxRssBytes = Number.isSafeInteger(configuredMaxRssBytes) && configuredMaxRssBytes > 0
+  ? configuredMaxRssBytes
+  : 1024 * 1024 * 1024;
+
+function contentPreview(blocks, limit = MAX_TOOL_RESULT_CHARS) {
+  if (!Array.isArray(blocks)) return "";
+  let result = "";
+  for (const block of blocks) {
+    if (!block || typeof block !== "object") continue;
+    const part = typeof block.text === "string" ? block.text : contentPreview(block.content, limit - result.length);
+    result += part.slice(0, limit - result.length);
+    if (result.length >= limit) break;
+  }
+  return result;
+}
+
+function toolDisplayArguments(raw) {
+  try {
+    if (typeof raw === "string" && raw.length > 1024 * 1024) return "{}";
+    const args = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!args || typeof args !== "object") return "{}";
+    return JSON.stringify(Object.fromEntries(
+      ["command", "path", "file_path"].filter((key) => typeof args[key] === "string")
+        .map((key) => [key, args[key].slice(0, MAX_TOOL_ARGUMENT_CHARS)]),
+    ));
+  } catch {
+    return "{}";
+  }
+}
+
+export function policyArguments(args) {
+  if (!args || typeof args !== "object") return {};
+  return Object.fromEntries(
+    ["command", "path", "file_path", "old_path", "new_path"]
+      .filter((key) => typeof args[key] === "string")
+      .map((key) => [key, args[key]]),
+  );
+}
+
+function outputContent(blocks) {
+  if (!Array.isArray(blocks)) return [];
+  return blocks.flatMap((block) => {
+    if (!block || typeof block !== "object") return [];
+    if ((block.type === "text" || block.type === "output_text") && typeof block.text === "string") return [block];
+    return outputContent(block.content);
+  });
+}
+
+export function projectHarnessEvent(event) {
+  const data = event?.data ?? {};
+  if (event?.type?.startsWith("compaction/")) return { type: event.type };
+  if (event?.type === "turn/end") {
+    const reason = data.reason ?? {};
+    return { type: event.type, data: { reason: {
+      kind: reason.kind,
+      ...(reason.error ? { error: { message: String(reason.error.message ?? "").slice(0, 4_000) } } : {}),
+    } } };
+  }
+  if (event?.type === "assistant/chunk") {
+    const chunk = data.chunk;
+    if (!chunk || !["text-delta", "reasoning-delta", "usage", "finish"].includes(chunk.type)) return null;
+    if (chunk.type === "finish") {
+      return { type: event.type, data: { chunk: {
+        type: "finish",
+        reason: chunk.reason,
+        replayState: { response: { stopReason: chunk.replayState?.response?.stopReason } },
+      } } };
+    }
+    return { type: event.type, data: { step: data.step, chunk } };
+  }
+  if (event?.type === "assistant/message") {
+    const content = outputContent(data.message?.content);
+    return { type: event.type, data: { usage: data.usage, message: { content } } };
+  }
+  if (event?.type === "tool/call") {
+    return { type: event.type, seq: event.seq, data: {
+      callId: data.callId,
+      name: data.name,
+      arguments: toolDisplayArguments(data.arguments),
+    } };
+  }
+  if (event?.type === "tool/result") {
+    return { type: event.type, seq: event.seq, data: {
+      message: { source: { callId: data.message?.source?.callId }, content: [{ type: "text", text: contentPreview(data.message?.content) }] },
+      ...(data.error ? { error: { message: "Tool failed" } } : {}),
+    } };
+  }
+  return null;
+}
+
+export function notifyBounded(transport, method, params, output = process.stdout, abort = (code) => {
+  process.stderr.write("Codexa Local Harness output safety buffer exceeded.\n");
+  process.exit(code);
+}) {
+  transport.notify(method, params);
+  if (output.writableLength > MAX_PENDING_STDOUT_BYTES) abort(86);
+}
 
 class CodexaHarnessServer {
   constructor(ctx, transport) {
@@ -20,14 +121,16 @@ class CodexaHarnessServer {
     this.shuttingDown = false;
 
     this.disposers.push(ctx.on("session/event", (session, event) => {
-      this.transport.notify("session.event", { sessionId: String(session.id), event });
+      if (!this.sessions.has(String(session.id))) return;
+      const projected = projectHarnessEvent(event);
+      if (projected) notifyBounded(this.transport, "session.event", { sessionId: String(session.id), event: projected });
     }));
     this.disposers.push(ctx.on("agent/status", ({ agent, status }) => {
-      this.transport.notify("session.status", { sessionId: String(agent.id), status });
+      notifyBounded(this.transport, "session.status", { sessionId: String(agent.id), status });
     }));
     this.disposers.push(ctx.on("session/created", (session) => {
       if (session.header.parentSession === undefined) return;
-      this.transport.notify("subagent.started", {
+      notifyBounded(this.transport, "subagent.started", {
         parentSessionId: String(session.header.parentSession),
         childSessionId: String(session.id),
       });
@@ -36,7 +139,7 @@ class CodexaHarnessServer {
     this.disposers.push(ctx.on("subagent/end", function(info) {
       if (!info.local) return;
       const parent = carrierKeyOf(this);
-      notificationTransport.notify("subagent.finished", {
+      notifyBounded(notificationTransport, "subagent.finished", {
         parentSessionId: String(parent.session.id),
         childSessionId: String(info.id),
         status: info.stopReason === "completed" ? "ok" : "error",
@@ -50,7 +153,7 @@ class CodexaHarnessServer {
         sessionId: String(agent.id),
         callId: execution.callId === undefined ? undefined : String(execution.callId),
         tool: execution.name,
-        arguments: execution.arguments,
+        arguments: policyArguments(execution.arguments),
       });
       if (!result || typeof result !== "object") {
         return { kind: "deny", reason: "Codexa returned an invalid tool-policy decision." };
@@ -202,7 +305,17 @@ export function apply(ctx) {
   });
   ctx.effect(() => {
     transport.start();
+    const memoryTimer = setInterval(() => {
+      const rssBytes = process.memoryUsage().rss;
+      if (rssBytes >= maxRssBytes) {
+        process.stderr.write("Codexa Local Harness RAM safety limit reached.\n");
+        process.exit(85);
+      }
+      notifyBounded(transport, "harness.memory", { rssBytes });
+    }, 500);
+    memoryTimer.unref();
     return async () => {
+      clearInterval(memoryTimer);
       await server.shutdown();
       transport.close();
     };

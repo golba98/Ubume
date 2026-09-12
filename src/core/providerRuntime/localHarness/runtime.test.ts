@@ -278,6 +278,37 @@ describe("Local Harness provider routing", () => {
     assert.equal(killedWith, "SIGTERM");
   });
 
+  test("1 GiB RSS guard stops the turn, invalidates its session, and releases the child", () => {
+    const runner = new LocalHarnessProcess();
+    const errors: Error[] = [];
+    const sessionChanges: Array<{ sessionId: string; present: boolean }> = [];
+    let killedWith: string | null = null;
+    const child = { exitCode: null, signalCode: null, kill: (signal: string) => { killedWith = signal; } };
+    const internals = runner as unknown as {
+      child: unknown;
+      active: unknown;
+      transport: unknown;
+      checkMemory(child: unknown, rssBytes: number): void;
+    };
+    internals.child = child;
+    internals.transport = { close: () => undefined, request: async () => ({}) };
+    internals.active = {
+      sessionId: "session-1",
+      settled: false,
+      handlers: { onLocalHarnessSession: (session: unknown, sessionId: string) => sessionChanges.push({ sessionId, present: session !== null }) },
+      abortCleanup: () => undefined,
+      reject: (error: Error) => errors.push(error),
+    };
+    internals.checkMemory(child, 1024 * 1024 * 1024 - 1);
+    assert.equal(errors.length, 0);
+    internals.checkMemory(child, 1024 * 1024 * 1024);
+    assert.equal(errors.length, 1);
+    assert.match(errors[0]!.message, /1 GiB process RAM/);
+    assert.deepEqual(sessionChanges, [{ sessionId: "session-1", present: false }]);
+    assert.equal(killedWith, "SIGTERM");
+    assert.equal(internals.child, null);
+  });
+
   test("cancellation aborts the active Harness request", async () => {
     const observed: { signal?: AbortSignal } = {};
     const fake: LocalHarnessRunner = {
@@ -485,7 +516,7 @@ describe("Harness event projection and policy", () => {
     const finalMetadata: Array<{ throughMessageCount: number; transcriptHash: string }> = [];
     const fixture = activeProcess({
       onFinalAnswerObserved: (text) => observedFinalAnswers.push(text),
-      onLocalHarnessSession: (metadata) => finalMetadata.push(metadata),
+      onLocalHarnessSession: (metadata) => { if (metadata) finalMetadata.push(metadata); },
     });
     const active = (fixture.process as unknown as { active: { resolve: (text: string) => void } }).active;
     active.resolve = (text) => resolved.push(text);
@@ -571,6 +602,26 @@ describe("Harness event projection and policy", () => {
     assert.deepEqual(fixture.usage, [12]);
     assert.deepEqual(fixture.tools.map((item) => item.status), ["running", "completed", "running", "completed"]);
     assert.equal(fixture.tools[0]?.command, "git status");
+  });
+
+  test("long reasoning display and completed tool arguments stay bounded", () => {
+    const fixture = activeProcess();
+    const notify = notifier(fixture);
+    for (let index = 0; index < 12; index += 1) {
+      notify("session.event", { sessionId: "session-1", event: {
+        type: "assistant/chunk",
+        data: { step: 1, chunk: { type: "reasoning-delta", index: 0, text: "x".repeat(8_000) } },
+      } });
+    }
+    const display = fixture.progress.at(-1)!;
+    assert.match(display, /Earlier reasoning omitted/);
+    assert.ok(display.length < 33_000);
+    assert.equal((display.match(/Earlier reasoning omitted/g) ?? []).length, 1);
+
+    notify("session.event", { sessionId: "session-1", event: { type: "tool/call", data: { callId: "call-1", name: "bash", arguments: "{\"command\":\"git status\"}" } } });
+    notify("session.event", { sessionId: "session-1", event: { type: "tool/result", data: { message: { source: { callId: "call-1" }, content: [{ type: "text", text: "clean" }] } } } });
+    const active = (fixture.process as unknown as { active: { toolArguments: Map<string, unknown> } }).active;
+    assert.equal(active.toolArguments.has("call-1"), false);
   });
 
   test("approved plan execution asks for mutating tools instead of denying them", async () => {
