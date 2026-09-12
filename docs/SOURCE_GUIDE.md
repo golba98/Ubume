@@ -312,6 +312,8 @@ Normalize paths consistently, keep mutable Codexa state outside projects, honor 
 | `src/core/workspace/planStorage.ts` | Normalizes, saves, and reads reviewed plans from Codexa workspace data. |
 | `src/core/workspace/projectInstructions.test.ts` | Verifies project Instructions behavior and regression contracts in the core/workspace area. |
 | `src/core/workspace/projectInstructions.ts` | Finds and loads AGENTS.md/project instructions with explicit missing, loaded, and error states. |
+| `src/core/workspace/scratchDir.test.ts` | Verifies session scratch folder creation, self-gitignore, id safety, and stale-folder pruning. |
+| `src/core/workspace/scratchDir.ts` | Creates and prunes per-session `.codexa/scratch/<session>` folders where the Local agent keeps throwaway test/debug files. |
 | `src/core/workspace/workspaceActivity.test.ts` | Verifies workspace Activity behavior and regression contracts in the core/workspace area. |
 | `src/core/workspace/workspaceActivity.ts` | Snapshots workspace files, detects changes, aggregates activity, and tracks modifications during runs. |
 | `src/core/workspace/workspaceGuard.test.ts` | Verifies workspace Guard behavior and regression contracts in the core/workspace area. |

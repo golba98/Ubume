@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, test } from "node:test";
@@ -132,6 +132,24 @@ describe("Local Harness provider routing", () => {
     assert.match(patch, /id: llm-deepseek\n  disabled: true/);
     assert.match(patch, /defaultPreset: !!js process\.env\.CODEXA_DSH_PERMISSION_PRESET/);
     assert.match(patch, /danger-full-access:\n        sandbox: danger-full-access\n        approval: never/);
+    assert.match(patch, /session scratch directory under \.codexa\/scratch\//);
+  });
+
+  test("writable sessions get a workspace scratch folder note; plan mode does not", () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "codexa-harness-scratch-"));
+    try {
+      const writable = { ...request("Qwen"), workspaceRoot };
+      const note = localHarnessTestUtils.prepareSessionScratch(writable, "session-1", false);
+      assert.match(note ?? "", /\.codexa\/scratch\/session-1\//);
+      assert.ok(existsSync(join(workspaceRoot, ".codexa", "scratch", "session-1")));
+      assert.ok(existsSync(join(workspaceRoot, ".codexa", "scratch", ".gitignore")));
+
+      const planning = { ...writable, runIntent: "plan" } as ProviderChatRequest;
+      assert.equal(localHarnessTestUtils.prepareSessionScratch(planning, "session-2", false), null);
+      assert.equal(existsSync(join(workspaceRoot, ".codexa", "scratch", "session-2")), false);
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   test("Codexa permission modes map to the official Harness sandbox schema", () => {
@@ -638,5 +656,12 @@ describe("Harness event projection and policy", () => {
     assert.deepEqual(await bridge("approval/request", { sessionId: "session-1", callId: "1", tool: "bash" }), { outcome: "allowed-once" });
     assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "2", tool: "bash", arguments: { command: "rm -rf ." } }), { kind: "deny", reason: "Shell command blocked as dangerous." });
     assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "3", tool: "bash", arguments: { command: "gh pr create --fill" } }), { kind: "ask", reason: "Allow gh pr create --fill?" });
+  });
+
+  test("session scratch paths pass the workspace guard", async () => {
+    const fixture = activeProcess();
+    const bridge = (fixture.process as unknown as { onBridgeRequest(method: string, params: Record<string, unknown>): Promise<unknown> }).onBridgeRequest.bind(fixture.process);
+    assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "1", tool: "write", arguments: { path: ".codexa/scratch/session-1/_probe.html" } }), { kind: "ask", reason: "Allow write .codexa/scratch/session-1/_probe.html?" });
+    assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "2", tool: "bash", arguments: { command: "node .codexa/scratch/session-1/_cdp.js" } }), { kind: "ask", reason: "Allow node .codexa/scratch/session-1/_cdp.js?" });
   });
 });
