@@ -12,6 +12,7 @@ import { resolveDefaultMaxOutputTokens } from "../localOutputBudget.js";
 import type { LocalHarnessSessionMetadata } from "../../workspace/conversationStore.js";
 import { resolveCodexaWorkspaceDataDir } from "../../workspace/appData.js";
 import { getShellWorkspaceGuardMessage, isPathInsideAllowedRoots } from "../../workspace/workspaceGuard.js";
+import { ensureSessionScratchDir, pruneStaleScratchDirs } from "../../workspace/scratchDir.js";
 import { isDangerousShellCommand } from "../../agent/tools.js";
 import { traceLocalStream } from "../../debug/localStreamDebug.js";
 import {
@@ -205,6 +206,18 @@ function resolveDshBin(): string {
   return resolve(dirname(packagePath), manifest.bin.dsh);
 }
 
+function prepareSessionScratch(request: ProviderChatRequest, sessionId: string, resumed: boolean): string | null {
+  if (resolveHarnessSandboxMode(request) === "read-only") return null;
+  try {
+    const scratch = ensureSessionScratchDir(request.workspaceRoot, sessionId);
+    if (!resumed) pruneStaleScratchDirs(request.workspaceRoot, { keep: sessionId });
+    return `Scratch directory for this session: ${scratch.relativePath}/ (put every temporary test, debug, or probe file there, not in the project).`;
+  } catch (error) {
+    traceLocalStream("harness.scratch.unavailable", { sessionId, error: error instanceof Error ? error.message : String(error) });
+    return null;
+  }
+}
+
 function bridgePath(): string {
   return fileURLToPath(new URL("../../../../bin/codexa-local-harness-bridge.js", import.meta.url));
 }
@@ -298,7 +311,11 @@ function profilePatch(supportsVision: boolean, reasoningEffortEnabled = false): 
     persona: >-
       You are a coding agent running inside Codexa. Work only in the active workspace,
       use the provided Harness tools for shell and file operations, and respect every
-      Codexa permission decision.
+      Codexa permission decision. Put throwaway files you create only to test, debug,
+      or inspect your work (harness pages, probe scripts, logs, dumps, browser profiles)
+      in the session scratch directory under .codexa/scratch/ that Codexa names, never
+      in the project root or source tree. Only deliverables the user asked for belong
+      in the project.
 - insert:
     - id: codexa-local-harness-bridge
       name: ${yamlString(bridgePath())}
@@ -398,6 +415,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       await this.transport!.request("session/close", { sessionId: metadata.sessionId }).catch(() => undefined);
     }
     const sessionId = canResume ? metadata.sessionId : randomUUID();
+    const scratchNote = prepareSessionScratch(request, sessionId, canResume);
     traceLocalStream("harness.session.open", { sessionId, model: config.model, resumed: canResume, endpoint: sanitizedEndpoint(config.baseUrl) });
     await this.transport!.request("session/open", {
       sessionId,
@@ -449,7 +467,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       signal.addEventListener("abort", abort, { once: true });
       state.abortCleanup = () => signal.removeEventListener("abort", abort);
       const history = request.conversationHistory ?? [];
-      const promptContent = !canResume && history.length > 0
+      const conversationContent = !canResume && history.length > 0
         ? [
           "Codexa restored the following visible conversation into a new Local Harness session.",
           "Treat it as prior dialogue; prior ephemeral tool state is unavailable.",
@@ -459,6 +477,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
           `USER: ${request.prompt}`,
         ].join("\n")
         : request.prompt;
+      const promptContent = scratchNote ? `${scratchNote}\n\n${conversationContent}` : conversationContent;
       if (!canResume && history.length > 0) {
         handlers.onProgress?.({
           id: "local-harness-session-migration",
@@ -979,6 +998,7 @@ export function closeLocalHarnessSession(sessionId: string | undefined): Promise
 export const localHarnessTestUtils = {
   resolveHarnessConfig,
   resolveHarnessSandboxMode,
+  prepareSessionScratch,
   routeFingerprint,
   secretFingerprint,
   profilePatch,

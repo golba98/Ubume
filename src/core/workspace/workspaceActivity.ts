@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join, relative, sep } from "path";
+import { SCRATCH_RELATIVE_DIR } from "./scratchDir.js";
 
 export type RunFileOperation = "created" | "modified" | "deleted";
 export type RunDiffLineKind = "added" | "removed";
@@ -243,7 +244,9 @@ export function captureWorkspaceSnapshot(rootDir: string): Map<string, Workspace
     for (const entry of entries) {
       if (entry.isDirectory()) {
         if (shouldIgnoreDirectory(entry.name)) continue;
-        walk(join(dir, entry.name));
+        const childDir = join(dir, entry.name);
+        if (normalizePath(relative(rootDir, childDir)) === SCRATCH_RELATIVE_DIR) continue;
+        walk(childDir);
         continue;
       }
 
