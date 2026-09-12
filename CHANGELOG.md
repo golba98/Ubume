@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+No changes yet.
+
+---
+
+## [1.0.27] — 2026-09-12 — Plan Approval Cleanup
+
 ### Fixed
 
 - **The approved plan is no longer printed twice** — pressing `Implement

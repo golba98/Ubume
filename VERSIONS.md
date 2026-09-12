@@ -3,6 +3,14 @@
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
 
+## v1.0.27 — 2026-09-12
+
+Approving a plan no longer prints the whole plan a second time underneath the
+"Plan approved" line — Codexa goes straight from approval into the work. Long
+cards in a running turn also stay properly framed when they are taller than the
+terminal: instead of a borderless box that starts mid-sentence, the card keeps
+its title and shows how many rows are hidden above.
+
 ## v1.0.26 — 2026-09-03
 
 Shell command blocks are now deliberately plain and copy-ready: the commands
