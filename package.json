@@ -47,12 +47,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/golba98/ubume-cli.git"
+    "url": "git+https://github.com/golba98/Ubume.git"
   },
   "bugs": {
-    "url": "https://github.com/golba98/ubume-cli/issues"
+    "url": "https://github.com/golba98/Ubume/issues"
   },
-  "homepage": "https://github.com/golba98/ubume-cli#readme",
+  "homepage": "https://github.com/golba98/Ubume#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
   },
