@@ -187,7 +187,7 @@ function makeRun(thinkingText: string): RunEvent {
     startedAt: 1,
     durationMs: null,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: "Explain",
     progressEntries: [makeProgressEntry(thinkingText)],
@@ -252,7 +252,7 @@ function makeStreamingResponseRenderItem(text: string): RenderTimelineItem {
     startedAt: 1,
     durationMs: null,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: "Compare algorithms",
     progressEntries: [],
@@ -318,7 +318,7 @@ function makeActionSequenceRenderItem(
     startedAt: 1,
     durationMs: finalized ? 100 : null,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: "Inspect files",
     progressEntries: [],
@@ -375,7 +375,7 @@ function makeCompletedPlanRenderItem(planText: string, status: "running" | "comp
     startedAt: 1,
     durationMs: status === "completed" ? 100 : null,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: user.prompt,
     progressEntries: [],
@@ -731,7 +731,7 @@ test("running run keeps its prompt and visible stream events reflowable", () => 
 
   const run: RunEvent = {
     id: 50, type: "run", createdAt: 1, startedAt: 1, durationMs: null,
-    backendId: "codex-subprocess", backendLabel: "Codexa", runtime: TEST_RUNTIME,
+    backendId: "codex-subprocess", backendLabel: "Ubume", runtime: TEST_RUNTIME,
     prompt: "Inspect project",
     progressEntries: [progressEntry],
     status: "running", summary: "running...", truncatedOutput: false,
@@ -793,7 +793,7 @@ test("completed run moves all stream events to staticItems — one atomic commit
 
   const run: RunEvent = {
     id: 52, type: "run", createdAt: 1, startedAt: 1, durationMs: 300,
-    backendId: "codex-subprocess", backendLabel: "Codexa", runtime: TEST_RUNTIME,
+    backendId: "codex-subprocess", backendLabel: "Ubume", runtime: TEST_RUNTIME,
     prompt: "Done project",
     progressEntries: [progressEntry2],
     status: "completed", summary: "completed", truncatedOutput: false,
@@ -839,7 +839,7 @@ test("gap row keys use event.streamSeq — stable across compaction changes", ()
 
   const run: RunEvent = {
     id: 54, type: "run", createdAt: 1, startedAt: 1, durationMs: 200,
-    backendId: "codex-subprocess", backendLabel: "Codexa", runtime: TEST_RUNTIME,
+    backendId: "codex-subprocess", backendLabel: "Ubume", runtime: TEST_RUNTIME,
     prompt: "Read files",
     progressEntries: [],
     status: "completed", summary: "done", truncatedOutput: false,
@@ -1032,7 +1032,7 @@ test("contiguous reasoning coalesces to one Reasoning block; a tool call splits 
     startedAt: 1,
     durationMs: 900,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: "hi",
     progressEntries: [

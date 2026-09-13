@@ -1,8 +1,8 @@
 import React, { memo } from "react";
 import { Box, Text } from "ink";
 import { HEADER_CONFIG_DEFAULTS, type HeaderConfig } from "../../config/settings.js";
-import { formatCodexaBrandLabel } from "../../core/version/channel.js";
-import { CODEXA_UPDATE_COMMAND, formatVersionLabel } from "../../core/version/updateCheck.js";
+import { formatUbumeBrandLabel } from "../../core/version/channel.js";
+import { UBUME_UPDATE_COMMAND, formatVersionLabel } from "../../core/version/updateCheck.js";
 import type { RuntimeSummary } from "../../config/runtimeConfig.js";
 import type { CodexAuthState } from "../../core/auth/codexAuth.js";
 import { getAuthStateLabel } from "../../core/auth/codexAuth.js";
@@ -35,7 +35,7 @@ const STACKED_METADATA_GAP_ROWS = 1;
 const UPDATE_CARD_GAP_ROWS = 1;
 // Recommended terminal size shown in the compact-mode hint when the viewport is
 // too small to render any logo art.
-const RECOMMENDED_FULL_HEADER_HINT = `Resize to ≥${LOGO_LARGE_MIN_COLS}×${LOGO_LARGE_MIN_ROWS} for the full Codexa header`;
+const RECOMMENDED_FULL_HEADER_HINT = `Resize to ≥${LOGO_LARGE_MIN_COLS}×${LOGO_LARGE_MIN_ROWS} for the full Ubume header`;
 
 export type HeaderHeroMode = "wide" | "medium" | "narrow" | "compact";
 
@@ -102,15 +102,15 @@ function getHeaderVerticalMargins(layout: Layout): { topMarginRows: number; bott
 }
 
 export function selectHeaderLogo(layout: Layout): readonly string[] {
-  if (process.env["CODEXA_NO_ASCII_LOGO"] === "1") return [];
+  if (process.env["UBUME_NO_ASCII_LOGO"] === "1") return [];
   const showNormalLogo =
-    process.env["CODEXA_NO_ASCII_LOGO"] !== "1" && (
+    process.env["UBUME_NO_ASCII_LOGO"] !== "1" && (
       layout.mode === "regular" ||
       layout.mode === "expanded" ||
       (layout.mode === "compact" && layout.cols >= 72)
     );
   if (!showNormalLogo) return [];
-  if (process.env["CODEXA_COMPACT_LOGO"] === "1") return LOGO_COMPACT;
+  if (process.env["UBUME_COMPACT_LOGO"] === "1") return LOGO_COMPACT;
   return LOGO_LARGE;
 }
 
@@ -124,7 +124,7 @@ export function getHeaderHeroLayout(
   const contentWidth = getHeaderContentWidth(layout.cols);
 
   const showNormalLogo =
-    process.env["CODEXA_NO_ASCII_LOGO"] !== "1" && (
+    process.env["UBUME_NO_ASCII_LOGO"] !== "1" && (
       layout.mode === "regular" ||
       layout.mode === "expanded" ||
       (layout.mode === "compact" && layout.cols >= 72)
@@ -271,7 +271,7 @@ export function TopHeader({
     : contentWidth;
   const workspaceValueWidth = Math.max(1, metadataWidth - getTextWidth("Workspace: "));
   const wsDisplay = shortenHeaderWorkspaceLabel(workspaceLabel, workspaceValueWidth);
-  const brandLabel = formatCodexaBrandLabel();
+  const brandLabel = formatUbumeBrandLabel();
   const metadataLinesRaw = [
     headerConfig.showBrand ? { key: "brand", text: brandLabel, color: theme.text, bold: true } : null,
     headerConfig.showAuthStatus ? { key: "auth", text: `Auth: ${authLabel}`, color: theme.text, bold: false } : null,
@@ -305,7 +305,7 @@ export function TopHeader({
     </Box>
   );
 
-  // Canonical CODEXA wordmark — uses per-line LOGO palette defined in each theme.
+  // Canonical UBUME wordmark — uses per-line LOGO palette defined in each theme.
   // No `bold`: bold on Unicode block/box-drawing characters causes per-glyph
   // spacing artifacts in common terminal fonts (Ptyxis, GNOME Terminal).
   // wrap="truncate" keeps each row on exactly one terminal line.
@@ -361,7 +361,7 @@ export function TopHeader({
             )}
             {metadataColumn}
             {updateAvailable && (
-              <Text color={theme.warning} wrap="truncate">{`Update available: Codexa ${formatVersionLabel(updateAvailable.latestVersion)} — Run: ${updateAvailable.updateCommand ?? CODEXA_UPDATE_COMMAND}`}</Text>
+              <Text color={theme.warning} wrap="truncate">{`Update available: Ubume ${formatVersionLabel(updateAvailable.latestVersion)} — Run: ${updateAvailable.updateCommand ?? UBUME_UPDATE_COMMAND}`}</Text>
             )}
           </Box>
         )}
@@ -378,7 +378,7 @@ export function TopHeader({
   const compactWorkspaceValueWidth = Math.max(1, compactMetadataWidth - getTextWidth("Workspace: "));
   const compactWorkspaceDisplay = shortenHeaderWorkspaceLabel(workspaceLabel, compactWorkspaceValueWidth);
   // A leading ✦ accent makes the single-line header read as a deliberate
-  // compact Codexa header rather than a broken fallback.
+  // compact Ubume header rather than a broken fallback.
   const compactParts: React.ReactNode[] = [
     <Text key="accent" color={theme.accent} bold>{"✦ "}</Text>,
   ];

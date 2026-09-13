@@ -32,7 +32,7 @@ const openAiRuntime: ProviderRuntime = {
   label: "OpenAI/Codex",
   backendKind: "codex-cli-auth",
   routeAvailable: true,
-  routeStatus: "Uses the configured Codex/OpenAI backend inside Codexa.",
+  routeStatus: "Uses the configured Codex/OpenAI backend inside Ubume.",
   launchAvailable: true,
   discoverModels: () => ({
     status: "ready",
@@ -66,14 +66,14 @@ function unavailableRuntime(providerId: ProviderId, label: string): ProviderRunt
     label,
     backendKind: "unavailable",
     routeAvailable: false,
-    routeStatus: `${label} is available as a launcher, but in-Codexa routing is not configured yet.`,
+    routeStatus: `${label} is available as a launcher, but in-Ubume routing is not configured yet.`,
     launchAvailable: providerId !== "local",
     discoverModels: (): ProviderModelDiscoveryResult => ({
       status: "not-configured",
       providerId,
       backendKind: "unavailable",
       models: [],
-      message: `${label} is available as a launcher, but in-Codexa routing is not configured yet.`,
+      message: `${label} is available as a launcher, but in-Ubume routing is not configured yet.`,
     }),
   };
 }
@@ -93,7 +93,7 @@ export function getProviderRuntime(providerId: ProviderId): ProviderRuntime {
   return PROVIDER_RUNTIMES[providerId];
 }
 
-export function isProviderRoutableInCodexa(
+export function isProviderRoutableInUbume(
   providerId: ProviderId,
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
@@ -108,7 +108,7 @@ export function isProviderRouteConfigured(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
   const runtime = getProviderRuntime(providerId);
-  return isProviderRoutableInCodexa(providerId, env) && (runtime.isRouteConfigured?.() ?? true);
+  return isProviderRoutableInUbume(providerId, env) && (runtime.isRouteConfigured?.() ?? true);
 }
 
 export function getProviderRouteSetupMessage(providerId: ProviderId): string {
@@ -196,7 +196,7 @@ export function resolveActiveProviderRoute(options: {
   currentReasoning: string;
 }): ActiveProviderRoute {
   const configuredRoute = options.workspaceConfigActiveRoute;
-  if (configuredRoute && configuredRoute.providerId !== "google" && isProviderRoutableInCodexa(configuredRoute.providerId)) {
+  if (configuredRoute && configuredRoute.providerId !== "google" && isProviderRoutableInUbume(configuredRoute.providerId)) {
     const route: ActiveProviderRoute = {
       providerId: configuredRoute.providerId,
       modelId: configuredRoute.modelId,
@@ -282,3 +282,5 @@ export function getDefaultRouteModel(providerId: ProviderId, currentOpenAiModel:
   }
   return currentOpenAiModel;
 }
+
+export const isProviderRoutableInCodexa = isProviderRoutableInUbume;

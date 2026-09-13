@@ -71,7 +71,7 @@ test("strips HTML before parsing model specs", () => {
 });
 
 test("cache round-trip preserves verified values", () => {
-  const dir = mkdtempSync(join(tmpdir(), "codexa-model-specs-"));
+  const dir = mkdtempSync(join(tmpdir(), "ubume-model-specs-"));
   const cacheFile = join(dir, "model-specs.json");
 
   try {
@@ -94,7 +94,7 @@ test("cache round-trip preserves verified values", () => {
 });
 
 test("background refresh updates specs and dedupes concurrent requests", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "codexa-model-specs-"));
+  const dir = mkdtempSync(join(tmpdir(), "ubume-model-specs-"));
   const cacheFile = join(dir, "model-specs.json");
   let fetchCalls = 0;
   const service = createModelSpecService({
@@ -126,7 +126,7 @@ test("background refresh updates specs and dedupes concurrent requests", async (
 });
 
 test("refresh returns unknown when a fetch fails even if cache exists", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "codexa-model-specs-"));
+  const dir = mkdtempSync(join(tmpdir(), "ubume-model-specs-"));
   const cacheFile = join(dir, "model-specs.json");
   saveModelSpecCache({
     "gpt-5.3-codex": {
@@ -155,7 +155,7 @@ test("refresh returns unknown when a fetch fails even if cache exists", async ()
 });
 
 test("refresh returns unknown when there is no cache and verification fails", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "codexa-model-specs-"));
+  const dir = mkdtempSync(join(tmpdir(), "ubume-model-specs-"));
   const cacheFile = join(dir, "model-specs.json");
   const service = createModelSpecService({
     cacheFile,

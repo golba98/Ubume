@@ -155,8 +155,8 @@ export function checkLocalGitWrite(): DiagnosticResult {
   }
 
   try {
-    execSync("git update-ref refs/heads/codexa-diagnostic-lock-test HEAD", { stdio: "ignore" });
-    execSync("git update-ref -d refs/heads/codexa-diagnostic-lock-test", { stdio: "ignore" });
+    execSync("git update-ref refs/heads/ubume-diagnostic-lock-test HEAD", { stdio: "ignore" });
+    execSync("git update-ref -d refs/heads/ubume-diagnostic-lock-test", { stdio: "ignore" });
     result.status = "PASS";
     result.evidence = "Can create/delete refs";
   } catch (error) {

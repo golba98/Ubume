@@ -55,7 +55,7 @@ export function isHomeScreenState({
 }
 
 function getLogoVariantName(rows: readonly string[]): "large" | "medium" | "compact" | "wordmark" | "none" {
-  if (rows.length === 0) return process.env["CODEXA_NO_ASCII_LOGO"] === "1" ? "none" : "wordmark";
+  if (rows.length === 0) return process.env["UBUME_NO_ASCII_LOGO"] === "1" ? "none" : "wordmark";
   if (rows === LOGO_LARGE || rows.join("\n") === LOGO_LARGE.join("\n")) return "large";
   if (rows === LOGO_MEDIUM || rows.join("\n") === LOGO_MEDIUM.join("\n")) return "medium";
   if (rows === LOGO_COMPACT || rows.join("\n") === LOGO_COMPACT.join("\n")) return "compact";
@@ -72,7 +72,7 @@ function getLogoHiddenReason({
   width: number;
 }): string | null {
   if (startupHeaderMode === "tiny") return "terminal-too-small";
-  if (process.env["CODEXA_NO_ASCII_LOGO"] === "1") return "CODEXA_NO_ASCII_LOGO";
+  if (process.env["UBUME_NO_ASCII_LOGO"] === "1") return "UBUME_NO_ASCII_LOGO";
   if (logoVariant === "wordmark") return `no-ascii-variant-fits-width-${width}`;
   if (logoVariant === "none") return `no-logo-variant-fits-width-${width}`;
   return null;

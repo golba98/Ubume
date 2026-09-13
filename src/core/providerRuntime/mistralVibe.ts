@@ -101,7 +101,7 @@ interface VibeConfigModelEntry {
 
 // Vibe resolves `active_model` (and the VIBE_ACTIVE_MODEL override) against the
 // model *alias*, which defaults to the model name when omitted — so the alias is
-// the id Codexa must select and pass back.
+// the id Ubume must select and pass back.
 function readVibeModelEntries(filePath: string): VibeConfigModelEntry[] {
   if (!existsSync(filePath)) return [];
   try {
@@ -270,7 +270,7 @@ export async function launchMistralVibeCli(
 
 // ─── Session continuation ────────────────────────────────────────────────────
 // Vibe persists every programmatic run as a session directory; passing the last
-// session id back via --resume keeps conversation context across Codexa turns.
+// session id back via --resume keeps conversation context across Ubume turns.
 
 const activeVibeSessions = new Map<string, string>();
 
@@ -313,7 +313,7 @@ export async function findLatestVibeSession(options: {
         if (typeof meta.session_id !== "string" || typeof meta.start_time !== "string") continue;
         if (meta.environment?.working_directory !== workspaceRoot) continue;
         const startMs = Date.parse(meta.start_time);
-        // 5s slack absorbs clock skew between Codexa's spawn timestamp and vibe's own start_time.
+        // 5s slack absorbs clock skew between Ubume's spawn timestamp and vibe's own start_time.
         if (!Number.isFinite(startMs) || startMs < options.sinceMs - 5_000) continue;
         if (startMs > latestStart) {
           latestStart = startMs;
@@ -469,7 +469,7 @@ export function createVibeStreamParser(
   };
 }
 
-// ─── In-Codexa run adapter ───────────────────────────────────────────────────
+// ─── In-Ubume run adapter ───────────────────────────────────────────────────
 
 type VibeCommandRunner = (
   spec: CommandSpec,

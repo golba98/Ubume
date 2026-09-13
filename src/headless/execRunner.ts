@@ -78,7 +78,7 @@ export function createHeadlessExecTiming(options: {
           return `${key}=${serialized}`;
         })
         .join(" ");
-      writeLine(stderr, `[codexa exec timing] phase=${phase} elapsed_ms=${elapsedMs} delta_ms=${deltaMs}${formattedFields ? ` ${formattedFields}` : ""}`);
+      writeLine(stderr, `[ubume exec timing] phase=${phase} elapsed_ms=${elapsedMs} delta_ms=${deltaMs}${formattedFields ? ` ${formattedFields}` : ""}`);
     },
   };
 }
@@ -109,7 +109,7 @@ function formatDiagnosticText(value: string): string {
 function writeDiagnostic(stderr: Pick<NodeJS.WriteStream, "write">, kind: string, message: string): void {
   const safeMessage = formatDiagnosticText(message);
   if (!safeMessage) return;
-  writeLine(stderr, `[codexa exec] ${kind}: ${safeMessage.replace(/\n/g, "\n  ")}`);
+  writeLine(stderr, `[ubume exec] ${kind}: ${safeMessage.replace(/\n/g, "\n  ")}`);
 }
 
 function formatToolActivity(activity: RunToolActivity): string {

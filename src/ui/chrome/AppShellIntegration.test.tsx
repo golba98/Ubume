@@ -32,7 +32,7 @@ class TestOutput extends PassThrough {
 const mockProviders = [
   { id: "openai", displayName: "OpenAI", routeMode: "provider-direct", backendType: "openai", isActiveRoute: true, enabled: true, currentModel: "gpt-4", statusLabel: "Active" },
   { id: "anthropic", displayName: "Anthropic", routeMode: "provider-direct", backendType: "anthropic", isActiveRoute: false, enabled: true, currentModel: "claude-3", statusLabel: "Ready" },
-  { id: "mistral", displayName: "Mistral Vibe CLI", routeMode: "in-codexa", backendType: "mistral-vibe-cli-auth", isActiveRoute: false, enabled: true, currentModel: "mistral-medium-3.5", statusLabel: "Enabled" },
+  { id: "mistral", displayName: "Mistral Vibe CLI", routeMode: "in-ubume", backendType: "mistral-vibe-cli-auth", isActiveRoute: false, enabled: true, currentModel: "mistral-medium-3.5", statusLabel: "Enabled" },
   { id: "local", displayName: "Local", routeMode: "provider-direct", backendType: "local", isActiveRoute: false, enabled: true, currentModel: "llama-3", statusLabel: "Ready" },
   { id: "antigravity", displayName: "Antigravity", routeMode: "provider-direct", backendType: "antigravity", isActiveRoute: false, enabled: true, currentModel: "AG-1", statusLabel: "Ready" }
 ];
@@ -195,7 +195,7 @@ test("canceling an install leaves the complete updater shell visible", async () 
         layout={layout}
         screen="update-prompt"
         authState="authenticated"
-        workspaceLabel="13-Codexa CLI"
+        workspaceLabel="13-Ubume CLI"
         runtimeSummary={buildRuntimeSummary(TEST_RUNTIME)}
         staticEvents={[]}
         activeEvents={[]}
@@ -236,14 +236,14 @@ test("canceling an install leaves the complete updater shell visible", async () 
   const postCancel = output.slice(beforeCancel).replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
   assert.equal(cancelCalls, 1);
   assert.equal(skipCalls, 0);
-  assert.match(postCancel, /Codexa v/);
-  assert.match(postCancel, /13-Codexa CLI/);
-  assert.match(postCancel, /Update available: Codexa 1\.0\.20/);
+  assert.match(postCancel, /Ubume v/);
+  assert.match(postCancel, /13-Ubume CLI/);
+  assert.match(postCancel, /Update available: Ubume 1\.0\.20/);
   assert.match(postCancel, /Current version: 1\.0\.19/);
   assert.match(postCancel, /│ ❯/);
   assert.match(postCancel, /gpt-5\.4 \(medium\)/);
   assert.match(postCancel, /Context:/);
-  assert.doesNotMatch(postCancel.slice(postCancel.lastIndexOf("Update available")), /Installing Codexa/);
+  assert.doesNotMatch(postCancel.slice(postCancel.lastIndexOf("Update available")), /Installing Ubume/);
 
   instance.cleanup();
 });

@@ -7,11 +7,11 @@ type DebugDetails = Record<string, unknown>;
 let sequence = 0;
 
 export function isInputDebugEnabled(): boolean {
-  return process.env.CODEXA_DEBUG_INPUT === "1";
+  return process.env.UBUME_DEBUG_INPUT === "1";
 }
 
 export function getInputDebugLogPath(): string {
-  return process.env.CODEXA_DEBUG_INPUT_LOG || join(homedir(), ".codexa-input-debug.log");
+  return process.env.UBUME_DEBUG_INPUT_LOG || join(homedir(), ".ubume-input-debug.log");
 }
 
 export function getStdinDebugState(stdin: unknown): DebugDetails {

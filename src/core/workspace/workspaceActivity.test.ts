@@ -162,12 +162,12 @@ test("creates green/red diff excerpts for mixed edits", () => {
   assert.equal(diff.diffLines?.some((line) => line.kind === "removed"), true);
 });
 
-test("ignores agent scratch files under .codexa/scratch", () => {
+test("ignores agent scratch files under .ubume/scratch", () => {
   const root = createTempWorkspace();
   try {
     const before = captureWorkspaceSnapshot(root);
-    mkdirSync(join(root, ".codexa", "scratch", "session-1"), { recursive: true });
-    writeFileSync(join(root, ".codexa", "scratch", "session-1", "_test_harness.html"), "<html></html>\n", "utf8");
+    mkdirSync(join(root, ".ubume", "scratch", "session-1"), { recursive: true });
+    writeFileSync(join(root, ".ubume", "scratch", "session-1", "_test_harness.html"), "<html></html>\n", "utf8");
     writeFileSync(join(root, "index.html"), "<html></html>\n", "utf8");
     const after = captureWorkspaceSnapshot(root);
     const activity = diffWorkspaceSnapshots(before, after, 789);

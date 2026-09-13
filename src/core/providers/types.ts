@@ -47,7 +47,7 @@ export interface BackendRunHandlers {
   /** Persists invisible rolling memory used only by Local context-window rollover. */
   onLocalContextCheckpoint?: (checkpoint: ConversationContextCheckpoint) => void;
   /** Persists the opaque DeepSeek Harness session backing a Local conversation. */
-  onLocalHarnessSession?: (session: LocalHarnessSessionMetadata) => void;
+  onLocalHarnessSession?: (session: LocalHarnessSessionMetadata | null, sessionId: string) => void;
   /** Reports authoritative provider token usage when available. */
   onContextUsage?: (usage: ProviderContextUsage) => void;
   /** Called around backend child-process lifecycle boundaries. */

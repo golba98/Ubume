@@ -14,7 +14,8 @@ import {
   formatWorkspaceDisplayPath,
   getCodexConfigFile,
   getCodexHome,
-  getCodexaTrustStoreFile,
+  getLegacyCodexaTrustStoreFile,
+  getUbumeTrustStoreFile,
   getNextMode,
   getNextRotatingMode,
   normalizeReasoningForModel,
@@ -27,7 +28,6 @@ test("keeps supported reasoning levels for gpt-5.4-mini", () => {
 test("keeps reasoning unchanged for non-mini models", () => {
   assert.equal(normalizeReasoningForModel("gpt-5.4", "low"), "low");
 });
-
 
 test("formats codex-style mode labels", () => {
   assert.equal(formatModeLabel("suggest"), "Read-only");
@@ -69,7 +69,7 @@ test("defines user settings through reusable schemas", () => {
     {
       key: "workspaceDisplayMode",
       label: "Workspace display",
-      description: "Controls how the workspace label is displayed in the Codexa header.",
+      description: "Controls how the workspace label is displayed in the Ubume header.",
       options: [
         { value: "dir", label: "Dir" },
         { value: "name", label: "Name" },
@@ -89,7 +89,7 @@ test("defines user settings through reusable schemas", () => {
     {
       key: "showBusyLoader",
       label: "Busy loader",
-      description: "Controls whether the footer shows a subtle loading animation while Codexa is busy.",
+      description: "Controls whether the footer shows a subtle loading animation while Ubume is busy.",
       options: [
         { value: "true", label: "True" },
         { value: "false", label: "False" },
@@ -106,7 +106,7 @@ test("formats workspace display paths without changing root semantics", () => {
   );
   assert.equal(
     formatWorkspaceDisplayPath("C:\\Development\\1-JavaScript\\13-Custom CLI", "name"),
-    "Codexa",
+    "Ubume",
   );
   assert.equal(
     formatWorkspaceDisplayPath("C:\\Development\\1-JavaScript\\13-Custom CLI", "simple"),
@@ -123,11 +123,11 @@ test("formats terminal title labels with the same workspace semantics", () => {
   );
   assert.equal(
     formatTerminalTitlePath("C:\\Development\\1-JavaScript\\13-Custom-CLI-Normal", "name"),
-    "Codexa",
+    "Ubume",
   );
   assert.equal(
     formatTerminalTitlePath("C:\\Development\\1-JavaScript\\13-Custom-CLI-Normal", "simple"),
-    "Codexa",
+    "Ubume",
   );
 });
 
@@ -138,7 +138,8 @@ test("resolves CODEX_HOME-derived paths from the live environment", () => {
   try {
     assert.equal(getCodexHome(), "C:\\Temp\\codex-home");
     assert.equal(getCodexConfigFile(), "C:\\Temp\\codex-home\\config.toml");
-    assert.equal(getCodexaTrustStoreFile(), "C:\\Temp\\codex-home\\codexa-trust.json");
+    assert.equal(getUbumeTrustStoreFile(), "C:\\Temp\\codex-home\\ubume-trust.json");
+    assert.equal(getLegacyCodexaTrustStoreFile(), "C:\\Temp\\codex-home\\codexa-trust.json");
   } finally {
     if (previousCodexHome === undefined) {
       delete process.env.CODEX_HOME;

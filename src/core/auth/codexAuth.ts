@@ -62,7 +62,7 @@ export function getAuthStateLabel(state: CodexAuthState): string {
 
 export function getLoginGuidance(): string {
   return [
-    "Sign in to the Codexa neural network to continue.",
+    "Sign in to the Ubume neural network to continue.",
     "Run this in your terminal:",
     "  codex login",
     "",
@@ -74,7 +74,7 @@ export function getLoginGuidance(): string {
 
 export function getLogoutGuidance(): string {
   return [
-    "You are managing your Codexa sign-out state.",
+    "You are managing your Ubume sign-out state.",
     "Run this in your terminal:",
     "  codex logout",
     "",
@@ -85,7 +85,7 @@ export function getLogoutGuidance(): string {
 export function getAuthStatusMessage(result: CodexAuthProbeResult): string {
   if (result.state === "authenticated") {
     return [
-      "Codexa authentication looks healthy.",
+      "Ubume authentication looks healthy.",
       "State: Authenticated",
       `Summary: ${result.rawSummary}`,
     ].join("\n");
@@ -93,7 +93,7 @@ export function getAuthStatusMessage(result: CodexAuthProbeResult): string {
 
   if (result.state === "unauthenticated") {
     return [
-      "Codexa is currently signed out.",
+      "Ubume is currently signed out.",
       "State: Signed out",
       `Summary: ${result.rawSummary}`,
       "Recovery:",
@@ -106,7 +106,7 @@ export function getAuthStatusMessage(result: CodexAuthProbeResult): string {
   }
 
   return [
-    "Codexa auth state is unknown. This can happen on unsupported neural versions.",
+    "Ubume auth state is unknown. This can happen on unsupported neural versions.",
     `Summary: ${result.rawSummary}`,
     `Recommended action: ${result.recommendedAction}`,
   ].join("\n");
@@ -130,7 +130,7 @@ export function getRunGateDecision(
     return {
       allowRun: false,
       blockMessage: [
-        "Run blocked: Codexa is signed out.",
+        "Run blocked: Ubume is signed out.",
         "Sign in first with your ChatGPT subscription:",
         "  codex login",
       ].join("\n"),
@@ -197,7 +197,7 @@ export async function probeCodexAuthStatus(): Promise<CodexAuthProbeResult> {
           checkedAt: Date.now(),
           rawSummary: summary,
           recommendedAction:
-            "Set CODEX_EXECUTABLE to a working Codex command/path, restart Codexa, then run /auth status again.",
+            "Set CODEX_EXECUTABLE to a working Codex command/path, restart Ubume, then run /auth status again.",
         };
       }
 

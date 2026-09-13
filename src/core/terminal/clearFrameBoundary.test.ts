@@ -275,7 +275,7 @@ test("seeded post-clear launch frame is ready even when static events are not em
 test("replays suppressed static intro rows into the first authoritative post-clear frame", () => {
   const harness = createHarness();
   const { controller, instance, events } = harness;
-  const staticIntro = "██╔════╝██╔═══██╗\nCodexa v1.0.4-dev local\nProvider: Local\n";
+  const staticIntro = "██╔════╝██╔═══██╗\nUbume v1.0.4-dev local\nProvider: Local\n";
 
   controller.syncRenderState({
     generation: 0,
@@ -286,7 +286,7 @@ test("replays suppressed static intro rows into the first authoritative post-cle
   });
   controller.beginClearGeneration(1);
 
-  instance.renderInteractiveFrame?.("│ ❯ Ask Codexa\nContext: 0 / ~200K", 4, staticIntro);
+  instance.renderInteractiveFrame?.("│ ❯ Ask Ubume\nContext: 0 / ~200K", 4, staticIntro);
   assert.equal(events.length, 0, "first post-clear commit is still behind the stale gate");
 
   const repaintRequested = controller.syncRenderState({
@@ -299,11 +299,11 @@ test("replays suppressed static intro rows into the first authoritative post-cle
   });
   assert.equal(repaintRequested, true);
 
-  instance.renderInteractiveFrame?.("│ ❯ Ask Codexa\nContext: 0 / ~200K", 4, "");
+  instance.renderInteractiveFrame?.("│ ❯ Ask Ubume\nContext: 0 / ~200K", 4, "");
 
   assert.equal(events[0]?.startsWith("clear:test:clearBoundary:firstPostClearFrame"), true);
   assert.ok(
-    events.some((entry) => entry === `write:│ ❯ Ask Codexa\nContext: 0 / ~200K:4:${staticIntro.length}`),
+    events.some((entry) => entry === `write:│ ❯ Ask Ubume\nContext: 0 / ~200K:4:${staticIntro.length}`),
     "authoritative frame should replay the static intro that Ink consumed during the suppressed frame",
   );
   assert.equal(controller.getState().clearPending, false);
@@ -579,7 +579,7 @@ test("startup overlay exit commits a freshly mounted main Static frame into an e
   events.length = 0;
 
   overlayActive = false;
-  const freshMainStatic = "Codexa logo\nWorkspace: test\nProvider: Local\n";
+  const freshMainStatic = "Ubume logo\nWorkspace: test\nProvider: Local\n";
   instance.fullStaticOutput = `${instance.fullStaticOutput ?? ""}${freshMainStatic}`;
   instance.renderInteractiveFrame?.("composer\nLocal / model\nContext: Unknown", 6, freshMainStatic);
 
@@ -647,7 +647,7 @@ test("a clear armed while an overlay is open replaces the pre-overlay transcript
   const harness = createHarness({ isOverlayActive: () => overlayActive });
   const { controller, instance, events } = harness;
 
-  const oldStatic = "Codexa logo\nold chat\n";
+  const oldStatic = "Ubume logo\nold chat\n";
   controller.syncRenderState({ generation: 0, staticEventsLength: 2, activeEventsLength: 0, transcriptCleared: false, uiStateKind: "IDLE" });
   instance.fullStaticOutput = oldStatic;
   instance.renderInteractiveFrame?.("main-frame", 4, oldStatic);
@@ -658,7 +658,7 @@ test("a clear armed while an overlay is open replaces the pre-overlay transcript
 
   // Resume arms the clear, then swaps the transcript and closes the picker in one commit.
   assert.equal(controller.beginClearGeneration(1), true);
-  const resumedStatic = "Codexa logo\nresumed chat\n";
+  const resumedStatic = "Ubume logo\nresumed chat\n";
   overlayActive = false;
   instance.fullStaticOutput = `${instance.fullStaticOutput ?? ""}${resumedStatic}`;
   instance.renderInteractiveFrame?.("composer", 5, resumedStatic);
@@ -774,13 +774,13 @@ test("does not hash or scan the accumulated transcript when tracing is disabled"
 });
 
 test("logs clear generation, stale suppression, and first committed post-clear frame fields for terminal tracing", () => {
-  const logPath = join(tmpdir(), `codexa-clear-boundary-${process.pid}-${Date.now()}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-clear-boundary-${process.pid}-${Date.now()}.jsonl`);
   rmSync(logPath, { force: true });
 
   try {
     configureRenderDebug({
-      CODEXA_TERMINAL_TRACE: "1",
-      CODEXA_RENDER_DEBUG_FILE: logPath,
+      UBUME_TERMINAL_TRACE: "1",
+      UBUME_RENDER_DEBUG_FILE: logPath,
     });
 
     const harness = createHarness();
@@ -830,13 +830,13 @@ test("logs clear generation, stale suppression, and first committed post-clear f
 });
 
 test("terminal trace marker counts include Ink static output from the startup frame", () => {
-  const logPath = join(tmpdir(), `codexa-clear-boundary-markers-${process.pid}-${Date.now()}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-clear-boundary-markers-${process.pid}-${Date.now()}.jsonl`);
   rmSync(logPath, { force: true });
 
   try {
     configureRenderDebug({
-      CODEXA_TERMINAL_TRACE: "1",
-      CODEXA_RENDER_DEBUG_FILE: logPath,
+      UBUME_TERMINAL_TRACE: "1",
+      UBUME_RENDER_DEBUG_FILE: logPath,
     });
 
     const harness = createHarness();
@@ -862,7 +862,7 @@ test("terminal trace marker counts include Ink static output from the startup fr
       .map((line) => JSON.parse(line)) as Array<Record<string, unknown>>;
     const frame = records.find((entry) => entry.kind === "terminal" && entry.event === "clearBoundaryFrame");
     assert.ok(frame, "startup frame should be traced");
-    assert.equal(frame.codexaLogoCount, 1);
+    assert.equal(frame.ubumeLogoCount, 1);
     assert.equal(frame.providerMigratedCount, 1);
     assert.equal(frame.launchModeCount, 1);
     assert.equal(frame.composerCount, 1);

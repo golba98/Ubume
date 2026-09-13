@@ -58,7 +58,7 @@ afterEach(() => resetLocalHarnessProcessForTests());
 
 describe("Local Harness provider routing", () => {
   test("converts prompt images into Harness content blocks", async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), "codexa-harness-image-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "ubume-harness-image-"));
     const imagePath = join(tempDir, "clipboard.png");
     writeFileSync(imagePath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
     try {
@@ -126,33 +126,33 @@ describe("Local Harness provider routing", () => {
       reasoningEffort: null,
     });
     const patch = localHarnessTestUtils.profilePatch(false);
-    assert.match(patch, /codexa-local:/);
+    assert.match(patch, /ubume-local:/);
     assert.match(patch, /api: openai-completions/);
-    assert.match(patch, /model: !!js process\.env\.CODEXA_DSH_MODEL/);
+    assert.match(patch, /model: !!js process\.env\.UBUME_DSH_MODEL/);
     assert.match(patch, /id: llm-deepseek\n  disabled: true/);
-    assert.match(patch, /defaultPreset: !!js process\.env\.CODEXA_DSH_PERMISSION_PRESET/);
+    assert.match(patch, /defaultPreset: !!js process\.env\.UBUME_DSH_PERMISSION_PRESET/);
     assert.match(patch, /danger-full-access:\n        sandbox: danger-full-access\n        approval: never/);
-    assert.match(patch, /session scratch directory under \.codexa\/scratch\//);
+    assert.match(patch, /session scratch directory under \.ubume\/scratch\//);
   });
 
   test("writable sessions get a workspace scratch folder note; plan mode does not", () => {
-    const workspaceRoot = mkdtempSync(join(tmpdir(), "codexa-harness-scratch-"));
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "ubume-harness-scratch-"));
     try {
       const writable = { ...request("Qwen"), workspaceRoot };
       const note = localHarnessTestUtils.prepareSessionScratch(writable, "session-1", false);
-      assert.match(note ?? "", /\.codexa\/scratch\/session-1\//);
-      assert.ok(existsSync(join(workspaceRoot, ".codexa", "scratch", "session-1")));
-      assert.ok(existsSync(join(workspaceRoot, ".codexa", "scratch", ".gitignore")));
+      assert.match(note ?? "", /\.ubume\/scratch\/session-1\//);
+      assert.ok(existsSync(join(workspaceRoot, ".ubume", "scratch", "session-1")));
+      assert.ok(existsSync(join(workspaceRoot, ".ubume", "scratch", ".gitignore")));
 
       const planning = { ...writable, runIntent: "plan" } as ProviderChatRequest;
       assert.equal(localHarnessTestUtils.prepareSessionScratch(planning, "session-2", false), null);
-      assert.equal(existsSync(join(workspaceRoot, ".codexa", "scratch", "session-2")), false);
+      assert.equal(existsSync(join(workspaceRoot, ".ubume", "scratch", "session-2")), false);
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }
   });
 
-  test("Codexa permission modes map to the official Harness sandbox schema", () => {
+  test("Ubume permission modes map to the official Harness sandbox schema", () => {
     const req = request("Ornith-32B");
     assert.equal(localHarnessTestUtils.resolveHarnessSandboxMode(req), "workspace-write");
     req.runtime.policy.sandboxMode = "read-only";
@@ -218,8 +218,8 @@ describe("Local Harness provider routing", () => {
   });
 
   test("Harness startup failure is isolated and actionable", async () => {
-    const previous = process.env.CODEXA_NODE_PATH;
-    process.env.CODEXA_NODE_PATH = "/definitely/missing/codexa-node";
+    const previous = process.env.UBUME_NODE_PATH;
+    process.env.UBUME_NODE_PATH = "/definitely/missing/ubume-node";
     const runner = new LocalHarnessProcess();
     try {
       await assert.rejects(
@@ -228,13 +228,13 @@ describe("Local Harness provider routing", () => {
       );
     } finally {
       runner.terminate();
-      if (previous === undefined) delete process.env.CODEXA_NODE_PATH;
-      else process.env.CODEXA_NODE_PATH = previous;
+      if (previous === undefined) delete process.env.UBUME_NODE_PATH;
+      else process.env.UBUME_NODE_PATH = previous;
     }
   });
 
   test("a fingerprint change restarts the Harness without the old child clobbering the new one", async () => {
-    const stubDir = mkdtempSync(join(tmpdir(), "codexa-harness-stub-"));
+    const stubDir = mkdtempSync(join(tmpdir(), "ubume-harness-stub-"));
     const stubPath = join(stubDir, "stub-bridge.js");
     // Stands in for the spawned dsh process: replies to `initialize` late enough
     // that the previous generation's exit always lands inside the new
@@ -264,8 +264,8 @@ describe("Local Harness provider routing", () => {
       ].join("\n"),
     );
     chmodSync(stubPath, 0o755);
-    const previous = process.env.CODEXA_NODE_PATH;
-    process.env.CODEXA_NODE_PATH = stubPath;
+    const previous = process.env.UBUME_NODE_PATH;
+    process.env.UBUME_NODE_PATH = stubPath;
     const runner = new LocalHarnessProcess();
     const internals = runner as unknown as {
       ensureStarted(req: ProviderChatRequest, config: unknown, fingerprint: string, handlers: BackendRunHandlers): Promise<void>;
@@ -278,8 +278,8 @@ describe("Local Harness provider routing", () => {
       await internals.ensureStarted(req, config, "fp-b", handlers);
     } finally {
       await runner.shutdown();
-      if (previous === undefined) delete process.env.CODEXA_NODE_PATH;
-      else process.env.CODEXA_NODE_PATH = previous;
+      if (previous === undefined) delete process.env.UBUME_NODE_PATH;
+      else process.env.UBUME_NODE_PATH = previous;
       rmSync(stubDir, { recursive: true, force: true });
     }
   });
@@ -294,6 +294,37 @@ describe("Local Harness provider routing", () => {
     };
     runner.terminate();
     assert.equal(killedWith, "SIGTERM");
+  });
+
+  test("1 GiB RSS guard stops the turn, invalidates its session, and releases the child", () => {
+    const runner = new LocalHarnessProcess();
+    const errors: Error[] = [];
+    const sessionChanges: Array<{ sessionId: string; present: boolean }> = [];
+    let killedWith: string | null = null;
+    const child = { exitCode: null, signalCode: null, kill: (signal: string) => { killedWith = signal; } };
+    const internals = runner as unknown as {
+      child: unknown;
+      active: unknown;
+      transport: unknown;
+      checkMemory(child: unknown, rssBytes: number): void;
+    };
+    internals.child = child;
+    internals.transport = { close: () => undefined, request: async () => ({}) };
+    internals.active = {
+      sessionId: "session-1",
+      settled: false,
+      handlers: { onLocalHarnessSession: (session: unknown, sessionId: string) => sessionChanges.push({ sessionId, present: session !== null }) },
+      abortCleanup: () => undefined,
+      reject: (error: Error) => errors.push(error),
+    };
+    internals.checkMemory(child, 1024 * 1024 * 1024 - 1);
+    assert.equal(errors.length, 0);
+    internals.checkMemory(child, 1024 * 1024 * 1024);
+    assert.equal(errors.length, 1);
+    assert.match(errors[0]!.message, /1 GiB process RAM/);
+    assert.deepEqual(sessionChanges, [{ sessionId: "session-1", present: false }]);
+    assert.equal(killedWith, "SIGTERM");
+    assert.equal(internals.child, null);
   });
 
   test("cancellation aborts the active Harness request", async () => {
@@ -503,7 +534,7 @@ describe("Harness event projection and policy", () => {
     const finalMetadata: Array<{ throughMessageCount: number; transcriptHash: string }> = [];
     const fixture = activeProcess({
       onFinalAnswerObserved: (text) => observedFinalAnswers.push(text),
-      onLocalHarnessSession: (metadata) => finalMetadata.push(metadata),
+      onLocalHarnessSession: (metadata) => { if (metadata) finalMetadata.push(metadata); },
     });
     const active = (fixture.process as unknown as { active: { resolve: (text: string) => void } }).active;
     active.resolve = (text) => resolved.push(text);
@@ -544,7 +575,7 @@ describe("Harness event projection and policy", () => {
     const effort = localHarnessTestUtils.profilePatch(false, true);
     assert.match(effort, /reasoningEfforts:\n\s+low: low\n\s+medium: medium\n\s+high: high/);
     assert.match(effort, /thinkingFormat: openai/);
-    assert.match(effort, /reasoning: !!js process\.env\.CODEXA_DSH_REASONING_EFFORT/);
+    assert.match(effort, /reasoning: !!js process\.env\.UBUME_DSH_REASONING_EFFORT/);
 
     const req = request("gpt-oss-20b");
     req.localConfig!.models!["gpt-oss-20b"]!.supportsReasoningEffort = true;
@@ -591,6 +622,26 @@ describe("Harness event projection and policy", () => {
     assert.equal(fixture.tools[0]?.command, "git status");
   });
 
+  test("long reasoning display and completed tool arguments stay bounded", () => {
+    const fixture = activeProcess();
+    const notify = notifier(fixture);
+    for (let index = 0; index < 12; index += 1) {
+      notify("session.event", { sessionId: "session-1", event: {
+        type: "assistant/chunk",
+        data: { step: 1, chunk: { type: "reasoning-delta", index: 0, text: "x".repeat(8_000) } },
+      } });
+    }
+    const display = fixture.progress.at(-1)!;
+    assert.match(display, /Earlier reasoning omitted/);
+    assert.ok(display.length < 33_000);
+    assert.equal((display.match(/Earlier reasoning omitted/g) ?? []).length, 1);
+
+    notify("session.event", { sessionId: "session-1", event: { type: "tool/call", data: { callId: "call-1", name: "bash", arguments: "{\"command\":\"git status\"}" } } });
+    notify("session.event", { sessionId: "session-1", event: { type: "tool/result", data: { message: { source: { callId: "call-1" }, content: [{ type: "text", text: "clean" }] } } } });
+    const active = (fixture.process as unknown as { active: { toolArguments: Map<string, unknown> } }).active;
+    assert.equal(active.toolArguments.has("call-1"), false);
+  });
+
   test("approved plan execution asks for mutating tools instead of denying them", async () => {
     const fixture = activeProcess();
     (fixture.process as unknown as { active: { request: { runIntent: string } } }).active.request.runIntent = "approved-execution";
@@ -598,7 +649,7 @@ describe("Harness event projection and policy", () => {
     assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "1", tool: "edit", arguments: { path: "src/app.tsx" } }), { kind: "ask", reason: "Allow edit src/app.tsx?" });
   });
 
-  test("mutating tools use Codexa approval and dangerous commands fail closed", async () => {
+  test("mutating tools use Ubume approval and dangerous commands fail closed", async () => {
     const fixture = activeProcess({ onToolApproval: async () => "allow-once" });
     const bridge = (fixture.process as unknown as { onBridgeRequest(method: string, params: Record<string, unknown>): Promise<unknown> }).onBridgeRequest.bind(fixture.process);
     assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "1", tool: "bash", arguments: { command: "git status" } }), { kind: "ask", reason: "Allow git status?" });
@@ -610,7 +661,7 @@ describe("Harness event projection and policy", () => {
   test("session scratch paths pass the workspace guard", async () => {
     const fixture = activeProcess();
     const bridge = (fixture.process as unknown as { onBridgeRequest(method: string, params: Record<string, unknown>): Promise<unknown> }).onBridgeRequest.bind(fixture.process);
-    assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "1", tool: "write", arguments: { path: ".codexa/scratch/session-1/_probe.html" } }), { kind: "ask", reason: "Allow write .codexa/scratch/session-1/_probe.html?" });
-    assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "2", tool: "bash", arguments: { command: "node .codexa/scratch/session-1/_cdp.js" } }), { kind: "ask", reason: "Allow node .codexa/scratch/session-1/_cdp.js?" });
+    assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "1", tool: "write", arguments: { path: ".ubume/scratch/session-1/_probe.html" } }), { kind: "ask", reason: "Allow write .ubume/scratch/session-1/_probe.html?" });
+    assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "2", tool: "bash", arguments: { command: "node .ubume/scratch/session-1/_cdp.js" } }), { kind: "ask", reason: "Allow node .ubume/scratch/session-1/_cdp.js?" });
   });
 });

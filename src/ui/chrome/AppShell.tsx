@@ -368,7 +368,7 @@ function AppShellInner({
           <PanelAvailableRowsContext.Provider value={panelAvailableRows}>
             <ActivePanelLayoutContext.Provider value={activePanelLayout}>
               <PanelLayoutContext.Provider value={panelLayout}>
-                {process.env.CODEXA_DEBUG_LAYOUT === "1" && (
+                {process.env.UBUME_DEBUG_LAYOUT === "1" && (
                   <Box>
                     <Text color="red">
                       DEBUG layout: rows={layout.rows} cols={layout.cols} mode={layout.mode} headerRows={headerRows} panelRows={panelAvailableRows} bottomChromeRows={appLayoutBudget.bottomChromeBudget.totalRows}

@@ -1,7 +1,18 @@
-# Codexa Versions
+# Ubume CLI Versions
 
 This file explains what users get in each release. For exact implementation
 details and test notes, see the [changelog](CHANGELOG.md).
+
+## v0.1.0 — 2026-09-13
+
+Initial pre-1.0 release of **Ubume CLI** (`ubume`).
+- Renamed project from Codexa CLI to Ubume CLI across all launchers, UI chrome, settings, persistence stores, and scripts.
+- Existing `CODEXA_*` environment variables, `codexa.mode` config keys, and `--codexa-prompt-policy` keep working.
+- The local native models keep their Codexa name ("Codexa Native").
+- Introduced `ubume` binary with `bin/codexa.js` as a backward-compatibility deprecation wrapper.
+- Renamed configuration and state directories to `.ubume/` (`~/.local/share/ubume`, `~/.ubume-settings.json`, `.ubume/scratch`) with automated, non-destructive migration of existing `.codexa` settings and workspaces.
+- Rebranded ASCII logo art, top header, status indicators, and wordmarks to Ubume.
+- Set initial package version to 0.1.0.
 
 ## v1.0.28 — 2026-09-12
 

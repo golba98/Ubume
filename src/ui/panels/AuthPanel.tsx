@@ -113,14 +113,14 @@ export function AuthPanel({
       <Text color={theme.textDim}>Last checked: {checkedAtLabel}</Text>
       <Text color={theme.textDim}>Probe summary: {authStatus.rawSummary || "No probe output yet"}</Text>
       <Text color={theme.text}>
-        This UI securely bridges to the Codexa neural network. It does not collect or store your ChatGPT credentials.
+        This UI securely bridges to the Ubume neural network. It does not collect or store your ChatGPT credentials.
       </Text>
       <Text color={theme.text}>{provider.statusMessage}</Text>
       <Box flexDirection="column" marginTop={1}>
         <Text color={theme.info}>Commands:</Text>
         <Text color={theme.text}>  /login        guided ChatGPT sign-in steps</Text>
         <Text color={theme.text}>  /logout       guided sign-out steps</Text>
-        <Text color={theme.text}>  /auth status  refresh Codexa authentication</Text>
+        <Text color={theme.text}>  /auth status  refresh Ubume authentication</Text>
       </Box>
       <Box flexDirection="column" marginTop={1}>
         {AUTH_PREFERENCES.map((item, index) => (

@@ -643,10 +643,10 @@ function buildTaskStatusRow(item: Extract<RenderTimelineItem, { type: "turn" }>,
   // Active state — static concise status. The bottom status slot owns the
   // live busy animation so transcript rows do not repaint on animation ticks.
   const statusText = item.renderState.runPhase === "streaming"
-    ? "Codexa is streaming"
+    ? "Ubume is streaming"
     : item.renderState.runPhase === "final"
-      ? "Codexa response complete"
-      : "Codexa is thinking";
+      ? "Ubume response complete"
+      : "Ubume is thinking";
 
   return createRow(
     `${item.key}-status`,
@@ -1657,7 +1657,7 @@ export function buildIntroRows(item: Extract<RenderTimelineItem, { type: "intro"
   const workspaceName = getWorkspaceDisplayName(intro.workspaceLabel);
   if (startupHeaderMode === "tiny") {
     const messageRows = [
-      `Codexa v${intro.version}`,
+      `Ubume v${intro.version}`,
       workspaceName ? `Workspace: ${workspaceName}` : null,
       intro.providerLabel ? `Provider: ${intro.providerLabel}` : `Auth: ${intro.authLabel}`,
     ].filter((line): line is string => Boolean(line));
@@ -1676,13 +1676,13 @@ export function buildIntroRows(item: Extract<RenderTimelineItem, { type: "intro"
   const logoRows = startupHeaderMode === "large"
     ? selectLogoVariant(safeWidth)
     : safeWidth >= LOGO_COMPACT_MIN_COLS ? LOGO_COMPACT : [];
-  const effectiveLogoRows = logoRows.length > 0 ? logoRows : ["CODEXA"];
+  const effectiveLogoRows = logoRows.length > 0 ? logoRows : ["UBUME"];
   if (startupHeaderMode === "large") {
     rows.push(createBlankRow(`${item.key}-top-gap`, safeWidth));
   }
   const logoWidth = effectiveLogoRows.reduce((maxWidth, line) => Math.max(maxWidth, getTextWidth(line)), 0);
   const metaLines = [
-    `Codexa v${intro.version}`,
+    `Ubume v${intro.version}`,
     workspaceName ? `Workspace: ${workspaceName}` : null,
     intro.providerLabel ? `Provider: ${intro.providerLabel}` : `Auth: ${intro.authLabel}`,
   ].filter((line): line is string => Boolean(line));
@@ -1893,7 +1893,7 @@ function buildCodexPlainRows(
   keyPrefix: string,
   width: number,
   contentRows: TimelineRowSpan[][],
-  label = "Codexa",
+  label = "Ubume",
 ): TimelineRow[] {
   const indent = " ".repeat(transcriptContentIndent);
   const rows: TimelineRow[] = [

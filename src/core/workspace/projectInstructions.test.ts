@@ -6,7 +6,7 @@ import test from "node:test";
 import { loadProjectInstructions } from "./projectInstructions.js";
 
 function withTempWorkspace(run: (workspaceRoot: string) => void) {
-  const workspaceRoot = mkdtempSync(join(tmpdir(), "codexa-instructions-"));
+  const workspaceRoot = mkdtempSync(join(tmpdir(), "ubume-instructions-"));
   try {
     run(workspaceRoot);
   } finally {

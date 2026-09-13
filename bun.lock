@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "codexa",
+      "name": "ubume",
       "dependencies": {
         "@deepseek-ai/dsh": "0.1.1-rc.2",
         "@deepseek-ai/dsh-attachment-local": "0.1.1-rc.2",

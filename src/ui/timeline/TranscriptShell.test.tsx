@@ -131,7 +131,7 @@ function runningRunEvent(turnId = 10, prompt = "hi"): RunEvent {
     startedAt: turnId,
     durationMs: null,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt,
     progressEntries: [],
@@ -177,8 +177,8 @@ function transcriptNode({
       <TranscriptShell
         layout={layout}
         authState="authenticated"
-        workspaceLabel="/workspace/codexa"
-        workspaceRoot="/workspace/codexa"
+        workspaceLabel="/workspace/ubume"
+        workspaceRoot="/workspace/ubume"
         runtimeSummary={TEST_RUNTIME_SUMMARY}
         staticEvents={staticEvents}
         activeEvents={activeEvents}
@@ -247,7 +247,7 @@ function detectBrandTier(value: string): "large" | "compact" | "wordmark" | "non
   const text = stripAnsi(value);
   if (text.includes(LOGO_LARGE[0]!.trim())) return "large";
   if (text.includes(LOGO_COMPACT[0]!)) return "compact";
-  if (text.includes("CODEXA") || text.includes("Codexa")) return "wordmark";
+  if (text.includes("UBUME") || text.includes("Ubume v")) return "wordmark";
   return "none";
 }
 
@@ -255,21 +255,21 @@ function assertHomeScreenFrame(value: string, size: { cols: number; rows: number
   const text = stripAnsi(value);
   assert.equal(detectBrandTier(text), expectedTier, `${size.cols}x${size.rows} should use the same responsive brand tier`);
   if (size.rows > 18 || size.cols < 60) {
-    assert.match(text, /Codexa v/);
+    assert.match(text, /Ubume v/);
   }
-  assert.match(text, /Workspace: codexa/);
+  assert.match(text, /Workspace: ubume/);
   assert.match(text, /Provider: Local/);
   assert.equal(countOccurrences(text, "│ ❯"), 1, `${size.cols}x${size.rows} should render one composer`);
   assert.equal(countOccurrences(text, "Context:"), 1, `${size.cols}x${size.rows} should render one footer/status area`);
 
   const lines = text.split(/\r?\n/);
-  const brandIndex = lines.findIndex((line) => line.includes("██████") || line.includes("✦ CODEXA") || line.includes("CODEXA") || line.includes("Codexa v") || line.includes("Workspace: codexa"));
+  const brandIndex = lines.findIndex((line) => line.includes("██████") || line.includes("✦ UBUME") || line.includes("UBUME") || line.includes("Ubume v") || line.includes("Workspace: ubume"));
   const composerIndex = lines.findIndex((line) => line.includes("│ ❯"));
   assert.ok(brandIndex >= 0, `${size.cols}x${size.rows} should render branding`);
   assert.ok(composerIndex > brandIndex, `${size.cols}x${size.rows} should render branding before composer`);
 }
 
-test("keeps the Codexa intro present across prompt rerenders", async () => {
+test("keeps the Ubume intro present across prompt rerenders", async () => {
   const { instance, getOutput } = renderTranscript([launchEvent(), systemEvent(2, "initial history line")]);
   await sleep();
 
@@ -281,7 +281,7 @@ test("keeps the Codexa intro present across prompt rerenders", async () => {
   instance.cleanup();
 
   const output = getOutput();
-  assert.ok(countOccurrences(output, "Codexa v") >= 1);
+  assert.ok(countOccurrences(output, "Ubume v") >= 1);
   assert.ok(countOccurrences(output, "Provider: Local") >= 1);
   assert.match(stripAnsi(output), /UPDATED LIVE PROMPT/);
 });
@@ -291,7 +291,7 @@ test("preserves a single intro after an explicit frame-cache reset", async () =>
   await sleep();
 
   const beforeOutput = getOutput();
-  assert.equal(countOccurrences(beforeOutput, "Codexa v"), 1);
+  assert.equal(countOccurrences(beforeOutput, "Ubume v"), 1);
   assert.equal(countOccurrences(beforeOutput, "Launch mode"), 1);
 
   resetInkOutputForFreshFrame({ instance: resolveInkRenderInstance(stdout), columns: stdout.columns });
@@ -302,7 +302,7 @@ test("preserves a single intro after an explicit frame-cache reset", async () =>
   instance.cleanup();
 
   const output = getOutput();
-  assert.equal(countOccurrences(output, "Codexa v"), 1, "cache resets must not duplicate committed history");
+  assert.equal(countOccurrences(output, "Ubume v"), 1, "cache resets must not duplicate committed history");
   assert.equal(countOccurrences(output, "Launch mode"), 1, "committed events remain single-copy");
   assert.match(stripAnsi(output), /LIVE PROMPT/, "the composer should still be present");
 });
@@ -310,14 +310,14 @@ test("preserves a single intro after an explicit frame-cache reset", async () =>
 test("clearCount change remounts TranscriptShell and repaints fresh static content", async () => {
   const { instance, stdout, getOutput } = renderTranscript([launchEvent()]);
   await sleep();
-  assert.equal(countOccurrences(getOutput(), "Codexa v"), 1);
+  assert.equal(countOccurrences(getOutput(), "Ubume v"), 1);
 
   resetInkOutputForFreshFrame({ instance: resolveInkRenderInstance(stdout), columns: stdout.columns });
   instance.rerender(transcriptNode({ staticEvents: [launchEvent()], clearCount: 1 }));
   await sleep();
   instance.cleanup();
 
-  assert.equal(countOccurrences(getOutput(), "Codexa v"), 2, "clearCount forces fresh static mount for clean post-clear frame");
+  assert.equal(countOccurrences(getOutput(), "Ubume v"), 2, "clearCount forces fresh static mount for clean post-clear frame");
 });
 
 test("fresh launch renders the banner before Launch mode as transcript content", async () => {
@@ -328,11 +328,11 @@ test("fresh launch renders the banner before Launch mode as transcript content",
   const text = stripAnsi(getOutput());
   assertFullLargeLogoVisible(text);
   assert.match(text, /██████/);
-  assert.match(text, /Codexa v/);
-  assert.match(text, /Workspace: codexa/);
+  assert.match(text, /Ubume v/);
+  assert.match(text, /Workspace: ubume/);
   assert.match(text, /Provider: Local/);
   assert.ok(text.indexOf("██████") < text.indexOf("Launch mode"));
-  assert.equal(countOccurrences(text, "Codexa v"), 1);
+  assert.equal(countOccurrences(text, "Ubume v"), 1);
   assert.equal(countOccurrences(text, "Launch mode"), 1);
 });
 
@@ -387,7 +387,7 @@ test("first submitted prompt remains visible in the owned conversation viewport"
 
   const text = stripAnsi(getOutput());
   assertFullLargeLogoVisible(text);
-  assert.ok(countOccurrences(text, "Codexa v") >= 1);
+  assert.ok(countOccurrences(text, "Ubume v") >= 1);
   assert.equal(countOccurrences(text, "Launch mode"), 1);
   assert.ok(text.indexOf("Launch mode") < text.lastIndexOf("PROMPT"));
   assert.ok(text.lastIndexOf("PROMPT") < text.lastIndexOf("hi"));
@@ -597,7 +597,7 @@ test("hides transcript input during overlay mode and restores the owned viewport
   instance.cleanup();
 
   const output = getOutput();
-  assert.equal(countOccurrences(output, "Codexa v"), 1);
+  assert.equal(countOccurrences(output, "Ubume v"), 1);
   assert.match(stripAnsi(output), /queued while overlay is visible/);
   assert.match(stripAnsi(output), /RESTORED PROMPT/);
 });
@@ -627,7 +627,7 @@ test("clear rerender shows fresh banner and launch text once without stale messa
   assert.match(postClearOutput, /PROMPT AFTER CLEAR/);
   assert.match(postClearOutput, /Local \/ qwen\/qwen3\.6-35b-a3b \(High\)/);
   assert.match(postClearOutput, /Context: 115 \/ 262K/);
-  assert.equal(countOccurrences(postClearOutput, "Codexa v"), 1);
+  assert.equal(countOccurrences(postClearOutput, "Ubume v"), 1);
   assert.equal(countOccurrences(postClearOutput, "Launch mode"), 1);
   assert.doesNotMatch(postClearOutput, /old message before clear/);
 });
@@ -649,7 +649,7 @@ const CLEAR_HOME_SCREEN_CASES: Array<{
 for (const testCase of CLEAR_HOME_SCREEN_CASES) {
   test(`fresh startup and /clear render the same branded home screen at ${testCase.cols}x${testCase.rows}`, async () => {
     const prompt = [
-      "│ ❯ Ask Codexa, run !shell, or use /command",
+      "│ ❯ Ask Ubume, run !shell, or use /command",
       "OpenAI Codex CLI / gpt-5.4-mini (Low)",
       "Context: 0 / 1M",
     ].join("\n");

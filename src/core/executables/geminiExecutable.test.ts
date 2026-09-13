@@ -70,7 +70,7 @@ test("Gemini resolver: env GEMINI_EXECUTABLE wins over PATH", async () => {
 
 test("Gemini resolver: APPDATA npm shim fallback works", async () => {
   if (process.platform !== "win32") return;
-  const tempRoot = join(tmpdir(), `codexa-gemini-${Date.now()}`);
+  const tempRoot = join(tmpdir(), `ubume-gemini-${Date.now()}`);
   const npmDir = join(tempRoot, "npm");
   const shim = join(npmDir, "gemini.cmd");
   mkdirSync(npmDir, { recursive: true });
@@ -91,7 +91,7 @@ test("Gemini resolver: APPDATA npm shim fallback works", async () => {
 test("Gemini resolver: PowerShell function text is not accepted as executable path", async () => {
   if (process.platform !== "win32") return;
   await withEnv({}, async () => {
-    const tempRoot = join(tmpdir(), `codexa-gemini-real-${Date.now()}`);
+    const tempRoot = join(tmpdir(), `ubume-gemini-real-${Date.now()}`);
     const npmDir = join(tempRoot, "npm");
     const shim = join(npmDir, "gemini.cmd");
     mkdirSync(npmDir, { recursive: true });

@@ -7,7 +7,7 @@ import type { ProviderModel } from "../providerRuntime/types.js";
 import { loadCachedProviderModels, saveCachedProviderModels } from "./providerModelCache.js";
 
 function tempCacheFile(): { file: string; cleanup: () => void } {
-  const dir = mkdtempSync(join(tmpdir(), "codexa-model-cache-"));
+  const dir = mkdtempSync(join(tmpdir(), "ubume-model-cache-"));
   return { file: join(dir, "model-cache.json"), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 

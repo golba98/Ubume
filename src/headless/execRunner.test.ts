@@ -130,7 +130,7 @@ test("streams assistant deltas to stdout and progress/tool/error diagnostics to 
 
   assert.equal(result.exitCode, 0);
   assert.equal(io.stdoutText(), "Hello world");
-  assert.doesNotMatch(`${io.stdoutText()}\n${io.stderrText()}`, /██████|Codexa v|Workspace:|Provider:|Context:/);
+  assert.doesNotMatch(`${io.stdoutText()}\n${io.stderrText()}`, /██████|Ubume v|Workspace:|Provider:|Context:/);
   assert.match(io.stderrText(), /startup:/);
   assert.match(io.stderrText(), /reasoning: thinking/);
   assert.match(io.stderrText(), /tool: running: pwd/);
@@ -166,7 +166,7 @@ test("emits final_answer_observed timing before provider response settles", asyn
 
   assert.equal(result.exitCode, 0);
   assert.match(io.stderrText(), /final_answer_observed/);
-  assert.match(io.stderrText(), /\[codexa exec timing\]/);
+  assert.match(io.stderrText(), /\[ubume exec timing\]/);
   assert.match(io.stderrText(), /final_answer_character_count=5/);
 });
 
@@ -188,7 +188,7 @@ test("timing is silent when disabled", async () => {
   );
 
   assert.equal(result.exitCode, 0);
-  assert.doesNotMatch(io.stderrText(), /\[codexa exec timing\]/);
+  assert.doesNotMatch(io.stderrText(), /\[ubume exec timing\]/);
 });
 
 test("raw prompt policy sends the exact prompt and skips project instructions", async () => {
@@ -207,7 +207,7 @@ test("raw prompt policy sends the exact prompt and skips project instructions", 
 
   const result = await runHeadlessExec(
     {
-      prompt: "Reply with exactly: CODEXA_READY",
+      prompt: "Reply with exactly: UBUME_READY",
       launchArgs: createLaunchArgs(),
       workspaceRoot: "C:\\Repo",
     },
@@ -227,7 +227,7 @@ test("raw prompt policy sends the exact prompt and skips project instructions", 
 
   assert.equal(result.exitCode, 0);
   assert.equal(projectInstructionLoadCount, 0);
-  assert.equal(captured[0]?.prompt, "Reply with exactly: CODEXA_READY");
+  assert.equal(captured[0]?.prompt, "Reply with exactly: UBUME_READY");
   assert.equal(captured[0]?.promptPolicy, "raw");
   assert.equal(captured[0]?.projectInstructions, null);
 });

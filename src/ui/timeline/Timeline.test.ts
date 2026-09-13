@@ -102,7 +102,7 @@ test("groups user, run, and assistant events into a single turn item", () => {
       startedAt: 2,
       durationMs: null,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Implement rate limiting",
       progressEntries: [createProgressEntry(1, "Scanning routes...")],
@@ -184,7 +184,7 @@ test("separates committed and active turn render state", () => {
       startedAt: 2,
       durationMs: 250,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Completed turn",
       progressEntries: [],
@@ -222,7 +222,7 @@ test("separates committed and active turn render state", () => {
       startedAt: 5,
       durationMs: null,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Live turn",
       progressEntries: [],
@@ -268,9 +268,9 @@ test("builds multi-row snapshots from wrapped timeline items", () => {
   assert.equal(snapshot.itemCount, 1);
 });
 
-test("Codexa intro renders as a normal timeline item", () => {
+test("Ubume intro renders as a normal timeline item", () => {
   const item: RenderTimelineItem = {
-    key: "codexa-intro",
+    key: "ubume-intro",
     type: "intro",
     padded: true,
     intro: {
@@ -284,11 +284,11 @@ test("Codexa intro renders as a normal timeline item", () => {
   const snapshot = buildTimelineSnapshot([item], { totalWidth: 110 });
   const lines = snapshot.rows.map((row) => row.spans.map((span) => span.text).join(""));
   const text = lines.join("\n");
-  const versionLineIndex = lines.findIndex((line) => line.includes("Codexa v1.0.1"));
+  const versionLineIndex = lines.findIndex((line) => line.includes("Ubume v1.0.1"));
 
   assert.equal(snapshot.itemCount, 1);
   assert.match(text, /██████/);
-  assert.match(text, /Codexa v1\.0\.1/);
+  assert.match(text, /Ubume v1\.0\.1/);
   assert.match(text, /Auth: Authenticated/);
   assert.match(text, /Workspace: 13-Custom-CLI-Normal/);
   assert.doesNotMatch(text, /Model:/);
@@ -314,19 +314,19 @@ test("static intro uses the padded timeline snapshot path", () => {
   const text = lines.join("\n");
 
   assert(rows.length >= 7);
-  assert(rows[0]!.key.startsWith("codexa-intro-wrapped-"));
+  assert(rows[0]!.key.startsWith("ubume-intro-wrapped-"));
   assert(lines.every((line) => line.length === shellWidth));
   assert(lines[0]!.startsWith(" "));
-  assert.match(text, /██████/);
-  assert.match(text, /╚██████╗/);
-  assert.match(text, /Codexa v/);
+  assert.match(text, /██╗/);
+  assert.match(text, /╚██████╔╝/);
+  assert.match(text, /Ubume v/);
   assert.match(text, /Auth: Authenticated/);
   assert.match(text, /Workspace: 13-Custom-CLI-Normal/);
 });
 
-test("Codexa intro scrolls out of the visible timeline window", () => {
+test("Ubume intro scrolls out of the visible timeline window", () => {
   const intro: RenderTimelineItem = {
-    key: "codexa-intro",
+    key: "ubume-intro",
     type: "intro",
     padded: true,
     intro: {
@@ -373,7 +373,7 @@ test("timeline snapshot keeps the prompt card top border closed", () => {
       startedAt: 2,
       durationMs: null,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Reproduce the prompt border issue",
       progressEntries: [],
@@ -412,12 +412,12 @@ test("first active run fallback immediately shows Codex thinking status", () => 
       startedAt: 2,
       durationMs: null,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Inspect the project",
       progressEntries: [],
       status: "running",
-      summary: "Codexa is thinking...",
+      summary: "Ubume is thinking...",
       truncatedOutput: false,
       toolActivities: [],
       activity: [],
@@ -521,7 +521,7 @@ test("default timeline omits active processing text while a run is streaming", (
       startedAt: 2,
       durationMs: null,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Create a file",
       progressEntries: [
@@ -591,7 +591,7 @@ test("streaming defers all processing text (active and completed) until finalize
       startedAt: 2,
       durationMs: null,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Improve streaming thoughts",
       progressEntries: [
@@ -634,7 +634,7 @@ test("streaming defers all processing text (active and completed) until finalize
   // updates as separate readable blocks" test below).
   assert.doesNotMatch(joined, /I inspected the renderer/);
   assert.doesNotMatch(joined, /Next I am separating/);
-  assert.match(joined, /Codex/);
+  assert.match(joined, /Ubume/);
   assert.doesNotMatch(joined, /▌/);
   assert.ok(snapshot.rows.every((row) => row.spans.map((span) => span.text).join("").length <= 54));
 });
@@ -655,7 +655,7 @@ test("completed runs coalesce contiguous progress updates under one Reasoning bl
       startedAt: 2,
       durationMs: 1200,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Investigate the failure",
       progressEntries: [
@@ -706,7 +706,7 @@ test("assistant unified diffs render with semantic tones", () => {
     "--- a/src/example.ts",
     "+++ b/src/example.ts",
     "@@ -1,3 +1,4 @@",
-    " const name = \"Codexa\";",
+    " const name = \"Ubume\";",
     "-console.log(\"old\");",
     "+console.log(\"new\");",
     "+console.log(\"added\");",
@@ -727,7 +727,7 @@ test("assistant unified diffs render with semantic tones", () => {
       startedAt: 2,
       durationMs: 100,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Show a diff",
       progressEntries: [],
@@ -787,7 +787,7 @@ test("completed assistant turn renders local links as compact terminal paths", (
       startedAt: 2,
       durationMs: 100,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "What is this file?",
       progressEntries: [],
@@ -1073,7 +1073,7 @@ function makeCompletedRunWithTool(turnId: number, command: string): TimelineEven
       startedAt: 2,
       durationMs: 500,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Do something",
       progressEntries: [],
@@ -1117,7 +1117,7 @@ function makeChronologicalTurnEvents(
     startedAt: 2,
     durationMs: 500,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: "Do something",
     progressEntries: [],
@@ -1409,7 +1409,7 @@ test("unified stream renders action before response by stream sequence", () => {
 
   assert.ok(joined.indexOf("List files") < joined.indexOf("Purpose"));
   assert.match(joined, /List files/);
-  assert.match(joined, /Codex/);
+  assert.match(joined, /Ubume/);
   assert.doesNotMatch(joined, /^\s*response\b/m);
 });
 
@@ -1458,7 +1458,7 @@ test("unified stream preserves thinking action response ordering", () => {
 
   assert.ok(joined.indexOf("I need to inspect") < joined.indexOf("Read file"));
   assert.ok(joined.indexOf("Read file") < joined.indexOf("Purpose"));
-  assert.match(joined, /Codex/);
+  assert.match(joined, /Ubume/);
   assert.doesNotMatch(joined, /^\s*response\b/m);
 });
 
@@ -1687,7 +1687,7 @@ test("finalize continuity viewport shows construction plus the beginning of the 
     startedAt: 2,
     durationMs: null,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt,
     progressEntries: [progressEntry],
@@ -1883,7 +1883,7 @@ test("long command is clipped within the compact action row", () => {
 // stale row-cache reuse after clear.
 
 const LONG_ACTION_COMMAND =
-  `/usr/bin/zsh -lc 'pwd && rg -n "13-Custom-CLI-Normal|codexa|purpose|description" -S README* package.json docs src bin . 2>/dev/null'`;
+  `/usr/bin/zsh -lc 'pwd && rg -n "13-Custom-CLI-Normal|ubume|purpose|description" -S README* package.json docs src bin . 2>/dev/null'`;
 
 function rowText(row: TimelineRow): string {
   return row.spans.map((span) => span.text).join("");
@@ -2083,7 +2083,7 @@ test("buildTimelineSnapshot reuses cached rows for completed entries on repeated
       startedAt: 2,
       durationMs: 100,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Cache test prompt",
       progressEntries: [],

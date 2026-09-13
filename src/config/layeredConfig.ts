@@ -254,41 +254,42 @@ function extractRuntimePatch(
     }
   }
 
-  const codexaTable = data.codexa;
-  if ("codexa" in data) {
-    if (!isRecord(codexaTable)) {
-      ignoredEntries.push("codexa");
+  const ubumeTable = data.ubume ?? data.codexa;
+  const tableKey = "ubume" in data ? "ubume" : ("codexa" in data ? "codexa" : null);
+  if (tableKey) {
+    if (!isRecord(ubumeTable)) {
+      ignoredEntries.push(tableKey);
     } else {
-      if ("backend" in codexaTable) {
+      if ("backend" in ubumeTable) {
         if (
-          typeof codexaTable.backend === "string"
-          && AVAILABLE_BACKENDS.some((item) => item.id === codexaTable.backend)
+          typeof ubumeTable.backend === "string"
+          && AVAILABLE_BACKENDS.some((item) => item.id === ubumeTable.backend)
         ) {
-          patch.provider = codexaTable.backend as AvailableBackend;
+          patch.provider = ubumeTable.backend as AvailableBackend;
           addTouchedField(touchedFields, "provider");
         } else {
-          ignoredEntries.push("codexa.backend");
+          ignoredEntries.push(`${tableKey}.backend`);
         }
       }
 
-      if ("mode" in codexaTable) {
+      if ("mode" in ubumeTable) {
         if (
-          typeof codexaTable.mode === "string"
-          && AVAILABLE_MODES.some((item) => item.key === codexaTable.mode)
+          typeof ubumeTable.mode === "string"
+          && AVAILABLE_MODES.some((item) => item.key === ubumeTable.mode)
         ) {
-          patch.mode = codexaTable.mode as AvailableMode;
+          patch.mode = ubumeTable.mode as AvailableMode;
           addTouchedField(touchedFields, "mode");
         } else {
-          ignoredEntries.push("codexa.mode");
+          ignoredEntries.push(`${tableKey}.mode`);
         }
       }
 
-      if ("plan_mode" in codexaTable) {
-        if (typeof codexaTable.plan_mode === "boolean") {
-          patch.planMode = codexaTable.plan_mode;
+      if ("plan_mode" in ubumeTable) {
+        if (typeof ubumeTable.plan_mode === "boolean") {
+          patch.planMode = ubumeTable.plan_mode;
           addTouchedField(touchedFields, "planMode");
         } else {
-          ignoredEntries.push("codexa.plan_mode");
+          ignoredEntries.push(`${tableKey}.plan_mode`);
         }
       }
     }
@@ -417,11 +418,13 @@ function extractRuntimePatchFromOverride(
     case "personality":
       overrideData.personality = value;
       break;
+    case "ubume.backend":
     case "codexa.backend":
-      overrideData.codexa = { backend: value };
+      overrideData.ubume = { backend: value };
       break;
+    case "ubume.mode":
     case "codexa.mode":
-      overrideData.codexa = { mode: value };
+      overrideData.ubume = { mode: value };
       break;
     default:
       return {
@@ -818,17 +821,17 @@ export function mergeRuntimeIntoTomlConfig(
       shouldWrite: runtime.policy.personality !== defaultRuntime.policy.personality,
     },
     {
-      path: ["codexa", "backend"],
+      path: ["ubume", "backend"],
       value: runtime.provider,
       shouldWrite: runtime.provider !== defaultRuntime.provider,
     },
     {
-      path: ["codexa", "mode"],
+      path: ["ubume", "mode"],
       value: runtime.mode,
       shouldWrite: runtime.mode !== defaultRuntime.mode,
     },
     {
-      path: ["codexa", "plan_mode"],
+      path: ["ubume", "plan_mode"],
       value: runtime.planMode,
       shouldWrite: runtime.planMode !== defaultRuntime.planMode,
     },

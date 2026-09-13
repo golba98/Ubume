@@ -70,7 +70,7 @@ function makePlanRun(overrides: Partial<Parameters<typeof createRunEvent>[0]> = 
   return createRunEvent({
     id: 7,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: "Plan it",
     turnId: 11,

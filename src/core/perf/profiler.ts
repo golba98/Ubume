@@ -15,7 +15,7 @@ let _session: PerfSession | null = null;
 
 export function isEnabled(): boolean {
   if (_enabled === null) {
-    _enabled = process.env["CODEXA_PERF"] === "1";
+    _enabled = process.env["UBUME_PERF"] === "1";
   }
   return _enabled;
 }
@@ -70,7 +70,7 @@ const STAGE_ROWS: Array<[from: string, to: string, label: string, note?: string]
 
 export function buildSummary(session: PerfSession): string {
   const lines: string[] = [
-    "┌── CODEXA PERF REPORT ─────────────────────────────────────────",
+    "┌── UBUME PERF REPORT ─────────────────────────────────────────",
     "│ Stage                                         ms",
   ];
 
@@ -113,10 +113,10 @@ export function buildSummary(session: PerfSession): string {
   return lines.join("\n");
 }
 
-// Sessions are appended as JSONL to ~/.codexa-perf.jsonl for offline analysis.
+// Sessions are appended as JSONL to ~/.ubume-perf.jsonl for offline analysis.
 export function persistSession(session: PerfSession): void {
   try {
-    const logPath = join(homedir(), ".codexa-perf.jsonl");
+    const logPath = join(homedir(), ".ubume-perf.jsonl");
     const line = JSON.stringify({ ...session, ts: Date.now() }) + "\n";
     appendFileSync(logPath, line, "utf8");
   } catch {

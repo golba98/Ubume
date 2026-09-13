@@ -8,7 +8,7 @@ const appSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "ap
 const appShellSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "ui", "chrome", "AppShell.tsx"), "utf8");
 const transcriptShellSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "ui", "timeline", "TranscriptShell.tsx"), "utf8");
 const composerSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "ui", "chrome", "BottomComposer.tsx"), "utf8");
-const launcherSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "codexa.js"), "utf8");
+const launcherSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "ubume.js"), "utf8");
 const indexSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "index.tsx"), "utf8");
 const layoutSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "ui", "layout.ts"), "utf8");
 const clearBoundarySource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "core", "terminal", "clearFrameBoundary.ts"), "utf8");
@@ -20,8 +20,8 @@ test("App does not start terminal title guards during busy rendering", () => {
 });
 
 test("App does not write terminal title OSC sequences while Ink is active", () => {
-  assert.doesNotMatch(appSource, /\\x1b\]0;CODEXA/);
-  assert.doesNotMatch(appSource, /\\x1b\]2;CODEXA/);
+  assert.doesNotMatch(appSource, /\\x1b\]0;UBUME/);
+  assert.doesNotMatch(appSource, /\\x1b\]2;UBUME/);
 });
 
 test("App root does not own the busy status animation frame", () => {
@@ -195,7 +195,7 @@ test("Installed launcher preserves inherited stdio for interactive TTY launches"
   assert.match(launcherSource, /const parentHasTTY = parentStdinIsTTY && parentStdoutIsTTY/);
   assert.match(launcherSource, /if \(!isHeadlessMode && parentHasTTY\)/);
   assert.match(launcherSource, /parentHasTTY\s*\?\s*\["inherit", "inherit", "inherit"\]/);
-  assert.match(launcherSource, /CODEXA_DEBUG_LAUNCH/);
+  assert.match(launcherSource, /UBUME_DEBUG_LAUNCH/);
 });
 
 test("Installed launcher does not own terminal titles for interactive TTY launches", () => {
@@ -204,7 +204,7 @@ test("Installed launcher does not own terminal titles for interactive TTY launch
 
   assert.ok(launchStartIndex >= 0);
   assert.ok(helpIndex > launchStartIndex);
-  assert.match(launcherSource, /CODEXA_INITIAL_TERMINAL_TITLE: intendedTerminalTitle/);
+  assert.match(launcherSource, /UBUME_INITIAL_TERMINAL_TITLE: intendedTerminalTitle/);
   assert.doesNotMatch(launcherSource, /writeIntendedTitle/);
   assert.doesNotMatch(launcherSource, /startLauncherTitleGuard/);
   assert.doesNotMatch(launcherSource, /createTitleStripper/);
@@ -344,7 +344,7 @@ test("VTE terminal trace records startup root, logo branch, composer count, and 
   assert.match(transcriptShellSource, /selectedLogoVariant/);
   assert.match(transcriptShellSource, /logoHiddenReason/);
   assert.match(transcriptShellSource, /homeScreenRendererUsed: homeScreenActive/);
-  assert.match(clearBoundarySource, /codexaLogoCount/);
+  assert.match(clearBoundarySource, /ubumeLogoCount/);
   assert.match(clearBoundarySource, /composerCount/);
   assert.match(clearBoundarySource, /footerCount/);
   assert.match(clearBoundarySource, /currentCols/);

@@ -3,7 +3,7 @@ import { basename, join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { resolveWorkspacePath } from "./workspaceGuard.js";
 import { normalizeWorkspaceRoot } from "./workspaceRoot.js";
-import { CODEXA_CHANNEL_ENV, LOCAL_DEV_CHANNEL, isLocalDevChannel } from "../version/channel.js";
+import { UBUME_CHANNEL_ENV, LOCAL_DEV_CHANNEL, isLocalDevChannel } from "../version/channel.js";
 
 export type LaunchKind = "installed-bin" | "dev-run";
 
@@ -44,11 +44,11 @@ export type WorkspaceRelaunchPlanResult =
 
 const ENV_KEYS = {
   workspaceRoot: "CODEX_WORKSPACE_ROOT",
-  launchKind: "CODEXA_LAUNCH_KIND",
-  packageRoot: "CODEXA_PACKAGE_ROOT",
-  launcherScript: "CODEXA_LAUNCHER_SCRIPT",
-  relaunchExecutable: "CODEXA_RELAUNCH_EXECUTABLE",
-  relaunchArgs: "CODEXA_RELAUNCH_ARGS",
+  launchKind: "UBUME_LAUNCH_KIND",
+  packageRoot: "UBUME_PACKAGE_ROOT",
+  launcherScript: "UBUME_LAUNCHER_SCRIPT",
+  relaunchExecutable: "UBUME_RELAUNCH_EXECUTABLE",
+  relaunchArgs: "UBUME_RELAUNCH_ARGS",
 } as const;
 
 function getDefaultPackageRoot(): string {
@@ -112,7 +112,7 @@ export function resolveLaunchContext(options: ResolveLaunchContextOptions = {}):
   const forwardArgs = options.forwardArgs ?? process.argv.slice(2);
 
   if (launchKind === "installed-bin") {
-    const resolvedLauncherScript = launcherScriptPath ?? join(packageRoot, "bin", "codexa.js");
+    const resolvedLauncherScript = launcherScriptPath ?? join(packageRoot, "bin", "ubume.js");
 
     return {
       workspaceRoot,
@@ -150,7 +150,7 @@ export function buildWorkspaceStatusMessage(launchContext: LaunchContext): strin
     "Active workspace:",
     `  ${launchContext.workspaceRoot}`,
     "",
-    `Launch mode: ${launchContext.launchKind === "installed-bin" ? "installed codexa" : "dev/repo launch"}`,
+    `Launch mode: ${launchContext.launchKind === "installed-bin" ? "installed ubume" : "dev/repo launch"}`,
     "",
   ];
 
@@ -159,16 +159,16 @@ export function buildWorkspaceStatusMessage(launchContext: LaunchContext): strin
       "This session was started from a local dev launch.",
       "Recommended setup:",
       "  npm run install:dev-bin",
-      "  which codexa-dev",
+      "  which ubume-dev",
       "  cd <target-folder>",
-      "  codexa-dev",
+      "  ubume-dev",
       "",
       "Quick recovery from here:",
       "  /workspace relaunch <path>",
     );
   } else {
     lines.push(
-      "This session is locked to the folder where you launched codexa.",
+      "This session is locked to the folder where you launched ubume.",
       "Use /workspace relaunch <path> to restart into another folder from inside this UI.",
     );
   }
@@ -211,7 +211,7 @@ function buildRelaunchEnv(
     [ENV_KEYS.launcherScript]: launchContext.launcherScriptPath ?? "",
     [ENV_KEYS.relaunchExecutable]: launchContext.relaunchExecutable,
     [ENV_KEYS.relaunchArgs]: JSON.stringify(launchContext.relaunchArgs),
-    [CODEXA_CHANNEL_ENV]: isLocalDevChannel(baseEnv) ? LOCAL_DEV_CHANNEL : baseEnv[CODEXA_CHANNEL_ENV],
+    [UBUME_CHANNEL_ENV]: isLocalDevChannel(baseEnv) ? LOCAL_DEV_CHANNEL : baseEnv[UBUME_CHANNEL_ENV],
   };
 }
 

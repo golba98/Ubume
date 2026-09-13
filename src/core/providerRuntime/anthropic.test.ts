@@ -83,7 +83,7 @@ async function withAnthropicEnv<T>(
   const originalClaudeExe = process.env.CLAUDE_EXECUTABLE;
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
-  const isolatedHome = mkdtempSync(join(tmpdir(), "codexa-anthropic-home-"));
+  const isolatedHome = mkdtempSync(join(tmpdir(), "ubume-anthropic-home-"));
   try {
     process.env.HOME = isolatedHome;
     delete process.env.USERPROFILE;
@@ -985,7 +985,7 @@ test("discoverModels uses Claude Code model-list result when available", async (
 });
 
 test("Claude capability discovery uses settings availableModels when CLI model list is unavailable", async () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), "codexa-claude-settings-"));
+  const tempRoot = mkdtempSync(join(tmpdir(), "ubume-claude-settings-"));
   try {
     const settingsPath = join(tempRoot, "settings.json");
     writeFileSync(settingsPath, JSON.stringify({

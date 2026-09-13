@@ -230,7 +230,7 @@ test("model picker renders 'Choose a Claude model' when activeProviderLabel is C
   try {
     await sleep(100);
     const stripped = stripAnsi(output);
-    assert.match(stripped, /Choose a Claude model to use inside Codexa/);
+    assert.match(stripped, /Choose a Claude model to use inside Ubume/);
     // Must not say "OpenAI"
     assert.ok(!stripped.includes("OpenAI"), "Should not mention OpenAI when picking Claude models");
   } finally {
@@ -266,7 +266,7 @@ test("model picker renders 'Choose a Gemini model' when activeProviderLabel is G
   try {
     await sleep(100);
     const stripped = stripAnsi(output);
-    assert.match(stripped, /Choose a Gemini model to use inside Codexa/);
+    assert.match(stripped, /Choose a Gemini model to use inside Ubume/);
     assert.ok(!stripped.includes("OpenAI"), "Should not mention OpenAI when picking Gemini models");
   } finally {
     cleanup();
@@ -297,7 +297,7 @@ test("model picker renders 'Choose an OpenAI model' when activeProviderLabel is 
   try {
     await sleep(100);
     const stripped = stripAnsi(output);
-    assert.match(stripped, /Choose an OpenAI model to use inside Codexa/);
+    assert.match(stripped, /Choose an OpenAI model to use inside Ubume/);
   } finally {
     cleanup();
   }
@@ -414,7 +414,7 @@ test("ProviderPicker with initialProviderId=anthropic selects Anthropic in the p
       displayName: "OpenAI",
       currentModel: "gpt-5",
       backendType: "openai-api-key",
-      routeMode: "in-codexa",
+      routeMode: "in-ubume",
       enabled: true,
       statusLabel: "Enabled",
       launchCommand: null,
@@ -427,7 +427,7 @@ test("ProviderPicker with initialProviderId=anthropic selects Anthropic in the p
       displayName: "Anthropic",
       currentModel: "sonnet",
       backendType: "claude-code-auth",
-      routeMode: "in-codexa",
+      routeMode: "in-ubume",
       enabled: true,
       statusLabel: "Enabled",
       launchCommand: null,

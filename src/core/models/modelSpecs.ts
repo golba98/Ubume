@@ -1,5 +1,5 @@
-import { readFileSync, renameSync, writeFileSync } from "fs";
-import { MODEL_SPECS_FILE } from "../../config/settings.js";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "fs";
+import { MODEL_SPECS_FILE, LEGACY_MODEL_SPECS_FILE } from "../../config/settings.js";
 
 export type ModelSpecStatus = "verified" | "loading" | "unknown";
 
@@ -143,6 +143,9 @@ function isVerifiedModelSpec(value: unknown): value is VerifiedModelSpec {
 }
 
 export function loadModelSpecCache(cacheFile = MODEL_SPECS_FILE): ModelSpecCache {
+  if (cacheFile === MODEL_SPECS_FILE && !existsSync(MODEL_SPECS_FILE) && existsSync(LEGACY_MODEL_SPECS_FILE)) {
+    cacheFile = LEGACY_MODEL_SPECS_FILE;
+  }
   try {
     const raw = JSON.parse(readFileSync(cacheFile, "utf-8")) as Record<string, unknown>;
     const cache: ModelSpecCache = {};
@@ -208,7 +211,7 @@ export interface ResolveModelSpecOptions {
 
 // Single authoritative resolver. Precedence:
 //   1. Runtime discovery metadata (if contextWindow is provided)
-//   2. Persistent spec cache (~/.codexa-model-specs.json)
+//   2. Persistent spec cache (~/.ubume-model-specs.json)
 //   3. Trusted static registry (KNOWN_MODEL_SPECS)
 //   4. Loading (if a background refresh is in-flight)
 //   5. Unknown

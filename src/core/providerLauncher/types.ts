@@ -17,9 +17,9 @@ export type ProviderBackendType =
   | "unavailable";
 
 export type ProviderLaunchAction = "launch" | "set-default" | "cancel";
-export type ProviderRouteAction = "use-in-codexa" | "select-model" | "refresh-models" | "run-diagnostics";
+export type ProviderRouteAction = "use-in-ubume" | "select-model" | "refresh-models" | "run-diagnostics";
 export type ProviderPickerAction = ProviderLaunchAction | ProviderRouteAction;
-export type ProviderRouteMode = "in-codexa" | "launch-only";
+export type ProviderRouteMode = "in-ubume" | "launch-only";
 
 export interface ProviderLaunchCommand {
   executable: string;

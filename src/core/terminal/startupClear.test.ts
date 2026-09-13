@@ -21,27 +21,27 @@ test("skips clear when noClear flag is true (--no-clear)", () => {
   assert.equal(cap.written.length, 0);
 });
 
-test("skips clear when CODEXA_NO_CLEAR=1 env var is set", () => {
+test("skips clear when UBUME_NO_CLEAR=1 env var is set", () => {
   const cap = makeCapture();
-  performStartupClear({ write: cap.write, noClear: false, env: { CODEXA_NO_CLEAR: "1" } });
+  performStartupClear({ write: cap.write, noClear: false, env: { UBUME_NO_CLEAR: "1" } });
   assert.equal(cap.written.length, 0);
 });
 
 test("noClear flag takes precedence over unset env var", () => {
   const cap = makeCapture();
-  performStartupClear({ write: cap.write, noClear: true, env: { CODEXA_NO_CLEAR: "0" } });
+  performStartupClear({ write: cap.write, noClear: true, env: { UBUME_NO_CLEAR: "0" } });
   assert.equal(cap.written.length, 0);
 });
 
-test("emits clear when CODEXA_NO_CLEAR is not '1'", () => {
+test("emits clear when UBUME_NO_CLEAR is not '1'", () => {
   const cap = makeCapture();
-  performStartupClear({ write: cap.write, noClear: false, env: { CODEXA_NO_CLEAR: "0" } });
+  performStartupClear({ write: cap.write, noClear: false, env: { UBUME_NO_CLEAR: "0" } });
   assert.deepEqual(cap.written, [TRANSCRIPT_CLEAR]);
 });
 
-test("emits clear when CODEXA_NO_CLEAR is undefined", () => {
+test("emits clear when UBUME_NO_CLEAR is undefined", () => {
   const cap = makeCapture();
-  performStartupClear({ write: cap.write, noClear: false, env: { CODEXA_NO_CLEAR: undefined } });
+  performStartupClear({ write: cap.write, noClear: false, env: { UBUME_NO_CLEAR: undefined } });
   assert.deepEqual(cap.written, [TRANSCRIPT_CLEAR]);
 });
 

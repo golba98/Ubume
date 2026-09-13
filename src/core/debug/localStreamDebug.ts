@@ -1,14 +1,14 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { resolveCodexaDataDir } from "../workspace/appData.js";
+import { resolveUbumeDataDir } from "../workspace/appData.js";
 
 export function isLocalStreamDebugEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.CODEXA_DEBUG_LOCAL_STREAM === "1";
+  return env.UBUME_DEBUG_LOCAL_STREAM === "1";
 }
 
 export function getLocalStreamDebugLogPath(env: NodeJS.ProcessEnv = process.env): string {
-  return env.CODEXA_DEBUG_LOCAL_STREAM_FILE?.trim()
-    || join(resolveCodexaDataDir(undefined, env), "debug", "local-stream.jsonl");
+  return env.UBUME_DEBUG_LOCAL_STREAM_FILE?.trim()
+    || join(resolveUbumeDataDir(undefined, env), "debug", "local-stream.jsonl");
 }
 
 const SENSITIVE_DETAIL_KEY = /(?:raw|content|reasoning|analysis|arguments|prompt)/i;
@@ -36,7 +36,7 @@ export function traceLocalStream(
   try {
     const logPath = getLocalStreamDebugLogPath(env);
     mkdirSync(dirname(logPath), { recursive: true });
-    const safeDetails = env.CODEXA_DEBUG_LOCAL_STREAM_CONTENT === "1"
+    const safeDetails = env.UBUME_DEBUG_LOCAL_STREAM_CONTENT === "1"
       ? details
       : redactStreamDetails(details);
     appendFileSync(logPath, `${JSON.stringify({

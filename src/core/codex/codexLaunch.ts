@@ -63,7 +63,7 @@ function classifyResponsibleModule(modulePath: string): "src" | "built-artifact"
 }
 
 function shouldLogCodexLaunchDiagnostics(): boolean {
-  return process.env.CODEXA_DEBUG_CODEX_LAUNCH === "1";
+  return process.env.UBUME_DEBUG_CODEX_LAUNCH === "1";
 }
 
 function logCodexLaunchDiagnostics(
@@ -77,7 +77,7 @@ function logCodexLaunchDiagnostics(
 
   const { capabilities, launchContext } = prepared;
   const debugLines = [
-    "[codexa] codex launch debug",
+    "[ubume] codex launch debug",
     `  responsible module: ${prepared.responsibleModulePath} (${prepared.responsibleModuleKind})`,
     `  launch kind: ${launchContext.launchKind ?? "unknown"}`,
     `  package root: ${launchContext.packageRoot ?? "unknown"}`,
@@ -124,9 +124,9 @@ export async function prepareCodexExecLaunch(
   const responsibleModulePath = resolveResponsibleModulePath(responsibleModuleUrl);
   const responsibleModuleKind = classifyResponsibleModule(responsibleModulePath);
   const launchContext = {
-    launchKind: process.env.CODEXA_LAUNCH_KIND,
-    packageRoot: process.env.CODEXA_PACKAGE_ROOT,
-    launcherScript: process.env.CODEXA_LAUNCHER_SCRIPT,
+    launchKind: process.env.UBUME_LAUNCH_KIND,
+    packageRoot: process.env.UBUME_PACKAGE_ROOT,
+    launcherScript: process.env.UBUME_LAUNCHER_SCRIPT,
   };
 
   if (!argsResult.ok) {

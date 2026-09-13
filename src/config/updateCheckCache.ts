@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
 
@@ -13,12 +13,24 @@ export interface UpdateCheckCache {
 // are honored. See the same pattern in src/core/models/providerModelCache.ts.
 export function getUpdateCheckCacheFilePath(): string {
   const home = process.env.USERPROFILE ?? process.env.HOME ?? homedir();
-  return join(home, ".codexa-update-check.json");
+  return join(home, ".ubume-update-check.json");
+}
+
+export function getLegacyUpdateCheckCacheFilePath(): string {
+  const home = process.env.USERPROFILE ?? process.env.HOME ?? homedir();
+  return join(home, ".ubume-update-check.json");
 }
 
 export function loadUpdateCheckCache(filePath = getUpdateCheckCacheFilePath()): UpdateCheckCache | null {
   try {
-    const text = readFileSync(filePath, "utf-8");
+    let resolvedPath = filePath;
+    if (!existsSync(resolvedPath) && filePath === getUpdateCheckCacheFilePath()) {
+      const legacyPath = getLegacyUpdateCheckCacheFilePath();
+      if (existsSync(legacyPath)) {
+        resolvedPath = legacyPath;
+      }
+    }
+    const text = readFileSync(resolvedPath, "utf-8");
     const data = JSON.parse(text) as Record<string, unknown>;
     if (typeof data.lastChecked !== "number") return null;
     if (typeof data.currentVersion !== "string") return null;
@@ -48,7 +60,7 @@ function stripV(v: string): string {
   return v.startsWith("v") ? v.slice(1) : v;
 }
 
-/** Returns true when a cache entry was created by the running Codexa version. */
+/** Returns true when a cache entry was created by the running Ubume version. */
 export function isCacheForRunningVersion(cache: UpdateCheckCache, runningVersion: string): boolean {
   return stripV(cache.currentVersion) === stripV(runningVersion);
 }

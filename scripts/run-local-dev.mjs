@@ -32,7 +32,7 @@ export function resolveLocalDevEntry(root, args) {
   };
 }
 
-/** Resolve the native Codexa model chat command used by `codexa-dev native`. */
+/** Resolve the native Codexa model chat command used by `ubume-dev native`. */
 export function resolveNativeChatCommand(env = process.env) {
   const modelRoot = env.CODEXA_NATIVE_MODEL_ROOT?.trim()
     || DEFAULT_NATIVE_MODEL_ROOT;
@@ -57,7 +57,7 @@ export function resolveNativeChatCommand(env = process.env) {
   };
 }
 
-/** Resolve the NumPy Codexa checkpoint chat command used by `codexa-dev numpy`. */
+/** Resolve the NumPy Codexa checkpoint chat command used by `ubume-dev numpy`. */
 export function resolveNumpyChatCommand(env = process.env) {
   const modelRoot = env.CODEXA_NUMPY_MODEL_ROOT?.trim()
     || join(homedir(), "Development", "2-Python", "32-LLM (NumPy)");
@@ -79,7 +79,7 @@ export function resolveNumpyChatCommand(env = process.env) {
 const { isHeadlessMode, isHeadlessBenchmark, entry, entryArgs } = resolveLocalDevEntry(repoRoot, forwardArgs);
 const isNativeChat = forwardArgs[0] === "native";
 const isNumpyChat = forwardArgs[0] === "numpy";
-const bunExecutable = process.env.CODEXA_BUN_EXECUTABLE?.trim()
+const bunExecutable = process.env.UBUME_BUN_EXECUTABLE?.trim() || process.env.CODEXA_BUN_EXECUTABLE?.trim()
   || (process.platform === "win32" ? "bun.exe" : "bun");
 
 function hasFlag(args, longFlag, shortFlag) {
@@ -108,29 +108,29 @@ function formatLocalDevVersion() {
 }
 
 function printHelp() {
-  console.log(`codexa-dev ${formatLocalDevVersion()}
+  console.log(`ubume-dev ${formatLocalDevVersion()}
 
 Usage:
-  codexa-dev
-  codexa-dev native
-  codexa-dev numpy
-  codexa-dev "explain this repo"
-  codexa-dev exec "print the current directory"
-  codexa-dev [options] [prompt]
+  ubume-dev
+  ubume-dev native
+  ubume-dev numpy
+  ubume-dev "explain this repo"
+  ubume-dev exec "print the current directory"
+  ubume-dev [options] [prompt]
 
-This command runs the local repository source with CODEXA_CHANNEL=local-dev.
-It does not replace or modify the published codexa command.
+This command runs the local repository source with UBUME_CHANNEL=local-dev.
+It does not replace or modify the published ubume command.
 
-codexa-dev native talks directly to the local Codexa 900M SFT checkpoint
+ubume-dev native talks directly to the local Codexa 900M SFT checkpoint
 through native PyTorch inference. It does not use LM Studio or GGUF.
-codexa-dev numpy talks directly to the local NumPy 250M checkpoint.
+ubume-dev numpy talks directly to the local NumPy 250M checkpoint.
 `);
 }
 
 function launch() {
-  if (process.env.CODEXA_DEBUG_LAUNCH === "1") {
+  if (process.env.UBUME_DEBUG_LAUNCH === "1" || process.env.CODEXA_DEBUG_LAUNCH === "1") {
     process.stderr.write(
-      `[codexa-dev:launch] source=local-repo channel=local-dev version=${formatLocalDevVersion()} entry=${entry}\n`,
+      `[ubume-dev:launch] source=local-repo channel=local-dev version=${formatLocalDevVersion()} entry=${entry}\n`,
     );
   }
 
@@ -156,7 +156,7 @@ function launch() {
     const child = spawn(native.executable, [...native.args, ...forwardArgs.slice(1)], {
       cwd: native.cwd,
       stdio: "inherit",
-      env: { ...process.env, CODEXA_CHANNEL: "local-dev-native" },
+      env: { ...process.env, UBUME_CHANNEL: "local-dev-native" },
     });
     child.on("error", (error) => {
       console.error(`Failed to launch Codexa native chat: ${error.message}`);
@@ -184,7 +184,7 @@ function launch() {
     const child = spawn(numpy.executable, [...numpy.args, ...forwardArgs.slice(1)], {
       cwd: numpy.cwd,
       stdio: "inherit",
-      env: { ...process.env, CODEXA_CHANNEL: "local-dev-numpy" },
+      env: { ...process.env, UBUME_CHANNEL: "local-dev-numpy" },
     });
     child.on("error", (error) => {
       console.error(`Failed to launch Codexa NumPy chat: ${error.message}`);
@@ -209,20 +209,20 @@ function launch() {
       env: {
         ...process.env,
         CODEX_WORKSPACE_ROOT: process.cwd(),
-        CODEXA_CHANNEL: "local-dev",
-        CODEXA_LAUNCH_KIND: "dev-run",
-        CODEXA_PACKAGE_ROOT: repoRoot,
-        CODEXA_LAUNCHER_SCRIPT: currentFile,
-        CODEXA_RELAUNCH_EXECUTABLE: process.execPath,
-        CODEXA_RELAUNCH_ARGS: JSON.stringify([currentFile, ...forwardArgs]),
-        CODEXA_HEADLESS_BENCHMARK: isHeadlessBenchmark ? "1" : "0",
+        UBUME_CHANNEL: "local-dev",
+        UBUME_LAUNCH_KIND: "dev-run",
+        UBUME_PACKAGE_ROOT: repoRoot,
+        UBUME_LAUNCHER_SCRIPT: currentFile,
+        UBUME_RELAUNCH_EXECUTABLE: process.execPath,
+        UBUME_RELAUNCH_ARGS: JSON.stringify([currentFile, ...forwardArgs]),
+        UBUME_HEADLESS_BENCHMARK: isHeadlessBenchmark ? "1" : "0",
       },
     },
   );
 
   child.on("error", (error) => {
-    console.error(`Failed to launch local Codexa: ${error.message}`);
-    console.error("Bun is required to launch codexa-dev. Install Bun, then run this command again.");
+    console.error(`Failed to launch local Ubume: ${error.message}`);
+    console.error("Bun is required to launch ubume-dev. Install Bun, then run this command again.");
     process.exit(1);
   });
 

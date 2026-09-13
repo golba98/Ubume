@@ -39,7 +39,7 @@ export function buildProviderLaunchSpec(provider: ProviderConfig, cwd: string): 
   if (!provider.enabled) {
     return {
       status: "disabled",
-      message: `${provider.displayName} is disabled. Configure a command in Codexa's provider settings before launching it.`,
+      message: `${provider.displayName} is disabled. Configure a command in Ubume's provider settings before launching it.`,
     };
   }
 

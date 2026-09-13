@@ -117,7 +117,7 @@ const TEST_COMMAND_CONTEXT = {
       "Active workspace:",
       "  C:\\Workspace",
       "",
-      "Launch mode: installed codexa",
+      "Launch mode: installed ubume",
     ].join("\n"),
   },
   tokensUsed: 1200,

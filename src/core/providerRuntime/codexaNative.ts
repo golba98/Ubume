@@ -95,7 +95,7 @@ export function discoverCodexaNativeModels(
       providerId: "codexa-native",
       backendKind: "unavailable",
       models: [],
-      message: "Codexa Native is only available on codexa-dev.",
+      message: "Codexa Native is only available on ubume-dev.",
     };
   }
   const missing = missingNativePaths(config);

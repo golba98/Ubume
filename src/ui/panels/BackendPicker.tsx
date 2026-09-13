@@ -19,7 +19,7 @@ export function BackendPicker({ currentBackend, onSelect, onCancel }: BackendPic
     <SelectionPanel
       focusId={FOCUS_IDS.backendPicker}
       title="Select backend"
-      subtitle="Codexa is connected and ready. Native OpenAI is reserved for a later implementation pass."
+      subtitle="Ubume is connected and ready. Native OpenAI is reserved for a later implementation pass."
       items={items}
       onSelect={onSelect}
       onCancel={onCancel}

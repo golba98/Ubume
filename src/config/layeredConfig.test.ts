@@ -10,7 +10,7 @@ function writeText(filePath: string, contents: string): void {
 }
 
 test("resolves user config, trusted project config, profiles, and CLI overrides deterministically", async () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), "codexa-layered-config-"));
+  const tempRoot = mkdtempSync(join(tmpdir(), "ubume-layered-config-"));
   const tempHome = join(tempRoot, "home");
   const workspaceRoot = join(tempRoot, "repo", "packages", "app");
   const projectRoot = join(tempRoot, "repo");
@@ -25,7 +25,7 @@ test("resolves user config, trusted project config, profiles, and CLI overrides 
 
     writeFileSync(join(tempHome, "config.toml"), [
       "model = \"gpt-5.2\"",
-      "[codexa]",
+      "[ubume]",
       "backend = \"openai-native\"",
       "",
       "[profiles.review]",
@@ -35,7 +35,7 @@ test("resolves user config, trusted project config, profiles, and CLI overrides 
     writeFileSync(join(projectRoot, ".codex", "config.toml"), [
       "model = \"gpt-5.4\"",
       "profile = \"review\"",
-      "[codexa]",
+      "[ubume]",
       "mode = \"suggest\"",
       "plan_mode = true",
       "",
@@ -67,7 +67,7 @@ test("resolves user config, trusted project config, profiles, and CLI overrides 
         profile: null,
         configOverrides: [
           "model=\"gpt-5.4-mini\"",
-          "codexa.mode=\"full-auto\"",
+          "ubume.mode=\"full-auto\"",
           "mcp.enabled=true",
         ],
         passthroughArgs: [],
@@ -102,7 +102,7 @@ test("resolves user config, trusted project config, profiles, and CLI overrides 
 });
 
 test("blocks project config when the detected project root is untrusted", async () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), "codexa-layered-untrusted-"));
+  const tempRoot = mkdtempSync(join(tmpdir(), "ubume-layered-untrusted-"));
   const tempHome = join(tempRoot, "home");
   const workspaceRoot = join(tempRoot, "repo", "app");
   const projectRoot = join(tempRoot, "repo");

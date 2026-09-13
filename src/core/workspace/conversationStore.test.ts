@@ -8,7 +8,7 @@ import { ConversationStore } from "./conversationStore.js";
 const temporaryRoots: string[] = [];
 
 function store(now: string, id = "abc") {
-  const root = mkdtempSync(join(tmpdir(), "codexa-conversations-"));
+  const root = mkdtempSync(join(tmpdir(), "ubume-conversations-"));
   temporaryRoots.push(root);
   return new ConversationStore("/workspace", {
     rootDir: root,

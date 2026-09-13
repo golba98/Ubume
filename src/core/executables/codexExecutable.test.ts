@@ -116,7 +116,7 @@ test("Codex resolver: rejects malicious CODEX_EXECUTABLE candidates", async () =
 });
 
 test("Codex resolver: accepts environment executable paths with spaces", async () => {
-  const tempRoot = join(tmpdir(), `codexa codex resolver ${Date.now()}`);
+  const tempRoot = join(tmpdir(), `ubume codex resolver ${Date.now()}`);
   const codexPath = join(tempRoot, "codex cli.exe");
   mkdirSync(tempRoot, { recursive: true });
   writeFileSync(codexPath, "");

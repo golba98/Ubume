@@ -12,7 +12,7 @@ import {
 import { normalizeWorkspaceRoot } from "./workspaceRoot.js";
 
 function createTempWorkspace(): string {
-  return mkdtempSync(join(tmpdir(), "codexa-launch-context-"));
+  return mkdtempSync(join(tmpdir(), "ubume-launch-context-"));
 }
 
 test("uses installed launcher metadata when available", () => {
@@ -21,19 +21,19 @@ test("uses installed launcher metadata when available", () => {
     packageRoot: "C:/repo",
     execPath: "C:/Program Files/nodejs/node.exe",
     env: {
-      CODEXA_LAUNCH_KIND: "installed-bin",
-      CODEXA_PACKAGE_ROOT: "C:/repo",
-      CODEXA_LAUNCHER_SCRIPT: "C:/repo/bin/codexa.js",
-      CODEXA_RELAUNCH_EXECUTABLE: "C:/Program Files/nodejs/node.exe",
-      CODEXA_RELAUNCH_ARGS: JSON.stringify(["C:/repo/bin/codexa.js", "--profile", "review"]),
+      UBUME_LAUNCH_KIND: "installed-bin",
+      UBUME_PACKAGE_ROOT: "C:/repo",
+      UBUME_LAUNCHER_SCRIPT: "C:/repo/bin/ubume.js",
+      UBUME_RELAUNCH_EXECUTABLE: "C:/Program Files/nodejs/node.exe",
+      UBUME_RELAUNCH_ARGS: JSON.stringify(["C:/repo/bin/ubume.js", "--profile", "review"]),
     },
   });
 
   assert.equal(context.launchKind, "installed-bin");
   assert.equal(context.packageRoot, "C:\\repo");
-  assert.equal(context.launcherScriptPath, "C:/repo/bin/codexa.js");
+  assert.equal(context.launcherScriptPath, "C:/repo/bin/ubume.js");
   assert.equal(context.relaunchExecutable, "C:/Program Files/nodejs/node.exe");
-  assert.deepEqual(context.relaunchArgs, ["C:/repo/bin/codexa.js", "--profile", "review"]);
+  assert.deepEqual(context.relaunchArgs, ["C:/repo/bin/ubume.js", "--profile", "review"]);
 });
 
 test("falls back to bun repo launch metadata when no installed launcher env exists", () => {
@@ -71,11 +71,11 @@ test("creates an installed-bin relaunch plan with normalized target cwd and env"
       packageRoot: "C:/repo",
       execPath: "C:/Program Files/nodejs/node.exe",
       env: {
-        CODEXA_LAUNCH_KIND: "installed-bin",
-        CODEXA_PACKAGE_ROOT: "C:/repo",
-        CODEXA_LAUNCHER_SCRIPT: "C:/repo/bin/codexa.js",
-        CODEXA_RELAUNCH_EXECUTABLE: "C:/Program Files/nodejs/node.exe",
-        CODEXA_RELAUNCH_ARGS: JSON.stringify(["C:/repo/bin/codexa.js", "--profile", "review"]),
+        UBUME_LAUNCH_KIND: "installed-bin",
+        UBUME_PACKAGE_ROOT: "C:/repo",
+        UBUME_LAUNCHER_SCRIPT: "C:/repo/bin/ubume.js",
+        UBUME_RELAUNCH_EXECUTABLE: "C:/Program Files/nodejs/node.exe",
+        UBUME_RELAUNCH_ARGS: JSON.stringify(["C:/repo/bin/ubume.js", "--profile", "review"]),
       },
     });
 
@@ -84,10 +84,10 @@ test("creates an installed-bin relaunch plan with normalized target cwd and env"
     if (!result.ok) return;
 
     assert.equal(result.plan.executable, "C:/Program Files/nodejs/node.exe");
-    assert.deepEqual(result.plan.args, ["C:/repo/bin/codexa.js", "--profile", "review"]);
+    assert.deepEqual(result.plan.args, ["C:/repo/bin/ubume.js", "--profile", "review"]);
     assert.equal(result.plan.cwd, normalizeWorkspaceRoot(nextWorkspace));
     assert.equal(result.plan.env.CODEX_WORKSPACE_ROOT, normalizeWorkspaceRoot(nextWorkspace));
-    assert.equal(result.plan.env.CODEXA_LAUNCH_KIND, "installed-bin");
+    assert.equal(result.plan.env.UBUME_LAUNCH_KIND, "installed-bin");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -152,7 +152,7 @@ test("describes dev launch mode with install guidance", () => {
 
   assert.match(message, /Launch mode: dev\/repo launch/i);
   assert.match(message, /npm run install:dev-bin/i);
-  assert.match(message, /codexa-dev/i);
+  assert.match(message, /ubume-dev/i);
   assert.doesNotMatch(message, /npm link/i);
   assert.match(message, /\/workspace relaunch <path>/i);
 });

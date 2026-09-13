@@ -6,6 +6,21 @@ No changes yet.
 
 ---
 
+## [0.1.0] — 2026-09-13 — Project Rename to Ubume CLI
+
+### Changed
+
+- **Project rebranding to Ubume CLI** (`ubume`): Renamed package to `ubume`, executable to `ubume`, and repo/tool identity to Ubume CLI with pre-1.0 initial version `0.1.0`.
+- **Launchers & Bridge**: Added primary `bin/ubume.js` launcher with legacy `bin/codexa.js` backward-compatibility deprecation wrapper. Added `bin/ubume-local-harness-bridge.js` with `codexa-local-harness-bridge.js` alias.
+- **Config & State Migration**: Moved active configuration, plans, model cache, trust store, and scratch directories to `.ubume/` (`~/.local/share/ubume`, `~/.ubume-settings.json`, `.ubume/scratch`) with automatic non-destructive migration of existing `.codexa` user files.
+- **TUI & Wordmark**: Rebranded ANSI block logos, ASCII art, status messages ("✧ Ubume is thinking"), and headers.
+- **Update Checks**: Configured update checking against `ubume` npm registry.
+- **Remaining Codexa references**: Finished renaming user-facing text, identifiers, debug log prefixes, dev shims (`ubume-dev` / `ubd`), home-dir caches and logs (`.ubume-update-check.json`, `.ubume-perf.jsonl`, `.ubume-input-debug.log`), and local-harness profile and env names (`ubume-local`, `UBUME_DSH_*`).
+- **Legacy compatibility**: Every `CODEXA_*` environment variable still works. The launcher and both entry points copy it into its unset `UBUME_*` name (`src/config/legacyEnv.ts`). `--codexa-prompt-policy`, the `codexa.mode` / `codexa.backend` config keys, the `codexa` / `codexa-dev` / `cxd` commands, and `scripts/audit-codexa-capabilities.mjs` are all still accepted.
+- **Codexa model family unchanged**: The native PyTorch / CuPy / NumPy models keep the Codexa name, including the provider IDs `codexa-native` / `codexa-cupy`, the model IDs, checkpoint paths, bridge scripts, the "Codexa Native" label, and `CODEXA_NATIVE_*` / `CODEXA_CUPY_*` / `CODEXA_NUMPY_*`.
+
+---
+
 ## [1.0.28] — 2026-09-12 — Resume Reliability
 
 ### Fixed

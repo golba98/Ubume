@@ -22,7 +22,7 @@ import { normalizeRuntimeConfig, resolveRuntimeConfig } from "../../config/runti
 import type { ProviderChatRequest } from "./types.js";
 
 // A real temp file used wherever tests need a configured absolute exe path that passes the existence check.
-const FAKE_GEMINI_EXE = join(tmpdir(), "codexa-test-gemini.cmd");
+const FAKE_GEMINI_EXE = join(tmpdir(), "ubume-test-gemini.cmd");
 writeFileSync(FAKE_GEMINI_EXE, "");
 
 function commandResult(overrides: Partial<CommandResult>): CommandResult {

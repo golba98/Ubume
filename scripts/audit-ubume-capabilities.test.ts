@@ -9,7 +9,7 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 test("capability audit resolves the current source layout without false missing results", () => {
   const result = spawnSync(
     process.execPath,
-    [join(repoRoot, "scripts", "audit-codexa-capabilities.mjs")],
+    [join(repoRoot, "scripts", "audit-ubume-capabilities.mjs")],
     {
       cwd: repoRoot,
       encoding: "utf8",

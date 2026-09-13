@@ -23,8 +23,11 @@ temp/
 *.log
 logs/
 .codexa-debug/
+.ubume-debug/
 .codexa/*.jsonl
+.ubume/*.jsonl
 .codexa/*.md
+.ubume/*.md
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -62,10 +65,12 @@ CLAUDE.md
 GEMINI.md
 docs/PR_DETAILS.md
 docs/audits/codexa-vs-codex-cli-feature-gap.md
+docs/audits/ubume-vs-codex-cli-feature-gap.md
 docs/planning/parity-implementation-backlog.md
 
 # Local workspace config
 .codexa/*.json
+.ubume/*.json
 
 .gemini/
 gha-creds-*.json

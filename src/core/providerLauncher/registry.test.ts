@@ -12,7 +12,7 @@ import {
 import { runCommand } from "../process/CommandRunner.js";
 
 test("provider registry exposes Codexa Native in local-dev channel and excludes it in production", () => {
-  const devProviders = buildProviderRegistry({ activeModel: "gpt-5.4", env: { CODEXA_CHANNEL: "local-dev" } });
+  const devProviders = buildProviderRegistry({ activeModel: "gpt-5.4", env: { UBUME_CHANNEL: "local-dev" } });
   assert.deepEqual(devProviders.map((provider) => provider.id), ["openai", "anthropic", "mistral", "codexa-native", "codexa-cupy", "local", "antigravity"]);
   assert.equal(devProviders[0]?.displayName, "OpenAI");
   assert.equal(devProviders[0]?.currentModel, "gpt-5.4");
@@ -20,10 +20,10 @@ test("provider registry exposes Codexa Native in local-dev channel and excludes 
   assert.deepEqual(devProviders[1]?.launchCommand, { executable: "claude", args: [] });
   assert.equal(devProviders[2]?.displayName, "Mistral Vibe CLI");
   assert.equal(devProviders[2]?.backendType, "mistral-vibe-cli-auth");
-  assert.equal(devProviders[2]?.routeMode, "in-codexa");
+  assert.equal(devProviders[2]?.routeMode, "in-ubume");
   assert.equal(devProviders[2]?.statusLabel, "Enabled");
   assert.deepEqual(devProviders[2]?.launchCommand, { executable: "vibe", args: [] });
-  assert.equal(devProviders[3]?.displayName, "codexa-PyTorch");
+  assert.equal(devProviders[3]?.displayName, "ubume-PyTorch");
   assert.equal(devProviders[3]?.backendType, "codexa-native-pytorch");
   assert.equal(devProviders[4]?.displayName, "CuPy");
   assert.equal(devProviders[4]?.backendType, "codexa-cupy");
@@ -32,7 +32,7 @@ test("provider registry exposes Codexa Native in local-dev channel and excludes 
   assert.equal(devProviders[4]?.launchCommand, null);
   assert.deepEqual(devProviders[6]?.launchCommand, { executable: "agy", args: [] });
 
-  const prodProviders = buildProviderRegistry({ activeModel: "gpt-5.4", env: { CODEXA_CHANNEL: "published" } });
+  const prodProviders = buildProviderRegistry({ activeModel: "gpt-5.4", env: { UBUME_CHANNEL: "published" } });
   assert.deepEqual(prodProviders.map((provider) => provider.id), ["openai", "anthropic", "mistral", "local", "antigravity"]);
   assert.equal(prodProviders.find((p) => p.id === "codexa-native"), undefined);
   assert.equal(prodProviders.find((p) => p.id === "codexa-cupy"), undefined);
@@ -89,7 +89,7 @@ test("antigravity appears in the provider registry with correct defaults", async
       })) as typeof runCommand,
     });
 
-    const providers = buildProviderRegistry({ activeModel: "gpt-5.4", env: { CODEXA_CHANNEL: "local-dev" } });
+    const providers = buildProviderRegistry({ activeModel: "gpt-5.4", env: { UBUME_CHANNEL: "local-dev" } });
     const antigravity = providers.find((p) => p.id === "antigravity");
 
     assert.ok(antigravity, "antigravity provider not found");
@@ -147,7 +147,7 @@ test("unvalidated local provider remains disabled until endpoint discovery succe
 
   assert.equal(providers.find((provider) => provider.id === "anthropic")?.isDefault, true);
   assert.equal(providers.find((provider) => provider.id === "local")?.isActiveRoute, true);
-  assert.equal(providers.find((provider) => provider.id === "local")?.routeMode, "in-codexa");
+  assert.equal(providers.find((provider) => provider.id === "local")?.routeMode, "in-ubume");
   assert.equal(providers.find((provider) => provider.id === "local")?.enabled, false);
 });
 
@@ -167,7 +167,7 @@ test("registry hides direct Google routes and falls back to OpenAI", () => {
   assert.equal(providers.find((provider) => provider.id === "openai")?.isActiveRoute, true);
 });
 
-test("anthropic can be selected as an active in-Codexa route", () => {
+test("anthropic can be selected as an active in-Ubume route", () => {
   const providers = buildProviderRegistry({
     activeModel: "gpt-5.4",
     workspaceConfig: {
@@ -180,7 +180,7 @@ test("anthropic can be selected as an active in-Codexa route", () => {
   });
 
   assert.equal(providers.find((provider) => provider.id === "anthropic")?.isActiveRoute, true);
-  assert.equal(providers.find((provider) => provider.id === "anthropic")?.routeMode, "in-codexa");
+  assert.equal(providers.find((provider) => provider.id === "anthropic")?.routeMode, "in-ubume");
   assert.equal(providers.find((provider) => provider.id === "anthropic")?.currentModel, "claude-sonnet-4-20250514");
   assert.equal(providers.find((provider) => provider.id === "openai")?.isActiveRoute, false);
 });

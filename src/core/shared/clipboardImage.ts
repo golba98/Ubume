@@ -47,7 +47,7 @@ async function readMacClipboard(run: CommandRunner): Promise<Buffer> {
   try {
     return await run("pngpaste", ["-"]);
   } catch {
-    const tempDir = await mkdtemp(join(tmpdir(), "codexa-clipboard-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "ubume-clipboard-"));
     const outputPath = join(tempDir, "clipboard.png");
     const applePath = outputPath.replace(/\\/g, "\\\\").replace(/\"/g, '\\"');
     try {

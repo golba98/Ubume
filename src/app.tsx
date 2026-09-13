@@ -183,7 +183,7 @@ import {
 } from "./core/providerRuntime/contextMetadata.js";
 import { captureWorkspaceSnapshot, createWorkspaceActivityTracker, diffWorkspaceSnapshots } from "./core/workspace/workspaceActivity.js";
 import { resolveWorkspaceRoot } from "./core/workspace/workspaceRoot.js";
-import { resolveCodexaAttachmentDir } from "./core/workspace/appData.js";
+import { resolveUbumeAttachmentDir } from "./core/workspace/appData.js";
 import { ConversationStore, type ConversationListEntry, type ConversationMessage, type ConversationRecord } from "./core/workspace/conversationStore.js";
 import {
   importExternalFile,
@@ -208,7 +208,7 @@ import {
   getProviderRouteSetupMessage,
   getProviderRuntime,
   isProviderRouteConfigured,
-  isProviderRoutableInCodexa,
+  isProviderRoutableInUbume,
   persistProviderDiscovery,
   resolveActiveProviderRoute,
   validateProviderRouteActivation,
@@ -472,7 +472,7 @@ export function App({ launchArgs }: AppProps) {
   const [baseLayeredConfig, setBaseLayeredConfig] = useState<LayeredConfigResult>(initialLayeredConfig.current);
   const [sessionRuntimeOverride, setSessionRuntimeOverride] = useState<PartialRuntimeConfig>(() => {
     const initialRoute = initialProviderWorkspaceConfig.current.activeRoute;
-    if (!initialRoute || !isProviderRoutableInCodexa(initialRoute.providerId)) {
+    if (!initialRoute || !isProviderRoutableInUbume(initialRoute.providerId)) {
       return {};
     }
 
@@ -955,7 +955,7 @@ export function App({ launchArgs }: AppProps) {
       `  Active chat route: ${activeRouteProvider?.displayName ?? "OpenAI"} / ${activeModelInfo}`,
       `  Context: ${ctxValue}${ctxSource}`,
       `  Backend kind: ${activeProviderRoute.backendKind}`,
-      `  In-Codexa routing: ${activeProviderRuntime.routeAvailable ? isProviderRouteConfigured(activeProviderRoute.providerId) ? "configured" : "not configured" : "unavailable"}`,
+      `  In-Ubume routing: ${activeProviderRuntime.routeAvailable ? isProviderRouteConfigured(activeProviderRoute.providerId) ? "configured" : "not configured" : "unavailable"}`,
       `  External launch: ${activeRouteProvider?.launchCommand ? "Available" : "Unavailable"}`,
       ...(providerLines.length > 0 ? providerLines : []),
     ].join("\n");
@@ -1674,11 +1674,11 @@ export function App({ launchArgs }: AppProps) {
         && discovery.models.length > 0
         && !discovery.models.some((model) => model.modelId === loaded.metadata.modelId || model.id === loaded.metadata.modelId);
       setConversationRouteOverride(modelUnavailable ? null : route);
-      if (!isProviderRoutableInCodexa(routeProvider) || modelUnavailable) {
-        const reason = !isProviderRoutableInCodexa(routeProvider)
+      if (!isProviderRoutableInUbume(routeProvider) || modelUnavailable) {
+        const reason = !isProviderRoutableInUbume(routeProvider)
           ? `${routeProvider} is not currently available`
           : `${loaded.metadata.modelId} is not currently available`;
-        appendSystemEvent("Original route unavailable", `Restored the conversation, but ${reason}. Codexa will use the current route when you send the next message.`);
+        appendSystemEvent("Original route unavailable", `Restored the conversation, but ${reason}. Ubume will use the current route when you send the next message.`);
         setConversationRouteOverride(null);
       }
     } else {
@@ -2754,9 +2754,9 @@ export function App({ launchArgs }: AppProps) {
         "Provider default updated",
         provider.routeMode === "launch-only"
           ? `${provider.displayName} is now the workspace default external CLI. Active chat route remains ${activeRouteProvider?.displayName ?? "OpenAI"} / ${model}.`
-          : provider.routeMode === "in-codexa" && routeConfigured
+          : provider.routeMode === "in-ubume" && routeConfigured
           ? `${provider.displayName} is now the workspace default provider. Active chat route remains ${activeRouteProvider?.displayName ?? "OpenAI"} / ${model}.`
-          : `${provider.displayName} is set as the workspace default, but in-Codexa routing is not configured yet. Active chat route remains ${activeRouteProvider?.displayName ?? "OpenAI"} / ${model}.`,
+          : `${provider.displayName} is set as the workspace default, but in-Ubume routing is not configured yet. Active chat route remains ${activeRouteProvider?.displayName ?? "OpenAI"} / ${model}.`,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save provider workspace config.";
@@ -2783,11 +2783,11 @@ export function App({ launchArgs }: AppProps) {
       return;
     }
 
-    if (action === "use-in-codexa") {
-      if (!isProviderRoutableInCodexa(providerId)) {
+    if (action === "use-in-ubume") {
+      if (!isProviderRoutableInUbume(providerId)) {
         const message = provider.isDefault
-          ? `${provider.displayName} is set as the workspace default, but in-Codexa routing is not configured yet.`
-          : `${provider.displayName} in-Codexa routing is not configured yet.`;
+          ? `${provider.displayName} is set as the workspace default, but in-Ubume routing is not configured yet.`
+          : `${provider.displayName} in-Ubume routing is not configured yet.`;
         if (providerRouteErrorsRef.current[providerId] !== message) {
           appendSystemEvent("Provider route unavailable", message);
           providerRouteErrorsRef.current[providerId] = message;
@@ -2892,10 +2892,10 @@ export function App({ launchArgs }: AppProps) {
     }
 
     if (action === "refresh-models") {
-      if (!isProviderRoutableInCodexa(providerId)) {
+      if (!isProviderRoutableInUbume(providerId)) {
         const message = provider.isDefault
-          ? `${provider.displayName} is set as the workspace default, but in-Codexa routing is not configured yet.`
-          : `${provider.displayName} in-Codexa routing is not configured yet.`;
+          ? `${provider.displayName} is set as the workspace default, but in-Ubume routing is not configured yet.`
+          : `${provider.displayName} in-Ubume routing is not configured yet.`;
         if (providerRouteErrorsRef.current[providerId] !== message) {
           appendSystemEvent("Provider route unavailable", message);
           providerRouteErrorsRef.current[providerId] = message;
@@ -3005,7 +3005,7 @@ export function App({ launchArgs }: AppProps) {
 
     // Do a real executable preflight before launching any external provider.
     // A missing CLI is a setup state, not a launch error the user should have
-    // to decode after Codexa has already handed over the terminal.
+    // to decode after Ubume has already handed over the terminal.
     if (action === "launch" && provider.launchCommand?.executable && !providerLaunchBypassRef.current) {
       void commandExistsOnPath(provider.launchCommand.executable).then((available) => {
         if (!isMountedRef.current) return;
@@ -3033,7 +3033,7 @@ export function App({ launchArgs }: AppProps) {
     setScreen("main");
     appendSystemEvent(
       "Provider launch",
-      `Suspending Codexa and launching ${provider.displayName}${providerId === "mistral" ? ` / ${provider.currentModel}` : ""}. Codexa will resume when the external CLI exits.`,
+      `Suspending Ubume and launching ${provider.displayName}${providerId === "mistral" ? ` / ${provider.currentModel}` : ""}. Ubume will resume when the external CLI exits.`,
     );
 
     const launchOptions = {
@@ -3097,7 +3097,7 @@ export function App({ launchArgs }: AppProps) {
     const plan = getProviderSetupPlan(providerId, windows);
 
     // Providers with user-supplied commands cannot be safely installed by
-    // Codexa. The prompt still gives them a retry path after manual setup.
+    // Ubume. The prompt still gives them a retry path after manual setup.
     if (!plan.installCommand) {
       providerLaunchBypassRef.current = true;
       setProviderSetup(null);
@@ -3603,7 +3603,7 @@ export function App({ launchArgs }: AppProps) {
       lines.push(`You: ${turn.prompt.trim()}`);
       if (turn.response?.trim()) {
         lines.push("");
-        lines.push(`Codexa: ${turn.response.trim()}`);
+        lines.push(`Ubume: ${turn.response.trim()}`);
       }
       lines.push("");
     }
@@ -3664,7 +3664,7 @@ export function App({ launchArgs }: AppProps) {
     if (busyRef.current) return;
     try {
       const clipboardImage = await readClipboardImage();
-      const attachmentsDir = resolveCodexaAttachmentDir(workspaceRoot, runtimeConfig.policy.attachmentDir);
+      const attachmentsDir = resolveUbumeAttachmentDir(workspaceRoot, runtimeConfig.policy.attachmentDir);
       const imagePath = await saveClipboardImage(clipboardImage.data, attachmentsDir);
       const attachment = {
         path: imagePath,
@@ -3905,7 +3905,7 @@ export function App({ launchArgs }: AppProps) {
       if (!supportsImages) {
         const detail = activeProviderRoute.providerId === "local"
           ? "The active Local model is not configured with supports_vision: true. Switch to a vision model or remove the image."
-          : `${formatRuntimeProviderLabel(activeProviderRoute.providerId)} does not have verified image transport in Codexa yet. Switch to Codexa/OpenAI or a vision-enabled Local model.`;
+          : `${formatRuntimeProviderLabel(activeProviderRoute.providerId)} does not have verified image transport in Ubume yet. Switch to Ubume/OpenAI or a vision-enabled Local model.`;
         appendErrorEvent("Image not supported", detail);
         return false;
       }
@@ -3952,7 +3952,7 @@ export function App({ launchArgs }: AppProps) {
     if (!provider.run) {
       appendErrorEvent(
         "Backend unavailable",
-        `${provider.label} is a planned provider placeholder. Use Codexa Core for runnable execution in v1.`,
+        `${provider.label} is a planned provider placeholder. Use Ubume Core for runnable execution in v1.`,
       );
       return false;
     }
@@ -4031,7 +4031,7 @@ export function App({ launchArgs }: AppProps) {
             responsePresentation: lifecycle.responsePresentation,
             approvedPlan: lifecycle.approvedPlan,
           }),
-          summary: "Codexa is starting...",
+          summary: "Ubume is starting...",
         },
       ],
     });
@@ -4356,7 +4356,7 @@ export function App({ launchArgs }: AppProps) {
             const combinedOutput = [safeMessage, safeRawOutput].filter(Boolean).join("\n");
             const errorMessage = isLikelyAuthFailure(combinedOutput)
               ? [
-                "Codexa reported an authentication/session error.",
+                "Ubume reported an authentication/session error.",
                 "Recovery:",
                 "  codex login",
                 "",
@@ -4409,12 +4409,14 @@ export function App({ launchArgs }: AppProps) {
             appDiagLog(`CONVERSATION_STORE: checkpoint save failed: ${error instanceof Error ? error.message : "filesystem error"}`);
           }
         },
-        onLocalHarnessSession: (session) => {
+        onLocalHarnessSession: (session, sessionId) => {
           const current = activeConversationRef.current;
-          if (!current || activeProviderRoute.providerId !== "local") return;
+          if (!current || activeProviderRoute.providerId !== "local" || !isCurrentRun(activeRunIdRef.current, runId)) return;
+          if (!session && current.metadata.localHarnessSession?.sessionId !== sessionId) return;
+          const { localHarnessSession: _previousSession, ...metadata } = current.metadata;
           const next: ConversationRecord = {
             ...current,
-            metadata: { ...current.metadata, localHarnessSession: session },
+            metadata: session ? { ...metadata, localHarnessSession: session } : metadata,
           };
           activeConversationRef.current = next;
           try {
@@ -4703,7 +4705,7 @@ export function App({ launchArgs }: AppProps) {
       const session = perf.getSession();
       const summary = session
         ? perf.buildSummary(session)
-        : "No perf data recorded yet. Set CODEXA_PERF=1 and send a prompt first.";
+        : "No perf data recorded yet. Set UBUME_PERF=1 and send a prompt first.";
       appendSystemEvent("Perf report", summary);
       dispatchSession({ type: "PUSH_HISTORY", value });
       resetComposer();
@@ -5140,7 +5142,7 @@ export function App({ launchArgs }: AppProps) {
 
     if (outsideViolations.length > 0) {
       if (runtimeConfig.policy.allowExternalFileImport) {
-        const attachmentsDir = resolveCodexaAttachmentDir(workspaceRoot, runtimeConfig.policy.attachmentDir);
+        const attachmentsDir = resolveUbumeAttachmentDir(workspaceRoot, runtimeConfig.policy.attachmentDir);
         const importFiles: PendingImportFile[] = outsideViolations.map((v) => ({
           srcPath: v.normalizedPath,
           rawPath: v.rawPath,
@@ -5252,7 +5254,7 @@ export function App({ launchArgs }: AppProps) {
       if (!hasVisibleTranscriptPlan) {
         return (
           <Text color={activeTheme.textMuted}>
-            Plan could not be displayed. Please ask Codexa to regenerate the plan.
+            Plan could not be displayed. Please ask Ubume to regenerate the plan.
           </Text>
         );
       }
@@ -5483,11 +5485,11 @@ export function App({ launchArgs }: AppProps) {
                   modelPickerOpenRef.current = false;
                   if (pendingRouteProviderId && pendingRouteProviderId !== activeProviderRoute.providerId) {
                     // Non-active provider: save as provider default without switching the active route.
-                    // User must click "Use in Codexa" to validate and activate.
+                    // User must click "Use in Ubume" to validate and activate.
                     persistProviderDefaultModelAndReasoning(pendingRouteProviderId, m, r);
                     appendSystemEvent(
                       "Provider model saved",
-                      `${modelPickerProviderLabel} default model set to ${m} with reasoning ${formatReasoningLabel(r)}. Choose "Use in Codexa" to activate this provider.`,
+                      `${modelPickerProviderLabel} default model set to ${m} with reasoning ${formatReasoningLabel(r)}. Choose "Use in Ubume" to activate this provider.`,
                     );
                     setScreen("provider-picker");
                   } else {
@@ -5557,7 +5559,7 @@ export function App({ launchArgs }: AppProps) {
               <SelectionPanel
                 focusId={FOCUS_IDS.permissionsApprovalPicker}
                 title="Approval Policy"
-                subtitle="Choose how Codexa should handle approval prompts."
+                subtitle="Choose how Ubume should handle approval prompts."
                 items={AVAILABLE_APPROVAL_POLICIES.map((item) => ({
                   label: item.id === runtimeConfig.policy.approvalPolicy
                     ? `${item.label}  ✓`
@@ -5740,7 +5742,7 @@ export function App({ launchArgs }: AppProps) {
                 width="100%"
                 marginTop={1}
               >
-                <Text color={activeTheme.textMuted}>Checking for Codexa updates...</Text>
+                <Text color={activeTheme.textMuted}>Checking for Ubume updates...</Text>
               </Box>
             )}
             </>

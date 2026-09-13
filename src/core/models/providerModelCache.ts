@@ -11,7 +11,11 @@ import type { ProviderModel } from "../providerRuntime/types.js";
 // redirection in tests holds — Bun's homedir() ignores runtime HOME changes.
 export function getProviderModelCacheFile(): string {
   const home = process.env.USERPROFILE ?? process.env.HOME ?? homedir();
-  return join(home, ".codexa-model-cache.json");
+  const ubumePath = join(home, ".ubume-model-cache.json");
+  if (existsSync(ubumePath)) return ubumePath;
+  const legacyPath = join(home, ".codexa-model-cache.json");
+  if (existsSync(legacyPath)) return legacyPath;
+  return ubumePath;
 }
 
 const CACHE_VERSION = 1;

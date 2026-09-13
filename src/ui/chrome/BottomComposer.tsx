@@ -301,15 +301,15 @@ function getStatusLine(
       if (elapsed >= 5) return `${cliLabel} is still starting. The upstream CLI can take a moment${timerStr}`;
       return `Starting ${cliLabel}${timerStr}`;
     }
-    return "✧ Codexa is thinking";
+    return "✧ Ubume is thinking";
   }
   if (uiState.kind === "RESPONDING") {
     const readyLabel = activeProviderId ? getProviderReadyLabel(activeProviderId) : null;
     if (readyLabel) return `✧ ${readyLabel} ready`;
-    return "✧ Codexa is thinking";
+    return "✧ Ubume is thinking";
   }
-  if (uiState.kind === "ANSWER_VISIBLE") return "✧ Codexa response complete";
-  if (uiState.kind === "SHELL_RUNNING") return "✧ Codexa is running command";
+  if (uiState.kind === "ANSWER_VISIBLE") return "✧ Ubume response complete";
+  if (uiState.kind === "SHELL_RUNNING") return "✧ Ubume is running command";
   if (uiState.kind === "AWAITING_USER_ACTION") return "✧ waiting for your answer";
   if (uiState.kind === "ERROR") return uiState.message;
   return null;
@@ -351,7 +351,7 @@ function getPlaceholder(persona: ComposerPersona): string {
       return "";
     case "idle":
     default:
-      return "Ask Codexa, run !shell, or use /command";
+      return "Ask Ubume, run !shell, or use /command";
   }
 }
 

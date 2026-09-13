@@ -465,7 +465,7 @@ export function ModelPickerScreen({
     ? "↑↓ model · ←→ intelligence · Enter · Esc"
     : "↑↓ model · ←→ reasoning · Enter select · Esc cancel";
   const aOrAn = /^[aeiou]/i.test(activeProviderLabel) ? "an" : "a";
-  const routeText = routeTextOverride ?? `Choose ${aOrAn} ${activeProviderLabel} model to use inside Codexa.`;
+  const routeText = routeTextOverride ?? `Choose ${aOrAn} ${activeProviderLabel} model to use inside Ubume.`;
   const sourceMarker = getModelSourceMarker(models, activeProviderLabel);
 
   const appLayoutBudget = useAppLayoutBudget();

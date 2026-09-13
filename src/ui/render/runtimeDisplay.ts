@@ -85,7 +85,7 @@ export function buildActiveRuntimeDisplay({
   const rawReasoning = route.providerId === "antigravity"
     ? route.reasoning
     : route.reasoning ?? reasoningLevel;
-  // Local runtimes own their reasoning behavior; Codexa cannot adjust it.
+  // Local runtimes own their reasoning behavior; Ubume cannot adjust it.
   // Do not present the global fallback as if it were an active Local setting.
   const reasoning = route.providerId !== "local" && rawReasoning
     ? formatReasoningLabel(rawReasoning)

@@ -16,22 +16,22 @@ import {
   stripTerminalTitleSequences,
   stripTerminalTitleSequencesFromChunk,
   traceTerminalTitleSequences,
-  writeCodexaTerminalTitle,
+  writeUbumeTerminalTitle,
   writeGuardedTerminalOutput,
   __resetTerminalTitleCache,
 } from "./terminalTitle.js";
 
 test("buildTerminalTitleSequence emits OSC 0 and OSC 2 with sanitized title text", () => {
-  const sequence = buildTerminalTitleSequence("Codexa\u0007!");
-  assert.equal(sequence, "\x1b]0;Codexa !\x07\x1b]2;Codexa !\x07");
-  assert.equal(sanitizeTerminalTitle("  Codexa  "), "Codexa");
+  const sequence = buildTerminalTitleSequence("Ubume\u0007!");
+  assert.equal(sequence, "\x1b]0;Ubume !\x07\x1b]2;Ubume !\x07");
+  assert.equal(sanitizeTerminalTitle("  Ubume  "), "Ubume");
 });
 
 test("title normalization never exposes raw Windows paths", () => {
-  assert.equal(normalizeTerminalTitle("C:\\WINDOWS\\system"), "Codexa");
-  assert.equal(normalizeTerminalTitle("c:/Users/example"), "Codexa");
-  assert.equal(normalizeTerminalTitle("\\\\server\\share"), "Codexa");
-  assert.equal(buildTerminalTitleSequence("C:\\WINDOWS\\system"), buildTerminalTitleSequence("Codexa"));
+  assert.equal(normalizeTerminalTitle("C:\\WINDOWS\\system"), "Ubume");
+  assert.equal(normalizeTerminalTitle("c:/Users/example"), "Ubume");
+  assert.equal(normalizeTerminalTitle("\\\\server\\share"), "Ubume");
+  assert.equal(buildTerminalTitleSequence("C:\\WINDOWS\\system"), buildTerminalTitleSequence("Ubume"));
 });
 
 test("stripTerminalTitleSequences removes OSC 0 title sequences with BEL terminator", () => {
@@ -93,11 +93,11 @@ test("formatTerminalTitleLabel follows the workspace leaf and app-name rules", (
   );
   assert.equal(
     formatTerminalTitleLabel("C:\\Development\\1-JavaScript\\13-Custom-CLI-Normal", "name"),
-    "Codexa",
+    "Ubume",
   );
   assert.equal(
     formatTerminalTitleLabel("C:\\Development\\1-JavaScript\\13-Custom-CLI-Normal", "simple"),
-    "Codexa",
+    "Ubume",
   );
 });
 
@@ -105,15 +105,15 @@ test("deriveTerminalTitle follows terminal title mode on startup", () => {
   const workspaceRoot = "C:\\Development\\1-JavaScript\\13-Custom-CLI-Normal";
 
   assert.equal(deriveTerminalTitle(workspaceRoot, "dir"), "13-Custom-CLI-Normal");
-  assert.equal(deriveTerminalTitle(workspaceRoot, "name"), "Codexa");
-  assert.equal(deriveTerminalTitle(workspaceRoot, "simple"), "Codexa");
+  assert.equal(deriveTerminalTitle(workspaceRoot, "name"), "Ubume");
+  assert.equal(deriveTerminalTitle(workspaceRoot, "simple"), "Ubume");
 });
 
 test("computeTerminalTitle follows the requested mapping", () => {
   const workspaceName = "13-Custom-CLI-Normal";
   assert.equal(computeTerminalTitle({ terminalTitleMode: "dir", workspaceName }), "13-Custom-CLI-Normal");
-  assert.equal(computeTerminalTitle({ terminalTitleMode: "name" }), "Codexa");
-  assert.equal(computeTerminalTitle({ terminalTitleMode: "simple" }), "Codexa");
+  assert.equal(computeTerminalTitle({ terminalTitleMode: "name" }), "Ubume");
+  assert.equal(computeTerminalTitle({ terminalTitleMode: "simple" }), "Ubume");
   assert.equal(computeTerminalTitle({ terminalTitleMode: "dir", appName: "Other" }), "Other");
 });
 
@@ -122,12 +122,12 @@ test("reassertTerminalTitle writes both title sequences without mutating process
   const originalTitle = process.title;
 
   try {
-    reassertTerminalTitle("Codexa", (chunk) => {
+    reassertTerminalTitle("Ubume", (chunk) => {
       writes.push(chunk);
     });
 
     assert.equal(process.title, originalTitle);
-    assert.deepEqual(writes, [buildTerminalTitleSequence("Codexa")]);
+    assert.deepEqual(writes, [buildTerminalTitleSequence("Ubume")]);
   } finally {
     process.title = originalTitle;
   }
@@ -137,22 +137,22 @@ test("setTerminalTitle deduplicates identical title writes", () => {
   const writes: string[] = [];
   __resetTerminalTitleCache();
 
-  setTerminalTitle("Codexa", { write: (chunk) => writes.push(chunk) });
-  setTerminalTitle("Codexa", { write: (chunk) => writes.push(chunk) });
+  setTerminalTitle("Ubume", { write: (chunk) => writes.push(chunk) });
+  setTerminalTitle("Ubume", { write: (chunk) => writes.push(chunk) });
   setTerminalTitle("Other", { write: (chunk) => writes.push(chunk) });
 
   assert.equal(writes.length, 2);
-  assert.equal(writes[0], buildTerminalTitleSequence("Codexa"));
+  assert.equal(writes[0], buildTerminalTitleSequence("Ubume"));
   assert.equal(writes[1], buildTerminalTitleSequence("Other"));
 });
 
-test("writeCodexaTerminalTitle delegates to central title writer with force support", () => {
+test("writeUbumeTerminalTitle delegates to central title writer with force support", () => {
   const writes: string[] = [];
   __resetTerminalTitleCache();
 
-  writeCodexaTerminalTitle("Codexa", { force: true, reason: "test", write: (chunk) => writes.push(chunk) });
+  writeUbumeTerminalTitle("Ubume", { force: true, reason: "test", write: (chunk) => writes.push(chunk) });
 
-  assert.deepEqual(writes, [buildTerminalTitleSequence("Codexa")]);
+  assert.deepEqual(writes, [buildTerminalTitleSequence("Ubume")]);
 });
 
 test("intended terminal title fallback is safe and later replaced by workspace title", () => {
@@ -164,8 +164,8 @@ test("intended terminal title fallback is safe and later replaced by workspace t
     reason: "test-fallback",
     write: (chunk) => writes.push(chunk),
   });
-  assert.equal(getIntendedTerminalTitle(), "Codexa");
-  assert.equal(writes.at(-1), buildTerminalTitleSequence("Codexa"));
+  assert.equal(getIntendedTerminalTitle(), "Ubume");
+  assert.equal(writes.at(-1), buildTerminalTitleSequence("Ubume"));
 
   setIntendedTerminalTitle("13-Custom-CLI-Normal", {
     force: true,
@@ -214,12 +214,12 @@ test("setTerminalTitle force option bypasses dedup", () => {
   const writes: string[] = [];
   __resetTerminalTitleCache();
 
-  setTerminalTitle("Codexa", { write: (chunk) => writes.push(chunk) });
-  setTerminalTitle("Codexa", { force: true, write: (chunk) => writes.push(chunk) });
-  setTerminalTitle("Codexa", { force: true, write: (chunk) => writes.push(chunk) });
+  setTerminalTitle("Ubume", { write: (chunk) => writes.push(chunk) });
+  setTerminalTitle("Ubume", { force: true, write: (chunk) => writes.push(chunk) });
+  setTerminalTitle("Ubume", { force: true, write: (chunk) => writes.push(chunk) });
 
   assert.equal(writes.length, 3);
-  writes.forEach((w) => assert.equal(w, buildTerminalTitleSequence("Codexa")));
+  writes.forEach((w) => assert.equal(w, buildTerminalTitleSequence("Ubume")));
 });
 
 test("stripTerminalTitleSequences handles very long unterminated OSC without hanging", () => {

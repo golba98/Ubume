@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } f
 import { join } from "node:path";
 
 /** Workspace-relative home for agent throwaway files (test harnesses, probe scripts, logs). */
-export const SCRATCH_RELATIVE_DIR = ".codexa/scratch";
+export const SCRATCH_RELATIVE_DIR = ".ubume/scratch";
+export const LEGACY_SCRATCH_RELATIVE_DIR = ".codexa/scratch";
 
 const DEFAULT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const SAFE_SESSION_ID = /^[A-Za-z0-9_-]+$/;
@@ -13,11 +14,15 @@ export interface SessionScratchDir {
 }
 
 export function resolveScratchRoot(workspaceRoot: string): string {
+  return join(workspaceRoot, ".ubume", "scratch");
+}
+
+export function resolveLegacyScratchRoot(workspaceRoot: string): string {
   return join(workspaceRoot, ".codexa", "scratch");
 }
 
 /**
- * Create `.codexa/scratch/<sessionId>` inside the workspace. The scratch root
+ * Create `.ubume/scratch/<sessionId>` inside the workspace. The scratch root
  * carries its own `*` .gitignore so git ignores it without touching the
  * project's ignore rules. It lives in the workspace (not the OS temp dir)
  * because sandboxed shells only get a persistent writable workspace.
@@ -38,21 +43,22 @@ export function pruneStaleScratchDirs(
   workspaceRoot: string,
   options: { keep?: string; maxAgeMs?: number; now?: number } = {},
 ): void {
-  const root = resolveScratchRoot(workspaceRoot);
-  const cutoff = (options.now ?? Date.now()) - (options.maxAgeMs ?? DEFAULT_MAX_AGE_MS);
-  let entries;
-  try {
-    entries = readdirSync(root, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name === options.keep) continue;
-    const dir = join(root, entry.name);
+  for (const root of [resolveScratchRoot(workspaceRoot), resolveLegacyScratchRoot(workspaceRoot)]) {
+    const cutoff = (options.now ?? Date.now()) - (options.maxAgeMs ?? DEFAULT_MAX_AGE_MS);
+    let entries;
     try {
-      if (statSync(dir).mtimeMs < cutoff) rmSync(dir, { recursive: true, force: true });
+      entries = readdirSync(root, { withFileTypes: true });
     } catch {
-      // A locked or vanished folder must not break the run that triggered pruning.
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === options.keep) continue;
+      const dir = join(root, entry.name);
+      try {
+        if (statSync(dir).mtimeMs < cutoff) rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // A locked or vanished folder must not break the run that triggered pruning.
+      }
     }
   }
 }

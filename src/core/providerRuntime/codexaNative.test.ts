@@ -49,7 +49,7 @@ test("Codexa Native defaults to the canonical PyTorch checkout", () => {
 test("Codexa Native discovery returns not-configured in production channel", () => {
   const result = discoverCodexaNativeModels(undefined, { CODEXA_CHANNEL: "published" });
   assert.equal(result.status, "not-configured");
-  assert.match(result.message ?? "", /only available on codexa-dev/);
+  assert.match(result.message ?? "", /only available on ubume-dev/);
 });
 
 test("Codexa Native discovery exposes the direct PyTorch model in local-dev channel when files exist", () => {

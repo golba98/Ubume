@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DEFAULT_NATIVE_MODEL_ROOT, resolveLocalDevEntry, resolveNativeChatCommand, resolveNumpyChatCommand } from "./run-local-dev.mjs";
-import { createCodexaDevShim, SHIM_NAMES } from "./install-local-dev-bin.mjs";
+import { createUbumeDevShim, SHIM_NAMES } from "./install-local-dev-bin.mjs";
 
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(scriptsDir);
@@ -40,7 +40,7 @@ test("resolveLocalDevEntry resolves --headless-benchmark to src/exec.ts", () => 
 });
 
 test("resolveNativeChatCommand targets the native SFT v2 checkpoint", () => {
-  const modelRoot = join(tmpdir(), "Codexa model");
+  const modelRoot = join(tmpdir(), "Ubume model");
   const resolved = resolveNativeChatCommand({
     CODEXA_NATIVE_MODEL_ROOT: modelRoot,
     CODEXA_NATIVE_DEVICE: "cpu",
@@ -85,15 +85,15 @@ test("resolveNumpyChatCommand targets the trained NumPy follow-up checkpoint", (
   ]);
 });
 
-test("createCodexaDevShim installs both codexa-dev and cxd pointing at the local launcher", () => {
-  const binDir = mkdtempSync(join(tmpdir(), "codexa-dev-shim-"));
+test("createUbumeDevShim installs both ubume-dev and cxd pointing at the local launcher", () => {
+  const binDir = mkdtempSync(join(tmpdir(), "ubume-dev-shim-"));
   try {
-    const result = createCodexaDevShim({ binDir });
+    const result = createUbumeDevShim({ binDir });
     const launcherPath = join(repoRoot, "scripts", "run-local-dev.mjs");
 
     assert.equal(result.launcherPath, launcherPath);
     assert.equal(result.shimPaths.length, SHIM_NAMES.length);
-    assert.deepEqual([...SHIM_NAMES].sort(), ["codexa-dev", "cxd"]);
+    assert.deepEqual([...SHIM_NAMES].sort(), ["codexa-dev", "cxd", "ubd", "ubume-dev"]);
 
     for (const shimPath of result.shimPaths) {
       // Each shim exists and references the LOCAL run-local-dev.mjs launcher.

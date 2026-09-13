@@ -11,11 +11,11 @@ const repoRoot = dirname(dirname(currentFile));
 const launcherPath = join(repoRoot, "scripts", "run-local-dev.mjs");
 
 // Both shim names launch the same local-repo dev launcher. `cxd` is the short
-// alias for `codexa-dev`.
-export const SHIM_NAMES = ["codexa-dev", "cxd"];
+// alias for `ubume-dev`.
+export const SHIM_NAMES = ["ubume-dev", "ubd", "codexa-dev", "cxd"];
 
 export function resolveInstallBinDir(env = process.env) {
-  const override = env.CODEXA_DEV_BIN_DIR?.trim();
+  const override = env.UBUME_DEV_BIN_DIR?.trim() || env.CODEXA_DEV_BIN_DIR?.trim();
   if (override) return override;
 
   try {
@@ -33,7 +33,7 @@ export function resolveInstallBinDir(env = process.env) {
   return join(homedir(), ".local", "bin");
 }
 
-export function createCodexaDevShim(options = {}) {
+export function createUbumeDevShim(options = {}) {
   const binDir = options.binDir ?? resolveInstallBinDir(options.env ?? process.env);
   const quotedLauncher = JSON.stringify(launcherPath);
   const contents = process.platform === "win32"
@@ -51,15 +51,17 @@ export function createCodexaDevShim(options = {}) {
     return shimPath;
   });
 
-  // shimPath kept for backward compatibility (the primary codexa-dev shim).
+  // shimPath kept for backward compatibility (the primary ubume-dev shim).
   return { binDir, shimPath: shimPaths[0], shimPaths, launcherPath };
 }
 
+export const createCodexaDevShim = createUbumeDevShim;
+
 if (currentFile === process.argv[1]) {
-  const result = createCodexaDevShim();
+  const result = createUbumeDevShim();
   console.log(`Installed ${SHIM_NAMES.join(", ")} -> ${result.launcherPath}`);
   for (const shimPath of result.shimPaths) {
     console.log(`Shim: ${shimPath}`);
   }
-  console.log("The published codexa command was not modified.");
+  console.log("The published ubume command was not modified.");
 }

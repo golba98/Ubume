@@ -123,7 +123,7 @@ test("collapses composer during thinking so input buffer artifacts are removed",
   await sleep();
   frame = stripAnsi(output);
   assert.doesNotMatch(frame, /draft prompt/i);
-  assert.match(frame, /Codexa is thinking/i);
+  assert.match(frame, /Ubume is thinking/i);
 
   instance.unmount();
 });
@@ -150,12 +150,12 @@ test("busy footer advances from local status state without a parent rerender", a
 
   await sleep();
   let frame = stripAnsi(output);
-  assert.match(frame, /Codexa is thinking \./);
+  assert.match(frame, /Ubume is thinking \./);
 
   output = "";
   await sleep(950);
   frame = stripAnsi(output);
-  assert.match(frame, /Codexa is thinking \.\./);
+  assert.match(frame, /Ubume is thinking \.\./);
 
   instance.unmount();
 });
@@ -183,8 +183,8 @@ test("busy footer omits loader frames when disabled", async () => {
   try {
     await sleep();
     let frame = stripAnsi(output);
-    assert.match(frame, /Codexa is thinking/);
-    assert.doesNotMatch(frame, /Codexa is thinking \./);
+    assert.match(frame, /Ubume is thinking/);
+    assert.doesNotMatch(frame, /Ubume is thinking \./);
 
     output = "";
     await sleep(950);
@@ -196,8 +196,8 @@ test("busy footer omits loader frames when disabled", async () => {
 });
 
 test("static status debug flag reserves status text without dot ticks", async () => {
-  const previous = process.env.CODEXA_DEBUG_STATIC_STATUS;
-  process.env.CODEXA_DEBUG_STATIC_STATUS = "1";
+  const previous = process.env.UBUME_DEBUG_STATIC_STATUS;
+  process.env.UBUME_DEBUG_STATIC_STATUS = "1";
   const stdin = new TestInput();
   const stdout = new TestOutput();
   let output = "";
@@ -220,7 +220,7 @@ test("static status debug flag reserves status text without dot ticks", async ()
   try {
     await sleep();
     let frame = stripAnsi(output);
-    assert.match(frame, /Codexa is thinking \.\.\./);
+    assert.match(frame, /Ubume is thinking \.\.\./);
 
     output = "";
     await sleep(950);
@@ -229,9 +229,9 @@ test("static status debug flag reserves status text without dot ticks", async ()
   } finally {
     instance.unmount();
     if (previous === undefined) {
-      delete process.env.CODEXA_DEBUG_STATIC_STATUS;
+      delete process.env.UBUME_DEBUG_STATIC_STATUS;
     } else {
-      process.env.CODEXA_DEBUG_STATIC_STATUS = previous;
+      process.env.UBUME_DEBUG_STATIC_STATUS = previous;
     }
   }
 });

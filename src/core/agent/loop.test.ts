@@ -23,7 +23,7 @@ function request(workspaceRoot: string, prompt: string): ProviderChatRequest {
 }
 
 async function withTempWorkspace<T>(callback: (workspaceRoot: string) => Promise<T>): Promise<T> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "codexa-agent-loop-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "ubume-agent-loop-"));
   try {
     return await callback(root);
   } finally {

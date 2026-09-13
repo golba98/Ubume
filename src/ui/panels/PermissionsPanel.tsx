@@ -68,7 +68,7 @@ export function PermissionsPanel({
     <SelectionPanel
       focusId={FOCUS_IDS.permissionsPanel}
       title="Permissions"
-      subtitle="Codexa policy guards. Recommended for local coding: On request + Workspace write."
+      subtitle="Ubume policy guards. Recommended for local coding: On request + Workspace write."
       items={items}
       limit={items.length}
       onSelect={(value) => onSelect(value as PermissionsPanelAction)}

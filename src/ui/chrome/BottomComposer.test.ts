@@ -175,7 +175,7 @@ test("suppresses completed response status while a slash command draft is active
       value: "next prompt",
       allowCommands: true,
     }),
-    "✧ Codexa response complete",
+    "✧ Ubume response complete",
   );
 });
 
@@ -240,7 +240,7 @@ test("shows generic thinking status for unknown/local provider", () => {
       activeProviderId: "local",
       runElapsedSeconds: 10,
     }),
-    "✧ Codexa is thinking",
+    "✧ Ubume is thinking",
   );
 });
 
@@ -366,7 +366,7 @@ test("shows generic thinking status when RESPONDING with unknown provider", () =
       allowCommands: true,
       activeProviderId: "local",
     }),
-    "✧ Codexa is thinking",
+    "✧ Ubume is thinking",
   );
 });
 
@@ -459,7 +459,7 @@ test("getTokenBarDisplay does not add ~ prefix for a documented verified context
 
 // ─── externalCliStatus: provider readiness gate ───────────────────────────────
 
-test("shows 'Codexa is thinking' (not startup message) when provider is ready and THINKING — google", () => {
+test("shows 'Ubume is thinking' (not startup message) when provider is ready and THINKING — google", () => {
   assert.equal(
     getVisibleComposerStatusLine({
       uiState: { kind: "THINKING", turnId: 2 },
@@ -469,11 +469,11 @@ test("shows 'Codexa is thinking' (not startup message) when provider is ready an
       runElapsedSeconds: 0,
       externalCliStatus: "ready",
     }),
-    "✧ Codexa is thinking",
+    "✧ Ubume is thinking",
   );
 });
 
-test("shows 'Codexa is thinking' even at 20 seconds elapsed when provider is ready — google", () => {
+test("shows 'Ubume is thinking' even at 20 seconds elapsed when provider is ready — google", () => {
   assert.equal(
     getVisibleComposerStatusLine({
       uiState: { kind: "THINKING", turnId: 2 },
@@ -483,11 +483,11 @@ test("shows 'Codexa is thinking' even at 20 seconds elapsed when provider is rea
       runElapsedSeconds: 20,
       externalCliStatus: "ready",
     }),
-    "✧ Codexa is thinking",
+    "✧ Ubume is thinking",
   );
 });
 
-test("shows 'Codexa is thinking' (not startup message) when provider is ready and THINKING — anthropic", () => {
+test("shows 'Ubume is thinking' (not startup message) when provider is ready and THINKING — anthropic", () => {
   assert.equal(
     getVisibleComposerStatusLine({
       uiState: { kind: "THINKING", turnId: 2 },
@@ -497,11 +497,11 @@ test("shows 'Codexa is thinking' (not startup message) when provider is ready an
       runElapsedSeconds: 0,
       externalCliStatus: "ready",
     }),
-    "✧ Codexa is thinking",
+    "✧ Ubume is thinking",
   );
 });
 
-test("shows 'Codexa is thinking' (not startup message) when provider is ready and THINKING — openai", () => {
+test("shows 'Ubume is thinking' (not startup message) when provider is ready and THINKING — openai", () => {
   assert.equal(
     getVisibleComposerStatusLine({
       uiState: { kind: "THINKING", turnId: 2 },
@@ -511,7 +511,7 @@ test("shows 'Codexa is thinking' (not startup message) when provider is ready an
       runElapsedSeconds: 0,
       externalCliStatus: "ready",
     }),
-    "✧ Codexa is thinking",
+    "✧ Ubume is thinking",
   );
 });
 

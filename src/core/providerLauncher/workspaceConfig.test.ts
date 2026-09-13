@@ -23,14 +23,14 @@ let testDataRoot = "";
 let originalDataRoot: string | undefined;
 
 beforeEach(() => {
-  originalDataRoot = process.env.CODEXA_DATA_DIR;
-  testDataRoot = mkdtempSync(join(tmpdir(), "codexa-provider-test-data-"));
-  process.env.CODEXA_DATA_DIR = testDataRoot;
+  originalDataRoot = process.env.UBUME_DATA_DIR;
+  testDataRoot = mkdtempSync(join(tmpdir(), "ubume-provider-test-data-"));
+  process.env.UBUME_DATA_DIR = testDataRoot;
 });
 
 afterEach(() => {
-  if (originalDataRoot === undefined) delete process.env.CODEXA_DATA_DIR;
-  else process.env.CODEXA_DATA_DIR = originalDataRoot;
+  if (originalDataRoot === undefined) delete process.env.UBUME_DATA_DIR;
+  else process.env.UBUME_DATA_DIR = originalDataRoot;
   rmSync(testDataRoot, { recursive: true, force: true });
 });
 
@@ -69,7 +69,7 @@ function withGeminiEnv<T>(
   }
 }
 
-test("parses provider workspace config from Codexa-owned JSON", () => {
+test("parses provider workspace config from Ubume-owned JSON", () => {
   const config = parseProviderWorkspaceConfig({
     default_provider_id: "google",
     activeRoute: {
@@ -165,17 +165,17 @@ test("legacy Antigravity backend aliases are treated as deprecated routes", () =
 });
 
 test("serializes and persists provider workspace defaults", () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), "codexa-provider-config-"));
-  const dataRoot = mkdtempSync(join(tmpdir(), "codexa-provider-data-"));
-  const previousDataRoot = process.env.CODEXA_DATA_DIR;
-  process.env.CODEXA_DATA_DIR = dataRoot;
+  const tempRoot = mkdtempSync(join(tmpdir(), "ubume-provider-config-"));
+  const dataRoot = mkdtempSync(join(tmpdir(), "ubume-provider-data-"));
+  const previousDataRoot = process.env.UBUME_DATA_DIR;
+  process.env.UBUME_DATA_DIR = dataRoot;
   try {
     const config = setProviderWorkspaceDefault({}, "anthropic");
     saveProviderWorkspaceConfig(tempRoot, config);
 
-    assert.match(getProviderWorkspaceConfigFile(tempRoot), /codexa-provider-data-/);
-    assert.doesNotMatch(getProviderWorkspaceConfigFile(tempRoot), /\.codexa/);
-    assert.equal(existsSync(join(tempRoot, ".codexa")), false);
+    assert.match(getProviderWorkspaceConfigFile(tempRoot), /ubume-provider-data-/);
+    assert.doesNotMatch(getProviderWorkspaceConfigFile(tempRoot), /\.ubume/);
+    assert.equal(existsSync(join(tempRoot, ".ubume")), false);
     assert.deepEqual(loadProviderWorkspaceConfig(tempRoot), {
       workspaceDefaultProviderId: "anthropic",
     });
@@ -183,8 +183,8 @@ test("serializes and persists provider workspace defaults", () => {
       workspaceDefaultProviderId: "anthropic",
     });
   } finally {
-    if (previousDataRoot === undefined) delete process.env.CODEXA_DATA_DIR;
-    else process.env.CODEXA_DATA_DIR = previousDataRoot;
+    if (previousDataRoot === undefined) delete process.env.UBUME_DATA_DIR;
+    else process.env.UBUME_DATA_DIR = previousDataRoot;
     rmSync(tempRoot, { recursive: true, force: true });
     rmSync(dataRoot, { recursive: true, force: true });
   }
@@ -192,9 +192,9 @@ test("serializes and persists provider workspace defaults", () => {
 
 test("loads legacy provider settings without recreating the workspace directory", () => {
   const tempRoot = mkdtempSync(join(tmpdir(), "codexa-provider-legacy-"));
-  const dataRoot = mkdtempSync(join(tmpdir(), "codexa-provider-data-"));
-  const previousDataRoot = process.env.CODEXA_DATA_DIR;
-  process.env.CODEXA_DATA_DIR = dataRoot;
+  const dataRoot = mkdtempSync(join(tmpdir(), "ubume-provider-data-"));
+  const previousDataRoot = process.env.UBUME_DATA_DIR;
+  process.env.UBUME_DATA_DIR = dataRoot;
   try {
     const legacyFile = getLegacyProviderWorkspaceConfigFile(tempRoot);
     mkdirSync(join(legacyFile, ".."), { recursive: true });
@@ -207,8 +207,8 @@ test("loads legacy provider settings without recreating the workspace directory"
     assert.deepEqual(loadProviderWorkspaceConfig(tempRoot), { workspaceDefaultProviderId: "openai" });
     assert.equal(existsSync(legacyFile), true);
   } finally {
-    if (previousDataRoot === undefined) delete process.env.CODEXA_DATA_DIR;
-    else process.env.CODEXA_DATA_DIR = previousDataRoot;
+    if (previousDataRoot === undefined) delete process.env.UBUME_DATA_DIR;
+    else process.env.UBUME_DATA_DIR = previousDataRoot;
     rmSync(tempRoot, { recursive: true, force: true });
     rmSync(dataRoot, { recursive: true, force: true });
   }
@@ -233,7 +233,7 @@ test("Mistral Vibe workspace default and active route both round-trip", () => {
 });
 
 test("saved Google workspace default is migrated to OpenAI before registry construction", () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), "codexa-provider-restart-"));
+  const tempRoot = mkdtempSync(join(tmpdir(), "ubume-provider-restart-"));
   try {
     saveProviderWorkspaceConfig(tempRoot, setProviderWorkspaceDefault({}, "google"));
 
@@ -251,7 +251,7 @@ test("saved Google workspace default is migrated to OpenAI before registry const
 });
 
 test("workspace provider config reload preserves default and active route separately", () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), "codexa-provider-route-"));
+  const tempRoot = mkdtempSync(join(tmpdir(), "ubume-provider-route-"));
   try {
     saveProviderWorkspaceConfig(tempRoot, {
       workspaceDefaultProviderId: "anthropic",
@@ -278,7 +278,7 @@ test("workspace provider config reload preserves default and active route separa
 });
 
 test("active Anthropic route persists without secrets", () => {
-  const tempRoot = mkdtempSync(join(tmpdir(), "codexa-provider-anthropic-route-"));
+  const tempRoot = mkdtempSync(join(tmpdir(), "ubume-provider-anthropic-route-"));
   const original = process.env.ANTHROPIC_API_KEY;
 
   try {

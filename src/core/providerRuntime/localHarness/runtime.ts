@@ -10,7 +10,7 @@ import type { BackendRunHandlers, ToolApprovalDecision } from "../../providers/t
 import type { ProviderChatRequest } from "../types.js";
 import { resolveDefaultMaxOutputTokens } from "../localOutputBudget.js";
 import type { LocalHarnessSessionMetadata } from "../../workspace/conversationStore.js";
-import { resolveCodexaWorkspaceDataDir } from "../../workspace/appData.js";
+import { resolveUbumeWorkspaceDataDir } from "../../workspace/appData.js";
 import { getShellWorkspaceGuardMessage, isPathInsideAllowedRoots } from "../../workspace/workspaceGuard.js";
 import { ensureSessionScratchDir, pruneStaleScratchDirs } from "../../workspace/scratchDir.js";
 import { isDangerousShellCommand } from "../../agent/tools.js";
@@ -28,7 +28,27 @@ import {
 import type { ContentBlock } from "@deepseek-ai/dsh-llm";
 
 const HARNESS_VERSION = "0.1.1-rc.2";
-const PROFILE_NAME = "codexa-local";
+const PROFILE_NAME = "ubume-local";
+const HARNESS_MAX_RSS_BYTES = 1024 * 1024 * 1024;
+const HARNESS_HEAP_LIMIT_MIB = 768;
+const HARNESS_MEMORY_POLL_MS = 500;
+const MAX_DISPLAY_REASONING_CHARS = 32_768;
+const REASONING_TRUNCATED_PREFIX = "… Earlier reasoning omitted for memory safety.\n";
+
+function readLinuxProcessRssBytes(pid: number): number | null {
+  if (process.platform !== "linux") return null;
+  try {
+    const status = readFileSync(`/proc/${pid}/status`, "utf8");
+    const match = /^VmRSS:\s+(\d+) kB$/m.exec(status);
+    return match ? Number(match[1]) * 1024 : null;
+  } catch {
+    return null;
+  }
+}
+
+function harnessMemoryLimitMessage(): string {
+  return "Local Harness hit a RAM safety limit (1 GiB process RAM or 768 MiB Node heap). The turn was stopped to protect your system. The partial response remains visible; your next prompt will start a fresh Harness session.";
+}
 
 export async function buildLocalHarnessPromptContentBlocks(
   dshHome: string,
@@ -61,7 +81,7 @@ export async function buildLocalHarnessPromptContentBlocks(
   }
   return blocks;
 }
-const INTERNAL_PROVIDER = "codexa-local";
+const INTERNAL_PROVIDER = "ubume-local";
 const require = createRequire(import.meta.url);
 const PROCESS_FINGERPRINT_SALT = randomBytes(16);
 
@@ -91,7 +111,7 @@ interface HarnessRunState {
   lastUsage?: { inputTokens: number; outputTokens: number; contextTokens: number; contextWindow: number | null; exact: boolean };
   /** Why the last model turn stopped (`max-tokens`, `stop`, `aborted`, …), from the finish chunk or turn/end. */
   stopReason?: string;
-  /** Number of output-window continuations issued inside this logical Codexa run. */
+  /** Number of output-window continuations issued inside this logical Ubume run. */
   continuationCount: number;
   /** Assistant-text length at the start of the current model turn. */
   windowStartTextLength: number;
@@ -219,7 +239,7 @@ function prepareSessionScratch(request: ProviderChatRequest, sessionId: string, 
 }
 
 function bridgePath(): string {
-  return fileURLToPath(new URL("../../../../bin/codexa-local-harness-bridge.js", import.meta.url));
+  return fileURLToPath(new URL("../../../../bin/ubume-local-harness-bridge.js", import.meta.url));
 }
 
 function profilePatch(supportsVision: boolean, reasoningEffortEnabled = false): string {
@@ -228,7 +248,7 @@ function profilePatch(supportsVision: boolean, reasoningEffortEnabled = false): 
   // levels, so both the declaration and the provider default are emitted only
   // when the model opted in (supports_reasoning_effort in providers.json).
   const providerReasoning = reasoningEffortEnabled
-    ? "\n        reasoning: !!js process.env.CODEXA_DSH_REASONING_EFFORT"
+    ? "\n        reasoning: !!js process.env.UBUME_DSH_REASONING_EFFORT"
     : "";
   const modelReasoning = reasoningEffortEnabled
     ? `
@@ -256,26 +276,26 @@ function profilePatch(supportsVision: boolean, reasoningEffortEnabled = false): 
 - id: agent-default-model
   config:
     provider: ${INTERNAL_PROVIDER}
-    model: !!js process.env.CODEXA_DSH_MODEL
+    model: !!js process.env.UBUME_DSH_MODEL
 - id: llm-pi-ai
   config:
     providers:
       ${INTERNAL_PROVIDER}:
-        displayName: Codexa Local
-        apiKeyEnv: CODEXA_DSH_API_KEY
+        displayName: Ubume Local
+        apiKeyEnv: UBUME_DSH_API_KEY
         api: openai-completions
-        baseURL: !!js process.env.CODEXA_DSH_BASE_URL
+        baseURL: !!js process.env.UBUME_DSH_BASE_URL
         compat:
           supportsDeveloperRole: false
           maxTokensField: max_tokens
-        defaultContextWindow: !!js Number(process.env.CODEXA_DSH_CONTEXT_WINDOW)
-        defaultMaxTokens: !!js Number(process.env.CODEXA_DSH_MAX_TOKENS)
+        defaultContextWindow: !!js Number(process.env.UBUME_DSH_CONTEXT_WINDOW)
+        defaultMaxTokens: !!js Number(process.env.UBUME_DSH_MAX_TOKENS)
         defaultInput: ${input}${providerReasoning}
         models:
-          - id: !!js process.env.CODEXA_DSH_MODEL
-            name: !!js process.env.CODEXA_DSH_MODEL
-            contextWindow: !!js Number(process.env.CODEXA_DSH_CONTEXT_WINDOW)
-            maxTokens: !!js Number(process.env.CODEXA_DSH_MAX_TOKENS)
+          - id: !!js process.env.UBUME_DSH_MODEL
+            name: !!js process.env.UBUME_DSH_MODEL
+            contextWindow: !!js Number(process.env.UBUME_DSH_CONTEXT_WINDOW)
+            maxTokens: !!js Number(process.env.UBUME_DSH_MAX_TOKENS)
             input: ${input}${modelReasoning}
 - id: sandbox-policy
   config:
@@ -283,47 +303,47 @@ function profilePatch(supportsVision: boolean, reasoningEffortEnabled = false): 
     workspaceRoot: !!js process.cwd()
 - id: approval
   config:
-    policy: !!js process.env.CODEXA_DSH_APPROVAL_POLICY
+    policy: !!js process.env.UBUME_DSH_APPROVAL_POLICY
 - id: permission
   config:
-    defaultPreset: !!js process.env.CODEXA_DSH_PERMISSION_PRESET
+    defaultPreset: !!js process.env.UBUME_DSH_PERMISSION_PRESET
     presets:
       read-only:
         sandbox: read-only
         approval: ask
         name: Read only
-        description: Read-only access controlled by Codexa.
+        description: Read-only access controlled by Ubume.
       workspace-write:
         sandbox: workspace-write
         approval: ask
         name: Workspace write
-        description: Workspace writes controlled by Codexa.
+        description: Workspace writes controlled by Ubume.
       danger-full-access:
         sandbox: danger-full-access
         approval: never
         name: Full access
-        description: Full filesystem access controlled by Codexa.
+        description: Full filesystem access controlled by Ubume.
 - id: tools
   config:
     mode: native
 - id: system-prompt
   config:
     persona: >-
-      You are a coding agent running inside Codexa. Work only in the active workspace,
+      You are a coding agent running inside Ubume. Work only in the active workspace,
       use the provided Harness tools for shell and file operations, and respect every
-      Codexa permission decision. Put throwaway files you create only to test, debug,
+      Ubume permission decision. Put throwaway files you create only to test, debug,
       or inspect your work (harness pages, probe scripts, logs, dumps, browser profiles)
-      in the session scratch directory under .codexa/scratch/ that Codexa names, never
+      in the session scratch directory under .ubume/scratch/ that Ubume names, never
       in the project root or source tree. Only deliverables the user asked for belong
       in the project.
 - insert:
-    - id: codexa-local-harness-bridge
+    - id: ubume-local-harness-bridge
       name: ${yamlString(bridgePath())}
 `;
 }
 
 function ensureProfile(workspaceRoot: string, config: HarnessConfig): string {
-  const home = join(resolveCodexaWorkspaceDataDir(workspaceRoot), "local-harness", `v-${HARNESS_VERSION}`);
+  const home = join(resolveUbumeWorkspaceDataDir(workspaceRoot), "local-harness", `v-${HARNESS_VERSION}`);
   const profileDir = join(home, "profiles", PROFILE_NAME);
   mkdirSync(profileDir, { recursive: true });
   writeFileSync(join(profileDir, "package.json"), `${JSON.stringify({
@@ -348,14 +368,14 @@ function resolveHarnessConfig(request: ProviderChatRequest): HarnessConfig {
     throw new Error(`Local agent request failed.\n\nModel: ${model}\n\nThe selected model is configured without tool/function-calling support required by the Local agent harness.`);
   }
   if (resolved?.supportsStreaming === false || modelConfig?.supportsStreaming === false) {
-    throw new Error(`Local agent request failed.\n\nModel: ${model}\n\nThe selected model is configured without streaming support required by Codexa's Local agent harness.`);
+    throw new Error(`Local agent request failed.\n\nModel: ${model}\n\nThe selected model is configured without streaming support required by Ubume's Local agent harness.`);
   }
   if (resolved?.supportsSystemPrompt === false || modelConfig?.supportsSystemPrompt === false) {
     throw new Error(`Local agent request failed.\n\nModel: ${model}\n\nThe selected model is configured without system-prompt support required by the Local agent harness.`);
   }
   return {
-    baseUrl: (resolved?.baseUrl ?? local?.baseUrl ?? process.env.CODEXA_LOCAL_BASE_URL ?? "http://localhost:1234/v1").replace(/\/+$/, ""),
-    apiKey: resolved?.apiKey ?? local?.apiKey ?? process.env.CODEXA_LOCAL_API_KEY ?? "lm-studio",
+    baseUrl: (resolved?.baseUrl ?? local?.baseUrl ?? process.env.UBUME_LOCAL_BASE_URL ?? "http://localhost:1234/v1").replace(/\/+$/, ""),
+    apiKey: resolved?.apiKey ?? local?.apiKey ?? process.env.UBUME_LOCAL_API_KEY ?? "lm-studio",
     model,
     contextWindow: resolved?.contextWindow ?? modelConfig?.contextLength ?? 32_768,
     maxTokens: resolved?.maxTokens
@@ -401,8 +421,23 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
   private stderr = "";
   private redactions: string[] = [];
   private dshHome = "";
+  private memoryPoll: ReturnType<typeof setInterval> | null = null;
+  private failedSessionCleanup: Promise<void> = Promise.resolve();
+
+  private stopMemoryPoll(): void {
+    if (this.memoryPoll) clearInterval(this.memoryPoll);
+    this.memoryPoll = null;
+  }
+
+  private checkMemory(child: ChildProcessWithoutNullStreams, rssBytes: number | null): void {
+    if (this.child !== child || rssBytes === null || rssBytes < HARNESS_MAX_RSS_BYTES) return;
+    this.failActive(new Error(harnessMemoryLimitMessage()));
+    this.terminate();
+  }
 
   async run(request: ProviderChatRequest, handlers: BackendRunHandlers, signal: AbortSignal): Promise<string> {
+    await this.failedSessionCleanup;
+    if (signal.aborted) throw new DOMException("Local request cancelled.", "AbortError");
     const config = resolveHarnessConfig(request);
     const fingerprint = routeFingerprint(config, request);
     const processFingerprint = `${fingerprint}:${secretFingerprint(config.apiKey)}`;
@@ -431,7 +466,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       transcriptHash: transcriptHash(request),
       updatedAt: new Date().toISOString(),
     };
-    handlers.onLocalHarnessSession?.(sessionMetadata);
+    handlers.onLocalHarnessSession?.(sessionMetadata, sessionId);
 
     return new Promise<string>((resolveRun, rejectRun) => {
       const state: HarnessRunState = {
@@ -469,7 +504,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       const history = request.conversationHistory ?? [];
       const conversationContent = !canResume && history.length > 0
         ? [
-          "Codexa restored the following visible conversation into a new Local Harness session.",
+          "Ubume restored the following visible conversation into a new Local Harness session.",
           "Treat it as prior dialogue; prior ephemeral tool state is unavailable.",
           "",
           ...history.map((message) => `${message.role.toUpperCase()}: ${message.content}`),
@@ -482,7 +517,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         handlers.onProgress?.({
           id: "local-harness-session-migration",
           source: "transcript",
-          text: "Restored visible Codexa history into a new Local Harness session; prior ephemeral tool state was not available.",
+          text: "Restored visible Ubume history into a new Local Harness session; prior ephemeral tool state was not available.",
         });
       }
       void buildLocalHarnessPromptContentBlocks(this.dshHome, promptContent, request.imageAttachments ?? [])
@@ -500,25 +535,32 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     const harnessSandboxMode = resolveHarnessSandboxMode(request);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      NODE_OPTIONS: [process.env.NODE_OPTIONS?.trim(), `--max-old-space-size=${HARNESS_HEAP_LIMIT_MIB}`].filter(Boolean).join(" "),
+      UBUME_DSH_MAX_RSS_BYTES: String(HARNESS_MAX_RSS_BYTES),
       DSH_HOME: dshHome,
       DSH_TELEMETRY_DISABLED: "1",
       DSH_PERMISSION_MODE: harnessSandboxMode,
-      CODEXA_DSH_PERMISSION_PRESET: harnessSandboxMode,
-      CODEXA_DSH_APPROVAL_POLICY: harnessSandboxMode === "danger-full-access" ? "never" : "ask",
-      CODEXA_DSH_BASE_URL: config.baseUrl,
-      CODEXA_DSH_API_KEY: config.apiKey,
-      CODEXA_DSH_MODEL: config.model,
-      CODEXA_DSH_CONTEXT_WINDOW: String(config.contextWindow),
-      CODEXA_DSH_MAX_TOKENS: String(config.maxTokens),
-      CODEXA_DSH_VISION: config.supportsVision ? "1" : "0",
-      ...(config.reasoningEffort ? { CODEXA_DSH_REASONING_EFFORT: config.reasoningEffort } : {}),
+      UBUME_DSH_PERMISSION_PRESET: harnessSandboxMode,
+      UBUME_DSH_APPROVAL_POLICY: harnessSandboxMode === "danger-full-access" ? "never" : "ask",
+      UBUME_DSH_BASE_URL: config.baseUrl,
+      UBUME_DSH_API_KEY: config.apiKey,
+      UBUME_DSH_MODEL: config.model,
+      UBUME_DSH_CONTEXT_WINDOW: String(config.contextWindow),
+      UBUME_DSH_MAX_TOKENS: String(config.maxTokens),
+      UBUME_DSH_VISION: config.supportsVision ? "1" : "0",
+      ...(config.reasoningEffort ? { UBUME_DSH_REASONING_EFFORT: config.reasoningEffort } : {}),
     };
-    const child = spawn(process.env.CODEXA_NODE_PATH?.trim() || "node", [resolveDshBin(), "--profile", PROFILE_NAME], {
+    const child = spawn(process.env.UBUME_NODE_PATH?.trim() || "node", [resolveDshBin(), "--profile", PROFILE_NAME], {
       cwd: request.workspaceRoot,
       env,
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.child = child;
+    this.stopMemoryPoll();
+    if (child.pid && process.platform === "linux") {
+      this.memoryPoll = setInterval(() => this.checkMemory(child, readLinuxProcessRssBytes(child.pid!)), HARNESS_MEMORY_POLL_MS);
+      this.memoryPoll.unref?.();
+    }
     traceLocalStream("harness.start", { model: config.model, endpoint: sanitizedEndpoint(config.baseUrl), workspaceRoot: request.workspaceRoot });
     this.stderr = "";
     this.redactions = [config.apiKey].filter((value) => value.length >= 6);
@@ -543,6 +585,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     });
     child.once("exit", (code) => {
       if (this.child !== child) return;
+      this.stopMemoryPoll();
       handlers.onProcessLifecycle?.("exit");
       this.child = null;
       this.transport?.close();
@@ -550,12 +593,18 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       if (!startupSettled) rejectStartup(new Error(`Local Harness exited during startup (${code ?? "signal"}).`));
       if (this.active && !this.active.settled) {
         const safeStderr = this.redactions.reduce((text, secret) => text.split(secret).join("[redacted]"), this.stderr).trim();
-        this.failActive(new Error(`Local Harness exited unexpectedly (${code ?? "signal"}).${safeStderr ? `\n${safeStderr}` : ""}`));
+        const memoryFailure = code === 85 || /heap out of memory|allocation failed.*heap/i.test(safeStderr);
+        const backpressureFailure = code === 86;
+        this.failActive(new Error(memoryFailure
+          ? harnessMemoryLimitMessage()
+          : backpressureFailure
+            ? "Local Harness output exceeded its 16 MiB safety buffer. The turn was stopped; your next prompt will start a fresh Harness session."
+            : `Local Harness exited unexpectedly (${code ?? "signal"}).${safeStderr ? `\n${safeStderr}` : ""}`));
       }
     });
     const transport = new JsonRpcLineTransport(child.stdout, child.stdin);
     this.transport = transport;
-    transport.onNotification((method, params) => this.onNotification(method, params as HarnessNotification));
+    transport.onNotification((method, params) => this.onNotification(method, params as HarnessNotification, child));
     transport.onRequest((method, params) => this.onBridgeRequest(method, params));
     transport.start();
     try {
@@ -579,7 +628,14 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     }
   }
 
-  private onNotification(method: string, params: HarnessNotification): void {
+  private onNotification(method: string, params: HarnessNotification, sourceChild?: ChildProcessWithoutNullStreams): void {
+    if (sourceChild && sourceChild !== this.child) return;
+    if (method === "harness.memory") {
+      if (this.child && typeof (params as { rssBytes?: unknown }).rssBytes === "number") {
+        this.checkMemory(this.child, (params as { rssBytes: number }).rssBytes);
+      }
+      return;
+    }
     const state = this.active;
     const ownsNotification = params.sessionId === state?.sessionId || params.parentSessionId === state?.sessionId;
     if (!state || !ownsNotification || state.settled) return;
@@ -650,7 +706,14 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         const step = typeof data.step === "number" ? data.step : 0;
         const index = typeof chunk.index === "number" ? chunk.index : 0;
         const reasoningKey = `${step}:${index}`;
-        const text = `${state.reasoningText.get(reasoningKey) ?? ""}${chunk.text}`;
+        const previousDisplay = state.reasoningText.get(reasoningKey) ?? "";
+        const previous = previousDisplay.startsWith(REASONING_TRUNCATED_PREFIX)
+          ? previousDisplay.slice(REASONING_TRUNCATED_PREFIX.length)
+          : previousDisplay;
+        const combined = `${previous}${chunk.text}`;
+        const text = combined.length > MAX_DISPLAY_REASONING_CHARS
+          ? `${REASONING_TRUNCATED_PREFIX}${combined.slice(-MAX_DISPLAY_REASONING_CHARS)}`
+          : combined;
         state.reasoningText.set(reasoningKey, text);
         state.handlers.onProgress?.({
           id: `local-reasoning-${state.sessionId}-${step}-${index}`,
@@ -711,6 +774,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         summary: textFromContent(data.message.content).slice(0, 2_000) || (failed ? "Tool failed" : "Tool completed"),
       });
       state.toolEventCount += 1;
+      state.toolArguments.delete(callId);
     }
   }
 
@@ -732,7 +796,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
 
   private async onBridgeRequest(method: string, params: Record<string, unknown>): Promise<unknown> {
     const state = this.active;
-    if (!state || params.sessionId !== state.sessionId) return method === "approval/request" ? { outcome: "rejected" } : { kind: "deny", reason: "No active Codexa Local run owns this tool call." };
+    if (!state || params.sessionId !== state.sessionId) return method === "approval/request" ? { outcome: "rejected" } : { kind: "deny", reason: "No active Ubume Local run owns this tool call." };
     if (method === "tool/policy") {
       const tool = String(params.tool ?? "tool");
       const callId = String(params.callId ?? "");
@@ -740,7 +804,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       if (callId) state.toolArguments.set(callId, { tool, arguments: args });
       if (!isMutatingTool(tool)) return { kind: "allow" };
       if (state.request.runIntent === "plan" || state.request.runtime.policy.sandboxMode === "read-only") {
-        return { kind: "deny", reason: "Codexa's current runtime policy is read-only." };
+        return { kind: "deny", reason: "Ubume's current runtime policy is read-only." };
       }
       const command = typeof args.command === "string" ? args.command : "";
       if (command && isDangerousShellCommand(command)) return { kind: "deny", reason: "Shell command blocked as dangerous." };
@@ -791,7 +855,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     }
   }
 
-  /** Continue max-token turns inside the same Harness session and Codexa run. */
+  /** Continue max-token turns inside the same Harness session and Ubume run. */
   private tryRecoverExhaustedTurn(state: HarnessRunState): boolean {
     if (state.cancelled || !this.outputBudgetExhausted(state) || !this.transport) return false;
 
@@ -909,7 +973,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       throughMessageCount: completedMessages.length,
       transcriptHash: createHash("sha256").update(JSON.stringify(completedMessages)).digest("hex"),
       updatedAt: new Date().toISOString(),
-    });
+    }, state.sessionId);
     state.handlers.onFinalAnswerObserved?.(state.text);
     traceLocalStream("harness.request.complete", { sessionId: state.sessionId, responseCharacters: state.text.length });
     state.resolve(state.text);
@@ -921,6 +985,25 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     state.settled = true;
     state.abortCleanup();
     this.active = null;
+    state.handlers.onLocalHarnessSession?.(null, state.sessionId);
+    const child = this.child;
+    const transport = this.transport;
+    if (child && transport) {
+      this.failedSessionCleanup = new Promise<void>((resolveCleanup) => {
+        const timer = setTimeout(() => {
+          if (this.child === child) void this.shutdown().then(resolveCleanup, resolveCleanup);
+          else resolveCleanup();
+        }, 1_500);
+        void transport.request("session/close", { sessionId: state.sessionId }).then(() => {
+          clearTimeout(timer);
+          resolveCleanup();
+        }).catch(() => {
+          clearTimeout(timer);
+          if (this.child === child) void this.shutdown().then(resolveCleanup, resolveCleanup);
+          else resolveCleanup();
+        });
+      });
+    }
     traceLocalStream("harness.request.error", {
       sessionId: state.sessionId,
       error: error.message,
@@ -931,6 +1014,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
   }
 
   async shutdown(): Promise<void> {
+    this.stopMemoryPoll();
     const transport = this.transport;
     const child = this.child;
     this.transport = null;
@@ -967,6 +1051,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
   }
 
   terminate(): void {
+    this.stopMemoryPoll();
     this.transport?.close();
     this.transport = null;
     if (this.child?.exitCode === null && this.child.signalCode === null) this.child.kill("SIGTERM");

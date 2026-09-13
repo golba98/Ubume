@@ -9,8 +9,8 @@ test("formatTomlKey quotes keys only when necessary", () => {
   assert.equal(formatTomlKey("danger-full-access"), "danger-full-access");
   assert.equal(formatTomlKey("/home/user/path"), '"/home/user/path"');
   assert.equal(
-    formatTomlKey("/home/k9-vortex/Development/1-JavaScript(Type)/13-Codexa CLI"),
-    '"/home/k9-vortex/Development/1-JavaScript(Type)/13-Codexa CLI"',
+    formatTomlKey("/home/k9-vortex/Development/1-JavaScript(Type)/13-Ubume CLI"),
+    '"/home/k9-vortex/Development/1-JavaScript(Type)/13-Ubume CLI"',
   );
   assert.equal(formatTomlKey("key with space"), '"key with space"');
   assert.equal(formatTomlKey("key.with.dots"), '"key.with.dots"');
@@ -19,8 +19,8 @@ test("formatTomlKey quotes keys only when necessary", () => {
 test("formatTomlPath formats dotted section paths with quotes where needed", () => {
   assert.equal(formatTomlPath(["projects"]), "projects");
   assert.equal(
-    formatTomlPath(["projects", "/home/k9-vortex/Development/1-JavaScript(Type)/13-Codexa CLI"]),
-    'projects."/home/k9-vortex/Development/1-JavaScript(Type)/13-Codexa CLI"',
+    formatTomlPath(["projects", "/home/k9-vortex/Development/1-JavaScript(Type)/13-Ubume CLI"]),
+    'projects."/home/k9-vortex/Development/1-JavaScript(Type)/13-Ubume CLI"',
   );
   assert.equal(
     formatTomlPath(["apps", "github", "tools.create_pull_request"]),
@@ -33,14 +33,14 @@ test("serializeTomlDocument produces valid parseable TOML for paths with spaces 
     sandbox_mode: "danger-full-access",
     approval_policy: "never",
     projects: {
-      "/home/k9-vortex/Development/1-JavaScript(Type)/13-Codexa CLI": {
+      "/home/k9-vortex/Development/1-JavaScript(Type)/13-Ubume CLI": {
         trust_level: "trusted",
       },
       "/simple/path": {
         trust_level: "trusted",
       },
     },
-    codexa: {
+    ubume: {
       mode: "full-auto",
       plan_mode: false,
     },
@@ -48,7 +48,7 @@ test("serializeTomlDocument produces valid parseable TOML for paths with spaces 
 
   const serialized = serializeTomlDocument(input);
   assert.ok(
-    serialized.includes('[projects."/home/k9-vortex/Development/1-JavaScript(Type)/13-Codexa CLI"]'),
+    serialized.includes('[projects."/home/k9-vortex/Development/1-JavaScript(Type)/13-Ubume CLI"]'),
     `Expected quoted table header in:\n${serialized}`,
   );
 
@@ -56,11 +56,11 @@ test("serializeTomlDocument produces valid parseable TOML for paths with spaces 
   assert.equal(parsed.sandbox_mode, "danger-full-access");
   assert.equal(parsed.approval_policy, "never");
   assert.deepEqual(
-    (parsed.projects as Record<string, unknown>)["/home/k9-vortex/Development/1-JavaScript(Type)/13-Codexa CLI"],
+    (parsed.projects as Record<string, unknown>)["/home/k9-vortex/Development/1-JavaScript(Type)/13-Ubume CLI"],
     { trust_level: "trusted" },
   );
   assert.deepEqual(
-    (parsed.codexa as Record<string, unknown>),
+    (parsed.ubume as Record<string, unknown>),
     { mode: "full-auto", plan_mode: false },
   );
 });

@@ -177,7 +177,7 @@ test("planning prompt asks for a final message that contains only the plan", () 
   assert.match(prompt, /before your last tool call/i);
 });
 
-test("builds an approved-plan execution prompt that tells codexa to implement now", () => {
+test("builds an approved-plan execution prompt that tells ubume to implement now", () => {
   const prompt = buildPlanExecutionPrompt({
     task: "Delete everything in hello.py and replace it with a starter hello_world.py script.",
     approvedPlan: "## Files\n- hello.py\n- hello_world.py",

@@ -28,11 +28,11 @@ function isProcessTerminationNoise(line: string): boolean {
 
 export const codexSubprocessProvider: BackendProvider = {
   id: "codex-subprocess",
-  label: "Codexa",
+  label: "Ubume",
   description: "Direct connection to the Codex neural network.",
   authState: "delegated",
   authLabel: "Authenticated via Codex",
-  statusMessage: "Authentication is managed via Codexa.",
+  statusMessage: "Authentication is managed via Ubume.",
   supportsModels: () => true,
   run: (prompt, options, handlers) => {
     let done = false;

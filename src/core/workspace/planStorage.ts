@@ -4,7 +4,7 @@ import { homedir } from "os";
 import { join } from "path";
 import { isNoiseLine } from "../providers/codexTranscript.js";
 import { sanitizeTerminalOutput } from "../terminal/terminalSanitize.js";
-import { resolveCodexaDataDir } from "./appData.js";
+import { resolveUbumeDataDir } from "./appData.js";
 
 type Platform = "win32" | "darwin" | "linux" | string;
 
@@ -79,20 +79,20 @@ export function normalizePlanReviewMarkdown(planText: string, workspaceRoot?: st
  * Uses platform-appropriate app-data locations instead of the workspace.
  */
 export function resolvePlanDir(platformOverride?: Platform): string {
-  const envDir = process.env["CODEXA_PLAN_DIR"];
+  const envDir = process.env["UBUME_PLAN_DIR"] || process.env["CODEXA_PLAN_DIR"];
   if (envDir) return envDir;
 
   const platform = platformOverride ?? process.platform;
 
   if (platform === "win32") {
     const localAppData = process.env["LOCALAPPDATA"];
-    if (localAppData) return join(localAppData, "Codexa", "plans");
+    if (localAppData) return join(localAppData, "Ubume", "plans");
     const appData = process.env["APPDATA"];
-    if (appData) return join(appData, "Codexa", "plans");
-    return join(homedir(), "AppData", "Local", "Codexa", "plans");
+    if (appData) return join(appData, "Ubume", "plans");
+    return join(homedir(), "AppData", "Local", "Ubume", "plans");
   }
 
-  return join(resolveCodexaDataDir(platform), "plans");
+  return join(resolveUbumeDataDir(platform), "plans");
 }
 
 // SHA-256 of the workspace path ensures filename uniqueness across projects with the same name.

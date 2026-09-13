@@ -12,7 +12,7 @@ import {
   type UserPromptEvent,
 } from "../../session/types.js";
 import { APP_VERSION } from "../../config/settings.js";
-import { formatCodexaVersionLabel } from "../../core/version/channel.js";
+import { formatUbumeVersionLabel } from "../../core/version/channel.js";
 import type { CodexAuthState } from "../../core/auth/codexAuth.js";
 import { getAuthStateLabel } from "../../core/auth/codexAuth.js";
 import * as renderDebug from "../../core/perf/renderDebug.js";
@@ -98,7 +98,7 @@ export type RenderTimelineItem = IntroRenderTimelineItem | TurnRenderTimelineIte
 // Re-enter follow-tail mode when the user scrolls within this many rows of the
 // tail, preventing a "stuck just above bottom" state after a near-end wheel scroll.
 const NEAR_BOTTOM_THRESHOLD = 3;
-const STABLE_RENDER_ENABLED = process.env.CODEXA_STABLE_RENDER !== "0";
+const STABLE_RENDER_ENABLED = process.env.UBUME_STABLE_RENDER !== "0";
 
 export interface TimelineViewportState {
   anchorRow: number;
@@ -859,11 +859,11 @@ export function buildIntroRenderItem(params: {
   providerLabel?: string | null;
 }): IntroRenderTimelineItem {
   return {
-    key: "codexa-intro",
+    key: "ubume-intro",
     type: "intro",
     padded: true,
     intro: {
-      version: formatCodexaVersionLabel(APP_VERSION),
+      version: formatUbumeVersionLabel(APP_VERSION),
       layoutMode: params.layout.mode,
       startupHeaderMode: params.startupHeaderMode,
       authLabel: formatAuthLabel(params.authState),

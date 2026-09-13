@@ -1,14 +1,14 @@
-# Codexa Technical Documentation
+# Ubume Technical Documentation
 
 ## System overview
 
-Codexa is an Ink/React terminal application that presents multiple coding-agent runtimes through one workspace-oriented interface. It supports interactive and headless prompts, provider/model discovery, reasoning and permission settings, streamed timelines, slash commands, session state, workspace trust, file-activity tracking, external CLI hand-off, and local OpenAI-compatible endpoints. Provider authentication remains owned by the provider CLI or local server.
+Ubume is an Ink/React terminal application that presents multiple coding-agent runtimes through one workspace-oriented interface. It supports interactive and headless prompts, provider/model discovery, reasoning and permission settings, streamed timelines, slash commands, session state, workspace trust, file-activity tracking, external CLI hand-off, and local OpenAI-compatible endpoints. Provider authentication remains owned by the provider CLI or local server.
 
 This overview standardizes project documentation. The detailed [architecture](ARCHITECTURE.md), [source guide](SOURCE_GUIDE.md), [developer scripts guide](../scripts/README.md), and [release guide](RELEASING.md) remain authoritative for their domains.
 
 ```mermaid
 flowchart LR
-  Terminal --> Launcher[bin/codexa.js]
+  Terminal --> Launcher[bin/ubume.js]
   Launcher -->|interactive| Entry[src/index.tsx]
   Launcher -->|exec| Headless[src/exec.ts]
   Entry --> App[src/app.tsx]
@@ -24,7 +24,7 @@ flowchart LR
 
 ## Runtime boundaries
 
-`bin/codexa.js` is the installed Node ESM launcher. It identifies interactive versus headless use, resolves the TypeScript runtime, preserves terminal semantics, and hands control to the relevant entry point. `src/index.tsx` validates the terminal, installs terminal modes and resize handling, and mounts exactly one Ink root. `src/app.tsx` is the interactive composition root: it owns effective configuration, prompt execution, session lifecycle, routed provider state, command effects, and screen transitions.
+`bin/ubume.js` is the installed Node ESM launcher. It identifies interactive versus headless use, resolves the TypeScript runtime, preserves terminal semantics, and hands control to the relevant entry point. `src/index.tsx` validates the terminal, installs terminal modes and resize handling, and mounts exactly one Ink root. `src/app.tsx` is the interactive composition root: it owns effective configuration, prompt execution, session lifecycle, routed provider state, command effects, and screen transitions.
 
 `src/ui/` owns terminal presentation. Its `chrome`, `timeline`, `panels`, `render`, and `input` groups separate stable layout, transcript rendering, overlays, pickers, and composer behavior. Reducers and measurement helpers keep rendering deterministic. `src/session/` owns conversation lifecycle and accumulated runtime events. `src/commands/handler.ts` parses slash commands into typed actions; effects are executed by the app rather than hidden inside the parser.
 
@@ -39,7 +39,7 @@ flowchart LR
 5. Session reducers accumulate reasoning, tool activity, file activity, assistant content, usage, status, and errors.
 6. Ink renders the transcript and active composer while terminal ownership modules preserve native scrollback, focus, resize, and cleanup invariants.
 
-External launch-only providers are handed the inherited terminal and remain outside active in-Codexa routing. In-app providers must adapt their events to common contracts without inventing models or capabilities not observed at runtime. Last-good caches accelerate startup but live discovery remains the source of truth when available.
+External launch-only providers are handed the inherited terminal and remain outside active in-Ubume routing. In-app providers must adapt their events to common contracts without inventing models or capabilities not observed at runtime. Last-good caches accelerate startup but live discovery remains the source of truth when available.
 
 ## State, configuration, and safety
 
@@ -65,7 +65,7 @@ Auth uses an essential-only compact view at short heights: title, backend/auth s
 
 Generic selection screens use the same responsive viewport as provider/model lists rather than `ink-select-input`'s fixed limit. Theme selection therefore renders all nine registered themes at 100×22, starts on the committed theme, previews a highlighted theme immediately, restores the committed theme on Escape, and persists it only on Enter. Mode, Backend, writable-root, and other `SelectionPanel` consumers inherit the same continuous scrolling and Home/End/Page navigation.
 
-The development startup screen no longer seeds a `Launch mode` transcript notice. `codexa-dev` opens directly to the logo/header, composer, and runtime status; `/clear` restores the same clean home screen. The `/workspace relaunch <path>` command remains available through normal command help.
+The development startup screen no longer seeds a `Launch mode` transcript notice. `ubume-dev` opens directly to the logo/header, composer, and runtime status; `/clear` restores the same clean home screen. The `/workspace relaunch <path>` command remains available through normal command help.
 
 The implementation changes are in `src/ui/panels/ProviderPicker.tsx`, `src/ui/panels/ModelPickerScreen.tsx`, `src/ui/panels/responsivePickerViewport.ts`, `src/ui/chrome/AppShell.tsx`, and the panel-hint composition in `src/app.tsx`. Focused tests cover five-item fit, long-list continuous scrolling, selection visibility, capacity growth, invalid dimensions, resize clamping, narrow rendering, and the 100×22 shell integration.
 

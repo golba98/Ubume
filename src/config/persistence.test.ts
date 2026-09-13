@@ -92,7 +92,7 @@ test("parses workspace display and busy loader from camel and snake case", () =>
 test("merges legacy runtime fields into TOML without overwriting existing values", () => {
   const merged = mergeRuntimeIntoTomlConfig({
     model: "gpt-5.4",
-    codexa: {
+    ubume: {
       mode: "suggest",
     },
   }, {
@@ -108,7 +108,7 @@ test("merges legacy runtime fields into TOML without overwriting existing values
   });
 
   assert.equal(merged.model, "gpt-5.4");
-  assert.deepEqual(merged.codexa, { mode: "suggest" });
+  assert.deepEqual(merged.ubume, { mode: "suggest" });
   assert.deepEqual(merged.sandbox_workspace_write, {
     network_access: true,
     writable_roots: ["C:\\safe"],
@@ -117,19 +117,19 @@ test("merges legacy runtime fields into TOML without overwriting existing values
 });
 
 test("persists Auto and Plan choices while preserving unrelated Codex config", () => {
-  const root = mkdtempSync(join(tmpdir(), "codexa-mode-"));
+  const root = mkdtempSync(join(tmpdir(), "ubume-mode-"));
   const previous = process.env.CODEX_HOME;
   process.env.CODEX_HOME = root;
   try {
-    writeFileSync(join(root, "config.toml"), "model = \"kept-model\"\n[codexa]\nbackend = \"openai-native\"\n", "utf-8");
+    writeFileSync(join(root, "config.toml"), "model = \"kept-model\"\n[ubume]\nbackend = \"openai-native\"\n", "utf-8");
     saveRuntimeModePreference("auto-edit", false);
     let parsed = parseTomlDocument(readFileSync(join(root, "config.toml"), "utf-8"));
     assert.equal(parsed.model, "kept-model");
-    assert.deepEqual(parsed.codexa, { backend: "openai-native", mode: "auto-edit", plan_mode: false });
+    assert.deepEqual(parsed.ubume, { backend: "openai-native", mode: "auto-edit", plan_mode: false });
 
     saveRuntimeModePreference("auto-edit", true);
     parsed = parseTomlDocument(readFileSync(join(root, "config.toml"), "utf-8"));
-    assert.equal((parsed.codexa as Record<string, unknown>).plan_mode, true);
+    assert.equal((parsed.ubume as Record<string, unknown>).plan_mode, true);
   } finally {
     if (previous === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = previous;
@@ -138,7 +138,7 @@ test("persists Auto and Plan choices while preserving unrelated Codex config", (
 });
 
 test("runtime mode persistence failures do not escape into the TUI", () => {
-  const root = mkdtempSync(join(tmpdir(), "codexa-mode-failure-"));
+  const root = mkdtempSync(join(tmpdir(), "ubume-mode-failure-"));
   const previous = process.env.CODEX_HOME;
   const blockedHome = join(root, "not-a-directory");
   writeFileSync(blockedHome, "blocked", "utf-8");

@@ -12,7 +12,7 @@ function makeRun(overrides: Partial<RunEvent> = {}): RunEvent {
     startedAt: 1,
     durationMs: 10,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: "Plan work",
     progressEntries: [],

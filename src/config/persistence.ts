@@ -15,6 +15,7 @@ import {
   getCodexConfigFile,
   normalizeLegacyDirectoryDisplayMode,
   SETTINGS_FILE,
+  LEGACY_SETTINGS_FILE,
   type AuthPreference,
   type HeaderConfig,
   type TerminalTitleMode,
@@ -324,7 +325,19 @@ function maybeMigrateLegacyRuntime(rawData: unknown): void {
 
 export function loadSettings(): AppSettings {
   try {
-    const text = readFileSync(SETTINGS_FILE, "utf-8");
+    let text = "";
+    if (existsSync(SETTINGS_FILE)) {
+      text = readFileSync(SETTINGS_FILE, "utf-8");
+    } else if (existsSync(LEGACY_SETTINGS_FILE)) {
+      text = readFileSync(LEGACY_SETTINGS_FILE, "utf-8");
+      try {
+        writeJsonFile(SETTINGS_FILE, JSON.parse(text));
+      } catch {
+        // Best-effort migration only
+      }
+    } else {
+      return getDefaultSettings();
+    }
     const rawData = JSON.parse(text);
     maybeMigrateLegacyRuntime(rawData);
     return parseSettingsData(rawData);
@@ -348,10 +361,12 @@ export function saveRuntimeModePreference(mode: AvailableMode, planMode: boolean
     const current = existsSync(codexConfigFile)
       ? parseTomlDocument(readFileSync(codexConfigFile, "utf-8"))
       : {};
-    const codexa = current.codexa && typeof current.codexa === "object" && !Array.isArray(current.codexa)
-      ? { ...(current.codexa as Record<string, unknown>) }
+    const useCodexa = !current.ubume && current.codexa && typeof current.codexa === "object" && !Array.isArray(current.codexa);
+    const tableKey = useCodexa ? "codexa" : "ubume";
+    const existing = (current[tableKey] && typeof current[tableKey] === "object" && !Array.isArray(current[tableKey]))
+      ? { ...(current[tableKey] as Record<string, unknown>) }
       : {};
-    current.codexa = { ...codexa, mode, plan_mode: planMode };
+    current[tableKey] = { ...existing, mode, plan_mode: planMode };
     mkdirSync(dirname(codexConfigFile), { recursive: true });
     const tmpFile = `${codexConfigFile}.tmp`;
     writeFileSync(tmpFile, serializeTomlDocument(current), "utf-8");

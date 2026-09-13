@@ -46,7 +46,7 @@ const SEED_FIXTURE = {
 };
 
 function withTempDir(run: (dir: string) => void): void {
-  const dir = mkdtempSync(join(tmpdir(), "codexa-seed-"));
+  const dir = mkdtempSync(join(tmpdir(), "ubume-seed-"));
   try {
     run(dir);
   } finally {

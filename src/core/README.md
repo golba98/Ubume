@@ -1,6 +1,6 @@
 # `src/core`
 
-Non-UI runtime logic for Codexa: launching backends, talking to provider CLIs,
+Non-UI runtime logic for Ubume: launching backends, talking to provider CLIs,
 terminal I/O, workspace resolution, and supporting utilities. UI lives in `src/ui`,
 app state in `src/session`, config in `src/config`. The top level of `src/core` is
 folders-only — every file lives in a domain folder so the directory stays scannable.
@@ -45,11 +45,11 @@ implemented as `providerRuntime/` runtimes.
 
 These are intentional, env-gated diagnostics (not dead code) — keep them named clearly:
 
-- `debug/inputDebug.ts` — stdin state tracing (`CODEXA_DEBUG_INPUT=1`).
+- `debug/inputDebug.ts` — stdin state tracing (`UBUME_DEBUG_INPUT=1`).
 - `debug/localStreamDebug.ts` — privacy-aware Local streaming diagnostics
-  (`CODEXA_DEBUG_LOCAL_STREAM=1`; add `CODEXA_DEBUG_LOCAL_STREAM_CONTENT=1`
+  (`UBUME_DEBUG_LOCAL_STREAM=1`; add `UBUME_DEBUG_LOCAL_STREAM_CONTENT=1`
   only when response text is safe to record).
-- `perf/renderDebug.ts` — Ink render/flicker tracing (`CODEXA_RENDER_DEBUG=1`). Kept in
+- `perf/renderDebug.ts` — Ink render/flicker tracing (`UBUME_RENDER_DEBUG=1`). Kept in
   `perf/` rather than `debug/` because it is imported widely across the UI.
 - `providerRuntime/claudeCodeDiscoveryDebug.ts` — entry point for the
   `bun run debug:claude-models` script; lives next to the discovery code it exercises.

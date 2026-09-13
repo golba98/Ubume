@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = dirname(scriptDir);
-const binPath = join(repoRoot, "bin", "codexa.js");
+const binPath = join(repoRoot, "bin", "ubume.js");
 const prompt = "Print the current directory, list files, and stop.";
 
 const child = spawn(
