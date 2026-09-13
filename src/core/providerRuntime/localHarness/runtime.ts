@@ -12,7 +12,13 @@ import { resolveDefaultMaxOutputTokens } from "../localOutputBudget.js";
 import type { LocalHarnessSessionMetadata } from "../../workspace/conversationStore.js";
 import { resolveUbumeWorkspaceDataDir } from "../../workspace/appData.js";
 import { getShellWorkspaceGuardMessage, isPathInsideAllowedRoots } from "../../workspace/workspaceGuard.js";
-import { ensureSessionScratchDir, pruneStaleScratchDirs } from "../../workspace/scratchDir.js";
+import {
+  describeSessionScratchDir,
+  ensureSessionScratchDir,
+  mentionsScratchDir,
+  pruneStaleScratchDirs,
+  removeUnusedSessionScratchDir,
+} from "../../workspace/scratchDir.js";
 import { isDangerousShellCommand } from "../../agent/tools.js";
 import { traceLocalStream } from "../../debug/localStreamDebug.js";
 import {
@@ -229,7 +235,8 @@ function resolveDshBin(): string {
 function prepareSessionScratch(request: ProviderChatRequest, sessionId: string, resumed: boolean): string | null {
   if (resolveHarnessSandboxMode(request) === "read-only") return null;
   try {
-    const scratch = ensureSessionScratchDir(request.workspaceRoot, sessionId);
+    // Only name the folder here; the tool/policy bridge creates it once a tool targets it.
+    const scratch = describeSessionScratchDir(request.workspaceRoot, sessionId);
     if (!resumed) pruneStaleScratchDirs(request.workspaceRoot, { keep: sessionId });
     return `Scratch directory for this session: ${scratch.relativePath}/ (put every temporary test, debug, or probe file there, not in the project).`;
   } catch (error) {
@@ -817,6 +824,13 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
           return { kind: "deny", reason: `Path is outside the active workspace: ${candidatePath}` };
         }
       }
+      if ([command, ...pathsFrom(args)].some(mentionsScratchDir)) {
+        try {
+          ensureSessionScratchDir(state.request.workspaceRoot, state.sessionId);
+        } catch (error) {
+          traceLocalStream("harness.scratch.unavailable", { sessionId: state.sessionId, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
       const signature = `${tool}:${command || pathsFrom(args).join(",")}`;
       if (state.approvals.has(signature)) return { kind: "allow" };
       if (state.request.runtime.policy.approvalPolicy === "on-request") return { kind: "ask", reason: `Allow ${commandFrom(tool, args)}?` };
@@ -963,6 +977,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     state.settled = true;
     state.abortCleanup();
     this.active = null;
+    if (state.request?.workspaceRoot) removeUnusedSessionScratchDir(state.request.workspaceRoot, state.sessionId);
     const completedMessages = [
       ...(state.request.conversationHistory ?? []),
       { role: "user", content: state.request.prompt },
@@ -985,6 +1000,8 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     state.settled = true;
     state.abortCleanup();
     this.active = null;
+    // Best-effort cleanup must never keep a failed run from settling.
+    if (state.request?.workspaceRoot) removeUnusedSessionScratchDir(state.request.workspaceRoot, state.sessionId);
     state.handlers.onLocalHarnessSession?.(null, state.sessionId);
     const child = this.child;
     const transport = this.transport;

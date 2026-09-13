@@ -135,14 +135,13 @@ describe("Local Harness provider routing", () => {
     assert.match(patch, /session scratch directory under \.ubume\/scratch\//);
   });
 
-  test("writable sessions get a workspace scratch folder note; plan mode does not", () => {
+  test("writable sessions get a scratch folder note without creating files; plan mode does not", () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), "ubume-harness-scratch-"));
     try {
       const writable = { ...request("Qwen"), workspaceRoot };
       const note = localHarnessTestUtils.prepareSessionScratch(writable, "session-1", false);
       assert.match(note ?? "", /\.ubume\/scratch\/session-1\//);
-      assert.ok(existsSync(join(workspaceRoot, ".ubume", "scratch", "session-1")));
-      assert.ok(existsSync(join(workspaceRoot, ".ubume", "scratch", ".gitignore")));
+      assert.equal(existsSync(join(workspaceRoot, ".ubume")), false);
 
       const planning = { ...writable, runIntent: "plan" } as ProviderChatRequest;
       assert.equal(localHarnessTestUtils.prepareSessionScratch(planning, "session-2", false), null);
@@ -663,5 +662,24 @@ describe("Harness event projection and policy", () => {
     const bridge = (fixture.process as unknown as { onBridgeRequest(method: string, params: Record<string, unknown>): Promise<unknown> }).onBridgeRequest.bind(fixture.process);
     assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "1", tool: "write", arguments: { path: ".ubume/scratch/session-1/_probe.html" } }), { kind: "ask", reason: "Allow write .ubume/scratch/session-1/_probe.html?" });
     assert.deepEqual(await bridge("tool/policy", { sessionId: "session-1", callId: "2", tool: "bash", arguments: { command: "node .ubume/scratch/session-1/_cdp.js" } }), { kind: "ask", reason: "Allow node .ubume/scratch/session-1/_cdp.js?" });
+  });
+
+  test("the scratch folder is created only when a tool targets it", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "ubume-harness-scratch-policy-"));
+    try {
+      const fixture = activeProcess();
+      const active = (fixture.process as unknown as { active: { request: ProviderChatRequest } }).active;
+      active.request = { ...active.request, workspaceRoot };
+      const bridge = (fixture.process as unknown as { onBridgeRequest(method: string, params: Record<string, unknown>): Promise<unknown> }).onBridgeRequest.bind(fixture.process);
+
+      await bridge("tool/policy", { sessionId: "session-1", callId: "1", tool: "write", arguments: { path: "index.html" } });
+      assert.equal(existsSync(join(workspaceRoot, ".ubume")), false);
+
+      await bridge("tool/policy", { sessionId: "session-1", callId: "2", tool: "write", arguments: { path: ".ubume/scratch/session-1/_probe.html" } });
+      assert.ok(existsSync(join(workspaceRoot, ".ubume", "scratch", "session-1")));
+      assert.ok(existsSync(join(workspaceRoot, ".ubume", "scratch", ".gitignore")));
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
   });
 });
