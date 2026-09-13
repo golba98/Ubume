@@ -3,18 +3,18 @@
 This guide documents how to publish the npm package `ubume` to the
 public npm registry.
 
-## Prepare version 0.1.0
+## Prepare version 0.1.1
 
 Run these commands from the repository root. NPM versions are immutable, so
 never reuse a version that has already been published.
 
 ```bash
-npm version 0.1.0 --no-git-tag-version
+npm version 0.1.1 --no-git-tag-version
 npm run gen-build-info
 npm pkg get name version
 ```
 
-Continue only after the printed version is `0.1.0`.
+Continue only after the printed version is `0.1.1`.
 
 ## Validate the release
 
@@ -53,8 +53,8 @@ runs the TypeScript typecheck, and runs the full Bun test suite.
 ## Verify the published package
 
 ```bash
-npm view ubume@0.1.0 version --registry=https://registry.npmjs.org
-npm install -g ubume@0.1.0 --registry=https://registry.npmjs.org
+npm view ubume@0.1.1 version --registry=https://registry.npmjs.org
+npm install -g ubume@0.1.1 --registry=https://registry.npmjs.org
 ubume --version
 ```
 
@@ -70,7 +70,7 @@ ubume --version
 
 ```bash
 git add -A
-git commit -m "release: prepare Ubume v0.1.0"
-git tag v0.1.0
-git push origin release/ubume-v0-1-0 --follow-tags
+git commit -m "release: prepare Ubume v0.1.1"
+git tag v0.1.1
+git push origin release/ubume-v0-1-1 --follow-tags
 ```

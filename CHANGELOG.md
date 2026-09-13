@@ -6,6 +6,30 @@ No changes yet.
 
 ---
 
+## [0.1.1] — 2026-09-13 — No Unrequested Workspace Files
+
+### Fixed
+
+- **Local agent no longer litters the project with `.ubume/scratch`** — every
+  writable Local Harness turn eagerly created `.ubume/scratch/<session>/` and a
+  `.gitignore` inside the workspace, even when the agent never wrote a
+  throwaway file, so an empty `.ubume` folder showed up next to the user's
+  files. The session scratch path is now only described in the prompt; the
+  folder and its `.gitignore` are created when a mutating tool call's path or
+  command actually targets `.ubume/scratch`
+  (`src/core/providerRuntime/localHarness/runtime.ts`), and when the run
+  completes or fails an empty session folder is removed along with any
+  `.ubume/scratch` and `.ubume` folders it leaves empty
+  (`removeUnusedSessionScratchDir` in `src/core/workspace/scratchDir.ts`).
+  Scratch still lives in the workspace because Harness's bwrap sandbox mounts a
+  fresh tmpfs over `/tmp` per command.
+- **Tests**: added `scratchDir.test.ts` coverage for side-effect-free
+  description, scratch-target detection, and unused-folder removal; updated the
+  Local Harness runtime tests to assert nothing is created at session open and
+  that the folder appears only when a tool targets it.
+
+---
+
 ## [0.1.0] — 2026-09-13 — Project Rename to Ubume CLI
 
 ### Changed
