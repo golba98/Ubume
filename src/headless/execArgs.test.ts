@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseHeadlessExecArgs } from "./execArgs.js";
 
-test("parses codexa exec positional prompt", () => {
+test("parses ubume exec positional prompt", () => {
   const parsed = parseHeadlessExecArgs(["Print", "the", "directory"]);
 
   assert.equal(parsed.ok, true);
@@ -12,7 +12,7 @@ test("parses codexa exec positional prompt", () => {
   assert.equal(parsed.value.launchArgs.initialPrompt, "Print the directory");
 });
 
-test("parses codexa exec --prompt value", () => {
+test("parses ubume exec --prompt value", () => {
   const parsed = parseHeadlessExecArgs(["--prompt", "Print the directory"]);
 
   assert.equal(parsed.ok, true);
@@ -20,7 +20,7 @@ test("parses codexa exec --prompt value", () => {
   assert.equal(parsed.value.prompt, "Print the directory");
 });
 
-test("parses codexa exec --prompt=value", () => {
+test("parses ubume exec --prompt=value", () => {
   const parsed = parseHeadlessExecArgs(["--prompt=Print the directory"]);
 
   assert.equal(parsed.ok, true);
@@ -42,7 +42,7 @@ test("rejects missing and empty prompts", () => {
   }
 });
 
-test("parses codexa exec --reasoning value", () => {
+test("parses ubume exec --reasoning value", () => {
   const parsed = parseHeadlessExecArgs(["--reasoning", "medium", "Print files"]);
 
   assert.equal(parsed.ok, true);
@@ -52,7 +52,7 @@ test("parses codexa exec --reasoning value", () => {
   assert.deepEqual(parsed.value.launchArgs.passthroughArgs, ["--reasoning", "medium"]);
 });
 
-test("parses codexa exec --reasoning=value", () => {
+test("parses ubume exec --reasoning=value", () => {
   const parsed = parseHeadlessExecArgs(["--reasoning=high", "Print files"]);
 
   assert.equal(parsed.ok, true);
@@ -65,7 +65,7 @@ test("parses codexa exec --reasoning=value", () => {
 test("parses timing and prompt policy flags without forwarding them to Codex", () => {
   const parsed = parseHeadlessExecArgs([
     "--timing",
-    "--codexa-prompt-policy",
+    "--ubume-prompt-policy",
     "wrapped",
     "Print files",
   ]);
@@ -79,24 +79,33 @@ test("parses timing and prompt policy flags without forwarding them to Codex", (
 });
 
 test("rejects invalid prompt policy values", () => {
-  const parsed = parseHeadlessExecArgs(["--codexa-prompt-policy", "verbose", "Prompt"]);
+  const parsed = parseHeadlessExecArgs(["--ubume-prompt-policy", "verbose", "Prompt"]);
 
   assert.equal(parsed.ok, false);
   if (!parsed.ok) {
-    assert.match(parsed.error, /codexa-prompt-policy/i);
+    assert.match(parsed.error, /ubume-prompt-policy/i);
   }
 });
 
-test("parses codexa exec --model and --reasoning together", () => {
+test("accepts the pre-rename --codexa-prompt-policy spelling", () => {
+  for (const argv of [["--codexa-prompt-policy", "wrapped", "Prompt"], ["--codexa-prompt-policy=wrapped", "Prompt"]]) {
+    const parsed = parseHeadlessExecArgs(argv);
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    assert.equal(parsed.value.promptPolicy, "wrapped");
+  }
+});
+
+test("parses ubume exec --model and --reasoning together", () => {
   const parsed = parseHeadlessExecArgs([
     "--model", "gpt-5.4-mini",
     "--reasoning", "medium",
-    "Reply with exactly: CODEXA_READY",
+    "Reply with exactly: UBUME_READY",
   ]);
 
   assert.equal(parsed.ok, true);
   if (!parsed.ok) return;
-  assert.equal(parsed.value.prompt, "Reply with exactly: CODEXA_READY");
+  assert.equal(parsed.value.prompt, "Reply with exactly: UBUME_READY");
   assert.deepEqual(parsed.value.launchArgs.configOverrides, [
     "model=\"gpt-5.4-mini\"",
     "model_reasoning_effort=medium",

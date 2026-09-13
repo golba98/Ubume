@@ -1,3 +1,4 @@
+import "./legacyEnvBootstrap.js";
 import { parseHeadlessExecArgs } from "./headless/execArgs.js";
 import {
   createHeadlessExecTiming,
@@ -7,10 +8,10 @@ import {
 
 export function printExecHelp(): void {
   console.log(`Usage:
-  codexa exec "prompt"
-  codexa exec --prompt "prompt"
-  codexa exec [--profile <name>] [-c key=value] "prompt"
-  codexa exec --model gpt-5.4-mini --reasoning medium "Reply with exactly: CODEXA_READY"
+  ubume exec "prompt"
+  ubume exec --prompt "prompt"
+  ubume exec [--profile <name>] [-c key=value] "prompt"
+  ubume exec --model gpt-5.4-mini --reasoning medium "Reply with exactly: UBUME_READY"
 
 Options:
       --prompt <text>     Prompt to submit in headless mode.
@@ -18,8 +19,8 @@ Options:
                           Reasoning effort: none, minimal, low, medium, high, xhigh.
       --benchmark-diagnostics
                           Alias for --timing.
-      --timing            Print optional codexa exec phase timing to stderr.
-      --codexa-prompt-policy <raw|wrapped>
+      --timing            Print optional ubume exec phase timing to stderr.
+      --ubume-prompt-policy <raw|wrapped>
                           Prompt policy for exec mode. Defaults to raw.
       --skip-git-repo-check
                           Forward --skip-git-repo-check to codex exec.
@@ -35,18 +36,18 @@ const isMainModule = Boolean((import.meta as ImportMeta & { main?: boolean }).ma
 if (isMainModule) {
   const argv = process.argv.slice(2);
   const timing = createHeadlessExecTiming({
-    enabled: process.env.CODEXA_EXEC_TIMING === "1"
+    enabled: process.env.UBUME_EXEC_TIMING === "1"
       || argv.includes("--timing")
       || argv.includes("--benchmark-diagnostics"),
     stderr: process.stderr,
-    startTimeMs: Number(process.env.CODEXA_EXEC_TIMING_EPOCH_MS) || undefined,
+    startTimeMs: Number(process.env.UBUME_EXEC_TIMING_EPOCH_MS) || undefined,
   });
-  timing.mark("codexa_exec_process_start", { pid: process.pid });
+  timing.mark("ubume_exec_process_start", { pid: process.pid });
 
   const parsed = parseHeadlessExecArgs(argv);
   if (!parsed.ok) {
-    console.error(`[codexa exec] parse: ${parsed.error}`);
-    timing.mark("codexa_exec_process_exit", { exit_code: HEADLESS_EXEC_PARSE_ERROR });
+    console.error(`[ubume exec] parse: ${parsed.error}`);
+    timing.mark("ubume_exec_process_exit", { exit_code: HEADLESS_EXEC_PARSE_ERROR });
     process.exit(HEADLESS_EXEC_PARSE_ERROR);
   }
 
@@ -57,7 +58,7 @@ if (isMainModule) {
 
   if (parsed.value.help) {
     printExecHelp();
-    timing.mark("codexa_exec_process_exit", { exit_code: 0 });
+    timing.mark("ubume_exec_process_exit", { exit_code: 0 });
     process.exit(0);
   }
 
@@ -65,8 +66,8 @@ if (isMainModule) {
     prompt: parsed.value.prompt,
     launchArgs: parsed.value.launchArgs,
     promptPolicy: parsed.value.promptPolicy,
-    benchmarkDiagnostics: (parsed.value.timing || process.env.CODEXA_EXEC_TIMING === "1") ? timing : undefined,
+    benchmarkDiagnostics: (parsed.value.timing || process.env.UBUME_EXEC_TIMING === "1") ? timing : undefined,
   });
-  timing.mark("codexa_exec_process_exit", { exit_code: result.exitCode });
+  timing.mark("ubume_exec_process_exit", { exit_code: result.exitCode });
   process.exit(result.exitCode);
 }

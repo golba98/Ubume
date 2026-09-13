@@ -9,9 +9,9 @@ import { resolveGeminiExecutable } from "../executables/geminiExecutable.js";
 
 // ─── Diagnostics ─────────────────────────────────────────────────────────────
 
-const GEMINI_DIAG_LOG = `${process.env.TEMP ?? process.env.TMPDIR ?? "/tmp"}/codexa-gemini-diag.log`;
+const GEMINI_DIAG_LOG = `${process.env.TEMP ?? process.env.TMPDIR ?? "/tmp"}/ubume-gemini-diag.log`;
 function isGeminiDiagEnabled(): boolean {
-  return process.env.CODEXA_GEMINI_DEBUG === "1";
+  return process.env.UBUME_GEMINI_DEBUG === "1";
 }
 
 function diagLog(msg: string): void {
@@ -20,11 +20,11 @@ function diagLog(msg: string): void {
 }
 
 const GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
-const GEMINI_TIMEOUT_MS = Number(process.env.CODEXA_GEMINI_TIMEOUT_MS?.trim()) || 120_000;
+const GEMINI_TIMEOUT_MS = Number(process.env.UBUME_GEMINI_TIMEOUT_MS?.trim()) || 120_000;
 const GEMINI_ROUTE_VALIDATION_TIMEOUT_MS = 30_000;
 const GEMINI_READY_PROMPT = "Respond with READY only.";
 const GEMINI_REASONING_UNSUPPORTED_DIAGNOSTIC = "Gemini reasoning control is not supported by this CLI version.";
-export const GEMINI_ROUTE_SETUP_MESSAGE = "Google/Gemini is not configured for in-Codexa routing yet. Sign in with Gemini CLI headless auth or set GEMINI_API_KEY / GOOGLE_API_KEY.";
+export const GEMINI_ROUTE_SETUP_MESSAGE = "Google/Gemini is not configured for in-Ubume routing yet. Sign in with Gemini CLI headless auth or set GEMINI_API_KEY / GOOGLE_API_KEY.";
 
 type CommandRunner = typeof runCommand;
 export type GeminiApprovalMode = "default" | "plan" | "auto_edit" | "yolo";
@@ -597,9 +597,9 @@ export async function validateGeminiRoute(options: {
 
   let errorMessage = GEMINI_ROUTE_SETUP_MESSAGE;
   if (failureReason === "shell wrapper/function conflict") {
-    errorMessage = `PowerShell wrapper detected. Codexa is bypassing it and using:\n${command.file}`;
+    errorMessage = `PowerShell wrapper detected. Ubume is bypassing it and using:\n${command.file}`;
   } else if (result.status === "completed" && result.exitCode === 0) {
-    errorMessage = "Gemini CLI responded, but Codexa could not validate the headless route. The probe returned unexpected output.";
+    errorMessage = "Gemini CLI responded, but Ubume could not validate the headless route. The probe returned unexpected output.";
   } else if (!looksFound) {
     errorMessage = "Gemini CLI was not found as a real executable file. Install Gemini CLI or set GEMINI_EXECUTABLE to a known working command/path.";
   } else if (result.status === "timeout") {
@@ -776,7 +776,7 @@ export const geminiRuntime: ProviderRuntime = {
       .catch((error) => {
         diagLog(`REJECTED: cancelled=${cancelled} errorType=${error instanceof Error ? error.name : typeof error}`);
         if (cancelled) return;
-        const message = error instanceof Error ? error.message : "Google/Gemini in-Codexa routing failed.";
+        const message = error instanceof Error ? error.message : "Google/Gemini in-Ubume routing failed.";
         diagLog(`CALLING: onError`);
         handlers.onError(message);
       });

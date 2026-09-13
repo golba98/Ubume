@@ -105,20 +105,21 @@ export function parseHeadlessExecArgs(argv: readonly string[]): HeadlessExecArgs
       continue;
     }
 
-    if (arg === "--codexa-prompt-policy") {
+    // --codexa-prompt-policy is the pre-rename spelling; keep accepting it.
+    if (arg === "--ubume-prompt-policy" || arg === "--codexa-prompt-policy") {
       const value = normalizeNonEmpty(argv[index + 1]);
       if (value !== "raw" && value !== "wrapped") {
-        return { ok: false, error: "Missing or invalid value for --codexa-prompt-policy. Use raw or wrapped." };
+        return { ok: false, error: "Missing or invalid value for --ubume-prompt-policy. Use raw or wrapped." };
       }
       promptPolicy = value;
       index += 1;
       continue;
     }
 
-    if (arg.startsWith("--codexa-prompt-policy=")) {
-      const value = normalizeNonEmpty(arg.slice("--codexa-prompt-policy=".length));
+    if (arg.startsWith("--ubume-prompt-policy=") || arg.startsWith("--codexa-prompt-policy=")) {
+      const value = normalizeNonEmpty(arg.slice(arg.indexOf("=") + 1));
       if (value !== "raw" && value !== "wrapped") {
-        return { ok: false, error: "Invalid value for --codexa-prompt-policy. Use raw or wrapped." };
+        return { ok: false, error: "Invalid value for --ubume-prompt-policy. Use raw or wrapped." };
       }
       promptPolicy = value;
       continue;
@@ -245,7 +246,7 @@ export function parseHeadlessExecArgs(argv: readonly string[]): HeadlessExecArgs
     }
 
     if (arg.startsWith("-")) {
-      return { ok: false, error: `Unknown option for codexa exec: ${arg}` };
+      return { ok: false, error: `Unknown option for ubume exec: ${arg}` };
     }
 
     positionalPromptParts.push(arg, ...argv.slice(index + 1));
@@ -278,7 +279,7 @@ export function parseHeadlessExecArgs(argv: readonly string[]): HeadlessExecArgs
   }
 
   if (!prompt) {
-    return { ok: false, error: "Missing prompt. Use codexa exec \"prompt\" or codexa exec --prompt \"prompt\"." };
+    return { ok: false, error: "Missing prompt. Use ubume exec \"prompt\" or ubume exec --prompt \"prompt\"." };
   }
 
   return {

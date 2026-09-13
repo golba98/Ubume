@@ -20,7 +20,7 @@ const ANTHROPIC_TIMEOUT_MS = 120_000;
 const ANTHROPIC_AUTH_CHECK_TIMEOUT_MS = 10_000;
 const ANTHROPIC_ROUTE_VALIDATION_TIMEOUT_MS = 15_000;
 const DISCOVERY_FAILURE_MESSAGE = "Claude Code model version discovery failed; using fallback aliases with unknown versions.";
-export const ANTHROPIC_ROUTE_SETUP_MESSAGE = "Anthropic/Claude is not configured for in-Codexa routing.\nSign in with Claude Code or set ANTHROPIC_API_KEY.";
+export const ANTHROPIC_ROUTE_SETUP_MESSAGE = "Anthropic/Claude is not configured for in-Ubume routing.\nSign in with Claude Code or set ANTHROPIC_API_KEY.";
 export { parseClaudeAuthStatus } from "./claudeCodeDiscovery.js";
 
 type CommandRunner = typeof runCommand;
@@ -569,7 +569,7 @@ export const anthropicRuntime: ProviderRuntime = {
         })
         .catch((error) => {
           if (cancelled) return;
-          const message = error instanceof Error ? error.message : "Anthropic/Claude in-Codexa routing failed.";
+          const message = error instanceof Error ? error.message : "Anthropic/Claude in-Ubume routing failed.";
           handlers.onError(message);
         });
       return () => { cancelled = true; };

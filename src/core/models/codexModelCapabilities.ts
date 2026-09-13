@@ -462,7 +462,7 @@ export function persistCodexModelCapabilities(capabilities: CodexModelCapabiliti
 }
 
 // Cache chain: TTL-based in-memory cache → live discovery → seeded local caches
-// (codex's own models_cache.json / Codexa's last-good discovery) → static
+// (codex's own models_cache.json / Ubume's last-good discovery) → static
 // fallback model list. Failed discoveries are evicted from the in-memory cache
 // so retries are possible even when a seed satisfied the request.
 export async function getCodexModelCapabilities(

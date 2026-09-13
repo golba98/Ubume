@@ -10,7 +10,7 @@ import type { BackendRunHandlers, ToolApprovalDecision } from "../../providers/t
 import type { ProviderChatRequest } from "../types.js";
 import { resolveDefaultMaxOutputTokens } from "../localOutputBudget.js";
 import type { LocalHarnessSessionMetadata } from "../../workspace/conversationStore.js";
-import { resolveCodexaWorkspaceDataDir } from "../../workspace/appData.js";
+import { resolveUbumeWorkspaceDataDir } from "../../workspace/appData.js";
 import { getShellWorkspaceGuardMessage, isPathInsideAllowedRoots } from "../../workspace/workspaceGuard.js";
 import { ensureSessionScratchDir, pruneStaleScratchDirs } from "../../workspace/scratchDir.js";
 import { isDangerousShellCommand } from "../../agent/tools.js";
@@ -28,7 +28,7 @@ import {
 import type { ContentBlock } from "@deepseek-ai/dsh-llm";
 
 const HARNESS_VERSION = "0.1.1-rc.2";
-const PROFILE_NAME = "codexa-local";
+const PROFILE_NAME = "ubume-local";
 const HARNESS_MAX_RSS_BYTES = 1024 * 1024 * 1024;
 const HARNESS_HEAP_LIMIT_MIB = 768;
 const HARNESS_MEMORY_POLL_MS = 500;
@@ -81,7 +81,7 @@ export async function buildLocalHarnessPromptContentBlocks(
   }
   return blocks;
 }
-const INTERNAL_PROVIDER = "codexa-local";
+const INTERNAL_PROVIDER = "ubume-local";
 const require = createRequire(import.meta.url);
 const PROCESS_FINGERPRINT_SALT = randomBytes(16);
 
@@ -111,7 +111,7 @@ interface HarnessRunState {
   lastUsage?: { inputTokens: number; outputTokens: number; contextTokens: number; contextWindow: number | null; exact: boolean };
   /** Why the last model turn stopped (`max-tokens`, `stop`, `aborted`, …), from the finish chunk or turn/end. */
   stopReason?: string;
-  /** Number of output-window continuations issued inside this logical Codexa run. */
+  /** Number of output-window continuations issued inside this logical Ubume run. */
   continuationCount: number;
   /** Assistant-text length at the start of the current model turn. */
   windowStartTextLength: number;
@@ -239,7 +239,7 @@ function prepareSessionScratch(request: ProviderChatRequest, sessionId: string, 
 }
 
 function bridgePath(): string {
-  return fileURLToPath(new URL("../../../../bin/codexa-local-harness-bridge.js", import.meta.url));
+  return fileURLToPath(new URL("../../../../bin/ubume-local-harness-bridge.js", import.meta.url));
 }
 
 function profilePatch(supportsVision: boolean, reasoningEffortEnabled = false): string {
@@ -248,7 +248,7 @@ function profilePatch(supportsVision: boolean, reasoningEffortEnabled = false): 
   // levels, so both the declaration and the provider default are emitted only
   // when the model opted in (supports_reasoning_effort in providers.json).
   const providerReasoning = reasoningEffortEnabled
-    ? "\n        reasoning: !!js process.env.CODEXA_DSH_REASONING_EFFORT"
+    ? "\n        reasoning: !!js process.env.UBUME_DSH_REASONING_EFFORT"
     : "";
   const modelReasoning = reasoningEffortEnabled
     ? `
@@ -276,26 +276,26 @@ function profilePatch(supportsVision: boolean, reasoningEffortEnabled = false): 
 - id: agent-default-model
   config:
     provider: ${INTERNAL_PROVIDER}
-    model: !!js process.env.CODEXA_DSH_MODEL
+    model: !!js process.env.UBUME_DSH_MODEL
 - id: llm-pi-ai
   config:
     providers:
       ${INTERNAL_PROVIDER}:
-        displayName: Codexa Local
-        apiKeyEnv: CODEXA_DSH_API_KEY
+        displayName: Ubume Local
+        apiKeyEnv: UBUME_DSH_API_KEY
         api: openai-completions
-        baseURL: !!js process.env.CODEXA_DSH_BASE_URL
+        baseURL: !!js process.env.UBUME_DSH_BASE_URL
         compat:
           supportsDeveloperRole: false
           maxTokensField: max_tokens
-        defaultContextWindow: !!js Number(process.env.CODEXA_DSH_CONTEXT_WINDOW)
-        defaultMaxTokens: !!js Number(process.env.CODEXA_DSH_MAX_TOKENS)
+        defaultContextWindow: !!js Number(process.env.UBUME_DSH_CONTEXT_WINDOW)
+        defaultMaxTokens: !!js Number(process.env.UBUME_DSH_MAX_TOKENS)
         defaultInput: ${input}${providerReasoning}
         models:
-          - id: !!js process.env.CODEXA_DSH_MODEL
-            name: !!js process.env.CODEXA_DSH_MODEL
-            contextWindow: !!js Number(process.env.CODEXA_DSH_CONTEXT_WINDOW)
-            maxTokens: !!js Number(process.env.CODEXA_DSH_MAX_TOKENS)
+          - id: !!js process.env.UBUME_DSH_MODEL
+            name: !!js process.env.UBUME_DSH_MODEL
+            contextWindow: !!js Number(process.env.UBUME_DSH_CONTEXT_WINDOW)
+            maxTokens: !!js Number(process.env.UBUME_DSH_MAX_TOKENS)
             input: ${input}${modelReasoning}
 - id: sandbox-policy
   config:
@@ -303,47 +303,47 @@ function profilePatch(supportsVision: boolean, reasoningEffortEnabled = false): 
     workspaceRoot: !!js process.cwd()
 - id: approval
   config:
-    policy: !!js process.env.CODEXA_DSH_APPROVAL_POLICY
+    policy: !!js process.env.UBUME_DSH_APPROVAL_POLICY
 - id: permission
   config:
-    defaultPreset: !!js process.env.CODEXA_DSH_PERMISSION_PRESET
+    defaultPreset: !!js process.env.UBUME_DSH_PERMISSION_PRESET
     presets:
       read-only:
         sandbox: read-only
         approval: ask
         name: Read only
-        description: Read-only access controlled by Codexa.
+        description: Read-only access controlled by Ubume.
       workspace-write:
         sandbox: workspace-write
         approval: ask
         name: Workspace write
-        description: Workspace writes controlled by Codexa.
+        description: Workspace writes controlled by Ubume.
       danger-full-access:
         sandbox: danger-full-access
         approval: never
         name: Full access
-        description: Full filesystem access controlled by Codexa.
+        description: Full filesystem access controlled by Ubume.
 - id: tools
   config:
     mode: native
 - id: system-prompt
   config:
     persona: >-
-      You are a coding agent running inside Codexa. Work only in the active workspace,
+      You are a coding agent running inside Ubume. Work only in the active workspace,
       use the provided Harness tools for shell and file operations, and respect every
-      Codexa permission decision. Put throwaway files you create only to test, debug,
+      Ubume permission decision. Put throwaway files you create only to test, debug,
       or inspect your work (harness pages, probe scripts, logs, dumps, browser profiles)
-      in the session scratch directory under .codexa/scratch/ that Codexa names, never
+      in the session scratch directory under .ubume/scratch/ that Ubume names, never
       in the project root or source tree. Only deliverables the user asked for belong
       in the project.
 - insert:
-    - id: codexa-local-harness-bridge
+    - id: ubume-local-harness-bridge
       name: ${yamlString(bridgePath())}
 `;
 }
 
 function ensureProfile(workspaceRoot: string, config: HarnessConfig): string {
-  const home = join(resolveCodexaWorkspaceDataDir(workspaceRoot), "local-harness", `v-${HARNESS_VERSION}`);
+  const home = join(resolveUbumeWorkspaceDataDir(workspaceRoot), "local-harness", `v-${HARNESS_VERSION}`);
   const profileDir = join(home, "profiles", PROFILE_NAME);
   mkdirSync(profileDir, { recursive: true });
   writeFileSync(join(profileDir, "package.json"), `${JSON.stringify({
@@ -368,14 +368,14 @@ function resolveHarnessConfig(request: ProviderChatRequest): HarnessConfig {
     throw new Error(`Local agent request failed.\n\nModel: ${model}\n\nThe selected model is configured without tool/function-calling support required by the Local agent harness.`);
   }
   if (resolved?.supportsStreaming === false || modelConfig?.supportsStreaming === false) {
-    throw new Error(`Local agent request failed.\n\nModel: ${model}\n\nThe selected model is configured without streaming support required by Codexa's Local agent harness.`);
+    throw new Error(`Local agent request failed.\n\nModel: ${model}\n\nThe selected model is configured without streaming support required by Ubume's Local agent harness.`);
   }
   if (resolved?.supportsSystemPrompt === false || modelConfig?.supportsSystemPrompt === false) {
     throw new Error(`Local agent request failed.\n\nModel: ${model}\n\nThe selected model is configured without system-prompt support required by the Local agent harness.`);
   }
   return {
-    baseUrl: (resolved?.baseUrl ?? local?.baseUrl ?? process.env.CODEXA_LOCAL_BASE_URL ?? "http://localhost:1234/v1").replace(/\/+$/, ""),
-    apiKey: resolved?.apiKey ?? local?.apiKey ?? process.env.CODEXA_LOCAL_API_KEY ?? "lm-studio",
+    baseUrl: (resolved?.baseUrl ?? local?.baseUrl ?? process.env.UBUME_LOCAL_BASE_URL ?? "http://localhost:1234/v1").replace(/\/+$/, ""),
+    apiKey: resolved?.apiKey ?? local?.apiKey ?? process.env.UBUME_LOCAL_API_KEY ?? "lm-studio",
     model,
     contextWindow: resolved?.contextWindow ?? modelConfig?.contextLength ?? 32_768,
     maxTokens: resolved?.maxTokens
@@ -504,7 +504,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       const history = request.conversationHistory ?? [];
       const conversationContent = !canResume && history.length > 0
         ? [
-          "Codexa restored the following visible conversation into a new Local Harness session.",
+          "Ubume restored the following visible conversation into a new Local Harness session.",
           "Treat it as prior dialogue; prior ephemeral tool state is unavailable.",
           "",
           ...history.map((message) => `${message.role.toUpperCase()}: ${message.content}`),
@@ -517,7 +517,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
         handlers.onProgress?.({
           id: "local-harness-session-migration",
           source: "transcript",
-          text: "Restored visible Codexa history into a new Local Harness session; prior ephemeral tool state was not available.",
+          text: "Restored visible Ubume history into a new Local Harness session; prior ephemeral tool state was not available.",
         });
       }
       void buildLocalHarnessPromptContentBlocks(this.dshHome, promptContent, request.imageAttachments ?? [])
@@ -536,21 +536,21 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       NODE_OPTIONS: [process.env.NODE_OPTIONS?.trim(), `--max-old-space-size=${HARNESS_HEAP_LIMIT_MIB}`].filter(Boolean).join(" "),
-      CODEXA_DSH_MAX_RSS_BYTES: String(HARNESS_MAX_RSS_BYTES),
+      UBUME_DSH_MAX_RSS_BYTES: String(HARNESS_MAX_RSS_BYTES),
       DSH_HOME: dshHome,
       DSH_TELEMETRY_DISABLED: "1",
       DSH_PERMISSION_MODE: harnessSandboxMode,
-      CODEXA_DSH_PERMISSION_PRESET: harnessSandboxMode,
-      CODEXA_DSH_APPROVAL_POLICY: harnessSandboxMode === "danger-full-access" ? "never" : "ask",
-      CODEXA_DSH_BASE_URL: config.baseUrl,
-      CODEXA_DSH_API_KEY: config.apiKey,
-      CODEXA_DSH_MODEL: config.model,
-      CODEXA_DSH_CONTEXT_WINDOW: String(config.contextWindow),
-      CODEXA_DSH_MAX_TOKENS: String(config.maxTokens),
-      CODEXA_DSH_VISION: config.supportsVision ? "1" : "0",
-      ...(config.reasoningEffort ? { CODEXA_DSH_REASONING_EFFORT: config.reasoningEffort } : {}),
+      UBUME_DSH_PERMISSION_PRESET: harnessSandboxMode,
+      UBUME_DSH_APPROVAL_POLICY: harnessSandboxMode === "danger-full-access" ? "never" : "ask",
+      UBUME_DSH_BASE_URL: config.baseUrl,
+      UBUME_DSH_API_KEY: config.apiKey,
+      UBUME_DSH_MODEL: config.model,
+      UBUME_DSH_CONTEXT_WINDOW: String(config.contextWindow),
+      UBUME_DSH_MAX_TOKENS: String(config.maxTokens),
+      UBUME_DSH_VISION: config.supportsVision ? "1" : "0",
+      ...(config.reasoningEffort ? { UBUME_DSH_REASONING_EFFORT: config.reasoningEffort } : {}),
     };
-    const child = spawn(process.env.CODEXA_NODE_PATH?.trim() || "node", [resolveDshBin(), "--profile", PROFILE_NAME], {
+    const child = spawn(process.env.UBUME_NODE_PATH?.trim() || "node", [resolveDshBin(), "--profile", PROFILE_NAME], {
       cwd: request.workspaceRoot,
       env,
       stdio: ["pipe", "pipe", "pipe"],
@@ -796,7 +796,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
 
   private async onBridgeRequest(method: string, params: Record<string, unknown>): Promise<unknown> {
     const state = this.active;
-    if (!state || params.sessionId !== state.sessionId) return method === "approval/request" ? { outcome: "rejected" } : { kind: "deny", reason: "No active Codexa Local run owns this tool call." };
+    if (!state || params.sessionId !== state.sessionId) return method === "approval/request" ? { outcome: "rejected" } : { kind: "deny", reason: "No active Ubume Local run owns this tool call." };
     if (method === "tool/policy") {
       const tool = String(params.tool ?? "tool");
       const callId = String(params.callId ?? "");
@@ -804,7 +804,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
       if (callId) state.toolArguments.set(callId, { tool, arguments: args });
       if (!isMutatingTool(tool)) return { kind: "allow" };
       if (state.request.runIntent === "plan" || state.request.runtime.policy.sandboxMode === "read-only") {
-        return { kind: "deny", reason: "Codexa's current runtime policy is read-only." };
+        return { kind: "deny", reason: "Ubume's current runtime policy is read-only." };
       }
       const command = typeof args.command === "string" ? args.command : "";
       if (command && isDangerousShellCommand(command)) return { kind: "deny", reason: "Shell command blocked as dangerous." };
@@ -855,7 +855,7 @@ export class LocalHarnessProcess implements LocalHarnessRunner {
     }
   }
 
-  /** Continue max-token turns inside the same Harness session and Codexa run. */
+  /** Continue max-token turns inside the same Harness session and Ubume run. */
   private tryRecoverExhaustedTurn(state: HarnessRunState): boolean {
     if (state.cancelled || !this.outputBudgetExhausted(state) || !this.transport) return false;
 

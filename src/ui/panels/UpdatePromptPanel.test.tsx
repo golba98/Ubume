@@ -114,11 +114,11 @@ test("prompt shows exact versions, actions, and the detected package manager com
   await sleep();
   harness.cleanup();
 
-  assert.match(harness.output(), /Update available: Codexa 1\.0\.5/);
+  assert.match(harness.output(), /Update available: Ubume 1\.0\.5/);
   assert.match(harness.output(), /Current version: 1\.0\.4/);
   assert.match(harness.output(), /❯ \[ Update now \]\s+\[ Later \]/);
   assert.match(harness.output(), /←\/→ to choose · Enter to confirm · Esc to close/);
-  assert.match(harness.output(), /bun add -g @golba98\/codexa@latest/);
+  assert.match(harness.output(), /bun add -g ubume@latest/);
   assert.doesNotMatch(harness.output(), /npm install -g/);
 });
 
@@ -137,11 +137,11 @@ test("Update now with a successful runner reaches the done phase", async () => {
 
   const installAndSuccessOutput = harness.output().slice(availableOutputLength);
   assert.deepEqual(calls, ["pnpm"]);
-  assert.match(installAndSuccessOutput, /Installing Codexa 1\.0\.5/);
-  assert.match(installAndSuccessOutput, /Codexa v1\.0\.5 installed successfully\./);
-  assert.match(installAndSuccessOutput, /Restart Codexa to use the new version\./);
+  assert.match(installAndSuccessOutput, /Installing Ubume 1\.0\.5/);
+  assert.match(installAndSuccessOutput, /Ubume v1\.0\.5 installed successfully\./);
+  assert.match(installAndSuccessOutput, /Restart Ubume to use the new version\./);
   assert.match(installAndSuccessOutput, /❯ \[ Restart now \]/);
-  assert.match(installAndSuccessOutput, /Enter to restart · Esc to stay in Codexa/);
+  assert.match(installAndSuccessOutput, /Enter to restart · Esc to stay in Ubume/);
 
   harness.stdin.write("\r");
   await sleep(20);
@@ -238,10 +238,10 @@ test("installing replaces the available card and Esc cancels back to a clean ava
 
   const installingFrame = harness.output().slice(beforeInstall);
   assert.equal(runCalls, 1);
-  assert.match(installingFrame, /Installing Codexa 1\.0\.5/);
+  assert.match(installingFrame, /Installing Ubume 1\.0\.5/);
   assert.match(installingFrame, /downloading package/);
   assert.match(installingFrame, /Esc to cancel/);
-  assert.doesNotMatch(installingFrame, /Update available: Codexa/);
+  assert.doesNotMatch(installingFrame, /Update available: Ubume/);
   assert.doesNotMatch(installingFrame, /Current version:/);
   assert.doesNotMatch(installingFrame, /Run: npm install/);
 
@@ -252,9 +252,9 @@ test("installing replaces the available card and Esc cancels back to a clean ava
   const availableAgainFrame = harness.output().slice(beforeCancel);
   assert.equal(cancelCalls, 1);
   assert.equal(harness.onSkipCalls(), 0);
-  assert.match(availableAgainFrame, /Update available: Codexa 1\.0\.5/);
+  assert.match(availableAgainFrame, /Update available: Ubume 1\.0\.5/);
   assert.match(availableAgainFrame, /Current version: 1\.0\.4/);
-  assert.doesNotMatch(availableAgainFrame, /Installing Codexa/);
+  assert.doesNotMatch(availableAgainFrame, /Installing Ubume/);
   assert.doesNotMatch(availableAgainFrame, /downloading package/);
 
   // A canceled attempt may resolve later; it must not replace the restored
@@ -289,8 +289,8 @@ test("Escape immediately after install starts cannot surface stale installer sta
   await sleep(180);
 
   const transitionOutput = harness.output().slice(transitionStart);
-  assert.match(transitionOutput, /Update available: Codexa 1\.0\.5/);
-  assert.doesNotMatch(transitionOutput.slice(transitionOutput.lastIndexOf("Update available")), /Installing Codexa/);
+  assert.match(transitionOutput, /Update available: Ubume 1\.0\.5/);
+  assert.doesNotMatch(transitionOutput.slice(transitionOutput.lastIndexOf("Update available")), /Installing Ubume/);
   assert.ok(cancelCalls <= 1, "an attempt that reached the runner is canceled at most once");
   assert.equal(harness.onSkipCalls(), 0);
   harness.cleanup();

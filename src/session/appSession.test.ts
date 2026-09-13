@@ -19,7 +19,7 @@ function makeRunEvent(turnId: number): RunEvent {
     startedAt: 2,
     durationMs: null,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: "Do work",
     progressEntries: [],

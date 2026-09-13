@@ -132,7 +132,7 @@ test("resolver: rejects configured executable values that include arguments", as
 });
 
 test("resolver: accepts quoted executable paths with spaces", async () => {
-  const tempRoot = join(tmpdir(), `codexa resolver ${Date.now()}`);
+  const tempRoot = join(tmpdir(), `ubume resolver ${Date.now()}`);
   const executablePath = join(tempRoot, "tool with spaces.exe");
   mkdirSync(tempRoot, { recursive: true });
   writeFileSync(executablePath, "");

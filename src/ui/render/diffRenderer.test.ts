@@ -8,7 +8,7 @@ const GIT_DIFF = [
   "--- a/src/example.ts",
   "+++ b/src/example.ts",
   "@@ -1,3 +1,4 @@",
-  " const name = \"Codexa\";",
+  " const name = \"Ubume\";",
   "-console.log(\"old\");",
   "+console.log(\"new\");",
   "+console.log(\"added\");",

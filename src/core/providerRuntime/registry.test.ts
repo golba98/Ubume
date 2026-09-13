@@ -30,7 +30,7 @@ import {
   resetAntigravityRouteValidationCacheForTests,
 } from "./antigravity.js";
 
-test("google runtime exposes configured Gemini models for in-Codexa routing", () => {
+test("google runtime exposes configured Gemini models for in-Ubume routing", () => {
   const runtime = getProviderRuntime("google");
   const discovery = discoverProviderModels("google");
 
@@ -40,7 +40,7 @@ test("google runtime exposes configured Gemini models for in-Codexa routing", ()
   assert.ok(discovery.models.length > 0);
 });
 
-test("anthropic runtime exposes configured Claude models for in-Codexa routing", () => {
+test("anthropic runtime exposes configured Claude models for in-Ubume routing", () => {
   const runtime = getProviderRuntime("anthropic");
   const discovery = discoverProviderModels("anthropic");
 
@@ -255,7 +255,7 @@ test("antigravity runtime has routeAvailable and correct backendKind", async () 
   resetAntigravityRouteValidationCacheForTests();
 });
 
-test("Mistral Vibe runtime is routable in Codexa and exposes the configured model", () => {
+test("Mistral Vibe runtime is routable in Ubume and exposes the configured model", () => {
   const runtime = getProviderRuntime("mistral");
   const discovery = discoverProviderModels("mistral");
 
@@ -411,7 +411,7 @@ function mockRunCommand(
 async function withEmptyClaudeSettingsHome(run: () => Promise<void>): Promise<void> {
   const originalHome = process.env.HOME;
   const originalUserProfile = process.env.USERPROFILE;
-  const tempHome = mkdtempSync(join(tmpdir(), "codexa-claude-empty-"));
+  const tempHome = mkdtempSync(join(tmpdir(), "ubume-claude-empty-"));
 
   try {
     process.env.HOME = tempHome;

@@ -10,31 +10,33 @@ import { getTextWidth } from "./textLayout.js";
 // The companion `wrap="truncate"` rule keeps each row on exactly one terminal
 // line regardless of the surrounding Ink flex layout.
 
-// Canonical Codexa brand wordmark — the ██ block art is the authoritative
+// Canonical Ubume brand wordmark — the ██ block art is the authoritative
 // large logo for wide/max layouts.
-export const CODEXA_WORDMARK = [
-  " ██████╗ ██████╗ ██████╗ ███████╗██╗  ██╗ █████╗ ",
-  "██╔════╝██╔═══██╗██╔══██╗██╔════╝╚██╗██╔╝██╔══██╗",
-  "██║     ██║   ██║██║  ██║█████╗   ╚███╔╝ ███████║",
-  "██║     ██║   ██║██║  ██║██╔══╝   ██╔██╗ ██╔══██║",
-  "╚██████╗╚██████╔╝██████╔╝███████╗██╔╝ ██╗██║  ██║",
-  " ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝",
+export const UBUME_WORDMARK = [
+  "██╗   ██╗██████╗ ██╗   ██╗███╗   ███╗███████╗",
+  "██║   ██║██╔══██╗██║   ██║████╗ ████║██╔════╝",
+  "██║   ██║██████╔╝██║   ██║██╔████╔██║█████╗  ",
+  "██║   ██║██╔══██╗██║   ██║██║╚██╔╝██║██╔══╝  ",
+  "╚██████╔╝██████╔╝╚██████╔╝██║ ╚═╝ ██║███████╗",
+  " ╚═════╝ ╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚══════╝",
 ].join("\n");
 
+export const CODEXA_WORDMARK = UBUME_WORDMARK;
+
 /** 6-row ANSI Shadow block-char logo. Requires cols ≥ LOGO_LARGE_MIN_COLS. */
-export const LOGO_LARGE: readonly string[] = CODEXA_WORDMARK.split("\n");
+export const LOGO_LARGE: readonly string[] = UBUME_WORDMARK.split("\n");
 
 /** 4-row pure-ASCII art logo. Requires cols ≥ LOGO_MEDIUM_MIN_COLS. */
 export const LOGO_MEDIUM: readonly string[] = [
-  "  ____   ___  ____  _____ _  __    _    ",
-  " / ___| / _ \\|  _ \\| ____| |/ /   / \\   ",
-  "| |    | | | | | | |  _| | ' /   / _ \\  ",
-  "|_|     \\___/|_| |_|_____|_|\\_\\ /_/ \\_\\ ",
+  " _   _ ____  _   _ __  __ _____ ",
+  "| | | | __ )| | | |  \\/  | ____|",
+  "| |_| |  _ \\| |_| | |\\/| |  _|  ",
+  " \\___/|____/ \\___/|_|  |_|_____|",
 ];
 
 /** 1-row compact logo. Requires cols ≥ LOGO_COMPACT_MIN_COLS. */
 export const LOGO_COMPACT: readonly string[] = [
-  "✦ CODEXA",
+  "✦ UBUME",
 ];
 
 // ─── Breakpoints ──────────────────────────────────────────────────────────────
@@ -60,16 +62,24 @@ const LOGO_VARIANTS: readonly { logo: readonly string[]; minCols: number; minRow
 
 // ─── Selection ────────────────────────────────────────────────────────────────
 
+function isNoLogoEnv(): boolean {
+  return process.env["UBUME_NO_ASCII_LOGO"] === "1" || process.env["CODEXA_NO_ASCII_LOGO"] === "1";
+}
+
+function isCompactLogoEnv(): boolean {
+  return process.env["UBUME_COMPACT_LOGO"] === "1" || process.env["CODEXA_COMPACT_LOGO"] === "1";
+}
+
 /**
  * Returns the best logo variant for the given terminal column count.
  *
  * Env overrides:
- *   CODEXA_NO_ASCII_LOGO=1  → always text-only (empty array)
- *   CODEXA_COMPACT_LOGO=1   → always compact single-line logo
+ *   UBUME_NO_ASCII_LOGO=1 / CODEXA_NO_ASCII_LOGO=1  → always text-only (empty array)
+ *   UBUME_COMPACT_LOGO=1  / CODEXA_COMPACT_LOGO=1   → always compact single-line logo
  */
 export function selectLogoVariant(cols: number): readonly string[] {
-  if (process.env["CODEXA_NO_ASCII_LOGO"] === "1") return [];
-  if (process.env["CODEXA_COMPACT_LOGO"] === "1") return LOGO_COMPACT;
+  if (isNoLogoEnv()) return [];
+  if (isCompactLogoEnv()) return LOGO_COMPACT;
   if (cols >= LOGO_LARGE_MIN_COLS) return LOGO_LARGE;
   if (cols >= LOGO_COMPACT_MIN_COLS) return LOGO_COMPACT;
   return [];
@@ -85,8 +95,8 @@ export function selectLogoVariant(cols: number): readonly string[] {
  * Honours the same env overrides as {@link selectLogoVariant}.
  */
 export function selectLogoVariantForViewport(cols: number, rows: number): readonly string[] {
-  if (process.env["CODEXA_NO_ASCII_LOGO"] === "1") return [];
-  if (process.env["CODEXA_COMPACT_LOGO"] === "1") {
+  if (isNoLogoEnv()) return [];
+  if (isCompactLogoEnv()) {
     return rows >= LOGO_COMPACT_MIN_ROWS ? LOGO_COMPACT : [];
   }
   for (const variant of LOGO_VARIANTS) {

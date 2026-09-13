@@ -660,7 +660,7 @@ test("discoverClaudeCodeCapabilities: complete fallback when CLI fails and no se
 });
 
 // ---------------------------------------------------------------------------
-// Regression: direct-probe discovery — the root cause of codexa-dev showing
+// Regression: direct-probe discovery — the root cause of ubume-dev showing
 // hardcoded fallback models. The Claude Code CLI (v2.x) does not mention
 // "model list --json" in its help text, so the old help-text-gated approach
 // never generated any probe candidates and always fell through to fallback.

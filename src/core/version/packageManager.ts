@@ -6,13 +6,13 @@ import {
   type CommandSpec,
   type CommandStreamHandlers,
 } from "../process/CommandRunner.js";
-import { CODEXA_NPM_PACKAGE } from "./updateCheck.js";
+import { UBUME_NPM_PACKAGE } from "./updateCheck.js";
 
 export type GlobalPackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
 const UPDATE_TIMEOUT_MS = 300_000;
 
-const PACKAGE_SPEC = `${CODEXA_NPM_PACKAGE}@latest`;
+const PACKAGE_SPEC = `${UBUME_NPM_PACKAGE}@latest`;
 
 // Yarn Classic only — Yarn Berry (v2+) removed `yarn global`, but Berry installs
 // don't produce the global launcher paths we detect, so Classic is the only case.
@@ -24,14 +24,14 @@ const UPDATE_ARGV: Record<GlobalPackageManager, readonly string[]> = {
 };
 
 /**
- * Infers which package manager owns the global Codexa install from the
- * launcher script location (CODEXA_LAUNCHER_SCRIPT, set by bin/codexa.js).
+ * Infers which package manager owns the global Ubume install from the
+ * launcher script location (UBUME_LAUNCHER_SCRIPT / CODEXA_LAUNCHER_SCRIPT, set by bin/ubume.js).
  */
 export function detectGlobalPackageManager(
   env: NodeJS.ProcessEnv = process.env,
   launcherPathOverride?: string,
 ): GlobalPackageManager {
-  const launcherPath = launcherPathOverride ?? env.CODEXA_LAUNCHER_SCRIPT ?? process.argv[1] ?? "";
+  const launcherPath = launcherPathOverride ?? env.UBUME_LAUNCHER_SCRIPT ?? env.CODEXA_LAUNCHER_SCRIPT ?? process.argv[1] ?? "";
   const normalized = launcherPath.toLowerCase().replace(/\\/g, "/");
   if (!normalized) return "npm";
 

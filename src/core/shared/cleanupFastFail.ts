@@ -62,6 +62,6 @@ export function getBlockedCleanupFailure(activity: RunToolActivity): string | nu
     "Cleanup stopped because a safe generated artifact could not be deleted.",
     `Cause: ${cause}.`,
     target,
-    "Codexa stopped after the first clear blocked-delete signal to avoid retrying a doomed cleanup.",
+    "Ubume stopped after the first clear blocked-delete signal to avoid retrying a doomed cleanup.",
   ].filter(Boolean).join("\n");
 }

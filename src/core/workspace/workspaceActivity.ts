@@ -245,7 +245,8 @@ export function captureWorkspaceSnapshot(rootDir: string): Map<string, Workspace
       if (entry.isDirectory()) {
         if (shouldIgnoreDirectory(entry.name)) continue;
         const childDir = join(dir, entry.name);
-        if (normalizePath(relative(rootDir, childDir)) === SCRATCH_RELATIVE_DIR) continue;
+        const normalizedRel = normalizePath(relative(rootDir, childDir));
+        if (normalizedRel === SCRATCH_RELATIVE_DIR || normalizedRel === ".codexa/scratch") continue;
         walk(childDir);
         continue;
       }

@@ -54,7 +54,7 @@ const EVENTS: TimelineEvent[] = [
     startedAt: 3,
     durationMs: 1250,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: "Reproduce the resize flicker and fix it.",
     progressEntries: [],
@@ -197,8 +197,8 @@ function renderShell(
 
 test("does not render passive update notice (replaced by interactive prompt)", async () => {
   const output = await renderShell(120, 40, { kind: "IDLE" });
-  assert.doesNotMatch(output, /Update available: Codexa .* is available/);
-  assert.doesNotMatch(output, /Run: npm install -g @golba98\/codexa@latest/);
+  assert.doesNotMatch(output, /Update available: Ubume .* is available/);
+  assert.doesNotMatch(output, /Run: npm install -g @golba98\/ubume@latest/);
 });
 
 test("header omits model/context while composer status row renders active model and context", async () => {
@@ -297,7 +297,7 @@ test("header omits model/context while composer status row renders active model 
 
   const lines = text.split("\n");
   const statusLineIndex = lines.findLastIndex((line) => line.includes("Claude Code CLI / Sonnet 4.6 (Low)"));
-  const promptLineIndex = lines.findLastIndex((line, index) => index < statusLineIndex && line.includes("❯") && line.includes("Ask Codexa"));
+  const promptLineIndex = lines.findLastIndex((line, index) => index < statusLineIndex && line.includes("❯") && line.includes("Ask Ubume"));
   assert.ok(promptLineIndex >= 0, "composer prompt should render");
 
   const finalBottomChrome = lines.slice(Math.max(0, promptLineIndex - 2)).join("\n");
@@ -393,11 +393,11 @@ test("100x22 bottom chrome renders runtime context once below composer", async (
 
   const text = stripAnsi(output);
   const lines = text.split("\n");
-  assert.match(text, /██████|CODEXA|Codexa/);
-  assert.match(text, /❯\s+Ask Codexa/);
+  assert.match(text, /██████|UBUME|Ubume/);
+  assert.match(text, /❯\s+Ask Ubume/);
 
   const runtimeLineIndex = lines.findLastIndex((line) => line.includes("OpenAI Codex CLI / gpt-5.4-mini"));
-  const promptLineIndex = lines.findLastIndex((line, index) => index < runtimeLineIndex && line.includes("❯") && line.includes("Ask Codexa"));
+  const promptLineIndex = lines.findLastIndex((line, index) => index < runtimeLineIndex && line.includes("❯") && line.includes("Ask Ubume"));
   assert.ok(runtimeLineIndex >= 0, "runtime metadata should render");
   assert.ok(promptLineIndex >= 0, "composer prompt should render");
   assert.equal(runtimeLineIndex, promptLineIndex + 2, "runtime metadata should sit directly below the composer input border");
@@ -504,7 +504,7 @@ test("startup uses the large logo only when the viewport height can contain it",
   const output = await renderStartupShell(120, 30);
 
   assert.match(output, /██████/);
-  assert.match(output, /Codexa v/);
+  assert.match(output, /Ubume v/);
   assert.match(output, /\n\s*╭[─]+╮\n\s*│ ❯/);
 });
 
@@ -512,9 +512,9 @@ test("startup uses compact side-by-side ASCII header at normal shorter terminal 
   const output = await renderStartupShell(100, 24);
 
   assert.match(output, /██████/);
-  assert.match(output, /Codexa v/);
+  assert.match(output, /Ubume v/);
   assert.match(output, /Workspace:\s*…\\13-Custom CLI/);
-  assert.match(output, /Provider: Codexa Core/);
+  assert.match(output, /Provider: Ubume Core/);
   assert.match(output, /gpt-5\.4 \(medium\)\s+· Auto\s+Context: Unknown/);
   assert.doesNotMatch(output, /Model: gpt-5\.4/);
   assert.doesNotMatch(output, /Reasoning:/);
@@ -524,7 +524,7 @@ test("startup uses compact side-by-side ASCII header at normal shorter terminal 
 test("startup micro mode keeps the live header and composer visible", async () => {
   const output = await renderStartupShell(39, 13);
 
-  assert.match(output, /Codexa/);
+  assert.match(output, /Ubume/);
   assert.match(output, /\n\s*╭[─]+╮\n\s*│ ❯/);
   assert.doesNotMatch(output, /██████/);
 });
@@ -548,16 +548,16 @@ test("larger terminals keep the composer metadata row", async () => {
 test("cramped busy state uses the run footer in app composition", async () => {
   const output = await renderShell(80, 24, { kind: "THINKING", turnId: 1 });
 
-  assert.match(output, /Codexa is thinking/i);
-  assert.doesNotMatch(output, /CODEXA\s+\|\s+gpt-5\.4/i);
-  assert.doesNotMatch(output, /CODEXA AGENT/);
+  assert.match(output, /Ubume is thinking/i);
+  assert.doesNotMatch(output, /UBUME\s+\|\s+gpt-5\.4/i);
+  assert.doesNotMatch(output, /UBUME AGENT/);
 });
 
 test("cramped streaming state avoids response-labelled footer text", async () => {
   const output = await renderShell(80, 24, { kind: "RESPONDING", turnId: 1 });
 
-  assert.match(output, /Codexa is thinking/i);
-  assert.doesNotMatch(output, /Codexa is streaming/i);
+  assert.match(output, /Ubume is thinking/i);
+  assert.doesNotMatch(output, /Ubume is streaming/i);
   assert.doesNotMatch(output, /Streaming response/i);
 });
 
@@ -588,13 +588,13 @@ test("100x22 overlay panels prioritize visible options over the large startup lo
     </Box>,
   );
 
-  assert.match(output, /Codexa v/);
+  assert.match(output, /Ubume v/);
   assert.doesNotMatch(output, /██████/);
   assert.match(output, /Midnight Purple/);
   assert.match(output, /Codex the Black/);
   assert.match(output, /Dracula Night/);
   assert.match(output, /Deep Oceanic/);
-  assert.match(output, /Ask Codexa/);
+  assert.match(output, /Ask Ubume/);
   assert.match(output, /gpt-5\.4 \(medium\)/);
 });
 
@@ -702,7 +702,7 @@ test("startup intro workspace label updates when the intro component rerenders",
       <ThemeProvider theme="purple">
         <StaticIntroItem
           authState="authenticated"
-          workspaceLabel="Codexa"
+          workspaceLabel="Ubume"
           layout={layout}
           verboseMode={false}
           workspaceRoot={"C:\\Development\\1-JavaScript\\13-Custom-CLI-Normal"}
@@ -712,7 +712,7 @@ test("startup intro workspace label updates when the intro component rerenders",
     await sleep(80);
 
     const frame = stripAnsi(output);
-    assert.match(frame, /Workspace:\s*Codexa/);
+    assert.match(frame, /Workspace:\s*Ubume/);
   } finally {
     instance.cleanup();
     await sleep(20);
@@ -766,7 +766,7 @@ test("model picker renders as a compact command panel with composer", async () =
 
   const output = stripAnsi(raw);
   assert.match(output, /Select model command panel/);
-  assert.match(output, /Codexa v/);
+  assert.match(output, /Ubume v/);
   assert.match(output, /gpt-5\.4 \(medium\)/);
 });
 
@@ -1116,11 +1116,11 @@ function buildShellNode(
 function countLogoInOutput(raw: string): number {
   // Count occurrences of a distinctive second line of the ASCII logo.
   // This line appears exactly once per physical logo render in real-mode output.
-  return (stripAnsi(raw).match(/██╔════╝██╔═══██╗/g) ?? []).length;
+  return (stripAnsi(raw).match(/██║ ╚═╝ ██║/g) ?? []).length;
 }
 
-function countCodexaMetadataInOutput(raw: string): number {
-  return (stripAnsi(raw).match(/Codexa v/g) ?? []).length;
+function countUbumeMetadataInOutput(raw: string): number {
+  return (stripAnsi(raw).match(/Ubume v/g) ?? []).length;
 }
 
 function maxCountPerWrite(writes: string[], counter: (value: string) => number): number {
@@ -1129,7 +1129,7 @@ function maxCountPerWrite(writes: string[], counter: (value: string) => number):
 
 function assertHeaderBefore(output: string, marker: string) {
   const text = stripAnsi(output);
-  const headerIndex = text.indexOf("Codexa v");
+  const headerIndex = text.indexOf("Ubume v");
   const markerIndex = text.indexOf(marker);
   assert.ok(headerIndex >= 0, "header should render");
   assert.ok(markerIndex >= 0, `marker should render: ${marker}`);
@@ -1146,15 +1146,15 @@ function rowText(row: ReturnType<typeof buildStaticIntroRows>[number]): string {
 test("startup metadata stacks workspace between version and auth in the right block", () => {
   const rows = buildStaticIntroRows({
     authState: "checking",
-    workspaceLabel: "Codexa",
+    workspaceLabel: "Ubume",
     layout: createLayoutSnapshot(120, 40),
     verboseMode: false,
     workspaceRoot: "C:\\Development\\1-JavaScript\\13-Custom-CLI-Normal",
   }).map(rowText);
 
-  const versionIndex = rows.findIndex((row) => row.includes("Codexa v"));
+  const versionIndex = rows.findIndex((row) => row.includes("Ubume v"));
   const authIndex = rows.findIndex((row) => row.includes("Auth: Checking"));
-  const workspaceIndex = rows.findIndex((row) => row.includes("Workspace: Codexa"));
+  const workspaceIndex = rows.findIndex((row) => row.includes("Workspace: Ubume"));
 
   assert.ok(versionIndex >= 0, "version metadata row should render");
   assert.ok(workspaceIndex >= 0, "workspace metadata row should render");
@@ -1298,7 +1298,7 @@ test("header remains topmost after multiple prompt and response cycles", async (
       startedAt: 31,
       durationMs: 200,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "Second prompt marker",
       progressEntries: [],
@@ -1337,7 +1337,7 @@ test("header remains topmost after multiple prompt and response cycles", async (
   assertHeaderBefore(raw, "Second prompt marker");
   assertHeaderBefore(raw, "Second assistant response marker");
   assert.equal(maxCountPerWrite(writes, countLogoInOutput), 1, "each rendered frame should contain one header");
-  assert.equal(maxCountPerWrite(writes, countCodexaMetadataInOutput), 1, "each rendered frame should contain one metadata block");
+  assert.equal(maxCountPerWrite(writes, countUbumeMetadataInOutput), 1, "each rendered frame should contain one metadata block");
 });
 
 test("header is not duplicated by provider migration and route switch transcript events", async () => {
@@ -1387,7 +1387,7 @@ test("header is not duplicated by provider migration and route switch transcript
   assert.match(stripAnsi(raw), /Provider migrated/);
   assert.match(stripAnsi(raw), /Provider route active/);
   assert.equal(maxCountPerWrite(writes, countLogoInOutput), 1, "route switch events must not add a transcript banner");
-  assert.equal(maxCountPerWrite(writes, countCodexaMetadataInOutput), 1, "route switch events must not duplicate metadata");
+  assert.equal(maxCountPerWrite(writes, countUbumeMetadataInOutput), 1, "route switch events must not duplicate metadata");
 });
 
 test("project instructions render with breathing room below the live header", async () => {
@@ -1469,7 +1469,7 @@ test("live header remains visible when transitioning from startup frame to first
 
   const postPromptOutput = stripAnsi(raw.slice(transitionOffset));
   assert.match(postPromptOutput, /██████/);
-  assert.match(postPromptOutput, /Codexa v/);
+  assert.match(postPromptOutput, /Ubume v/);
   assert.match(postPromptOutput, /Workspace: C:\\Test/);
   assert.match(postPromptOutput, /Reproduce the resize flicker and fix it\./);
   assert.match(postPromptOutput, /Root cause looks like a layout gutter mismatch/);
@@ -1499,14 +1499,14 @@ test("workspace label updates on cold start without remounting the app shell", a
   });
 
   await sleep(100);
-  instance.rerender(buildShellNode(layout, [], { workspaceLabel: "Codexa" }));
+  instance.rerender(buildShellNode(layout, [], { workspaceLabel: "Ubume" }));
   await sleep(100);
 
   instance.cleanup();
   await sleep(20);
 
   const output = stripAnsi(raw);
-  assert.match(output, /Workspace:\s*Codexa/);
+  assert.match(output, /Workspace:\s*Ubume/);
   assert.doesNotMatch(output, /Settings/);
   assert.ok(countLogoInOutput(raw) <= 4, "workspace label changes should stay bounded to the live startup header");
 });
@@ -1536,7 +1536,7 @@ test("post-clear empty native frame renders the live header and empty composer",
 
   const output = stripAnsi(raw);
   assert.match(output, /██████/);
-  assert.match(output, /Codexa v/);
+  assert.match(output, /Ubume v/);
   assert.match(output, /\n\s*╭[─]+╮\n\s*│ ❯/);
   assert.doesNotMatch(output, /Reproduce the resize flicker and fix it\./);
 });
@@ -1569,7 +1569,7 @@ test("clear transition physically reprints the intro after previous transcript o
   await sleep(20);
 
   const postClearOutput = stripAnsi(raw.slice(clearOutputOffset));
-  assert.match(postClearOutput, /Codexa v/);
+  assert.match(postClearOutput, /Ubume v/);
   assert.match(postClearOutput, /\n\s*╭[─]+╮\n\s*│ ❯/);
   assert.doesNotMatch(postClearOutput, /Reproduce the resize flicker and fix it\./);
   assert.doesNotMatch(postClearOutput, /Root cause looks like a layout gutter mismatch/);
@@ -1611,7 +1611,7 @@ test("live header remains visible when panel opens and then closes", async () =>
 
   const postCloseOutput = stripAnsi(raw.slice(closeOutputOffset));
   assert.match(postCloseOutput, /██████/);
-  assert.match(postCloseOutput, /Codexa v/);
+  assert.match(postCloseOutput, /Ubume v/);
   assert.match(stripAnsi(raw), /Reproduce the resize flicker and fix it\./);
 });
 
@@ -1724,7 +1724,7 @@ test("cold-start stability: opening and closing model picker does not expand UI"
   instance.cleanup();
   await sleep(20);
 
-  assert.match(stripAnsi(raw), /Codexa v/);
+  assert.match(stripAnsi(raw), /Ubume v/);
 
   // Verify the layout didn't expand to fill the full 40 rows.
   // In real mode, cumulative lines should be low.
@@ -1767,10 +1767,10 @@ test("cold-start stability: opening and closing provider picker does not duplica
 
   const postCloseOutput = stripAnsi(raw.slice(closeOutputOffset));
   assert.match(postCloseOutput, /██████/);
-  assert.match(postCloseOutput, /Codexa v/);
+  assert.match(postCloseOutput, /Ubume v/);
   assert.match(postCloseOutput, /\n\s*╭[─]+╮\n\s*│ ❯/);
   assert.equal(countLogoInOutput(postCloseOutput), 1, "provider picker close frame should have one logo");
-  assert.equal(countCodexaMetadataInOutput(postCloseOutput), 1, "provider picker close frame should have one metadata block");
+  assert.equal(countUbumeMetadataInOutput(postCloseOutput), 1, "provider picker close frame should have one metadata block");
 });
 
 test("cold-start stability: system events do not break the startup frame", async () => {

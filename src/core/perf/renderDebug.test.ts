@@ -22,10 +22,10 @@ function clean(path: string): void {
 }
 
 test("render debug stays quiet by default", () => {
-  const logPath = join(tmpdir(), `codexa-render-debug-quiet-${process.pid}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-render-debug-quiet-${process.pid}.jsonl`);
   clean(logPath);
 
-  configureRenderDebug({ CODEXA_RENDER_DEBUG_FILE: logPath });
+  configureRenderDebug({ UBUME_RENDER_DEBUG_FILE: logPath });
   traceEvent("test", "quiet");
   traceRender("QuietComponent", "test");
 
@@ -33,13 +33,13 @@ test("render debug stays quiet by default", () => {
 });
 
 test("render debug writes JSONL only when explicitly enabled", () => {
-  const logPath = join(tmpdir(), `codexa-render-debug-enabled-${process.pid}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-render-debug-enabled-${process.pid}.jsonl`);
   clean(logPath);
 
   try {
     configureRenderDebug({
-      CODEXA_RENDER_DEBUG: "1",
-      CODEXA_RENDER_DEBUG_FILE: logPath,
+      UBUME_RENDER_DEBUG: "1",
+      UBUME_RENDER_DEBUG_FILE: logPath,
     });
     traceRender("EnabledComponent", "unit");
 
@@ -56,18 +56,18 @@ test("render debug writes JSONL only when explicitly enabled", () => {
 });
 
 test("render debug defaults to user-data diagnostic logs", () => {
-  configureRenderDebug({ CODEXA_DATA_DIR: "/custom/codexa" });
-  assert.equal(getRenderDebugLogPath(), join("/custom/codexa", "debug", "render-status.log"));
+  configureRenderDebug({ UBUME_DATA_DIR: "/custom/ubume" });
+  assert.equal(getRenderDebugLogPath(), join("/custom/ubume", "debug", "render-status.log"));
 });
 
 test("model state debug alias enables the render status log", () => {
-  const logPath = join(tmpdir(), `codexa-model-state-render-debug-${process.pid}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-model-state-render-debug-${process.pid}.jsonl`);
   clean(logPath);
 
   try {
     configureRenderDebug({
-      CODEXA_DEBUG_MODEL_STATE: "1",
-      CODEXA_RENDER_DEBUG_FILE: logPath,
+      UBUME_DEBUG_MODEL_STATE: "1",
+      UBUME_RENDER_DEBUG_FILE: logPath,
     });
     traceEvent("model", "alias");
 
@@ -83,29 +83,29 @@ test("model state debug alias enables the render status log", () => {
 });
 
 test("render debug creates missing log directories", () => {
-  const logPath = join(tmpdir(), `codexa-render-debug-nested-${process.pid}`, "render-debug.log");
-  rmSync(join(tmpdir(), `codexa-render-debug-nested-${process.pid}`), { force: true, recursive: true });
+  const logPath = join(tmpdir(), `ubume-render-debug-nested-${process.pid}`, "render-debug.log");
+  rmSync(join(tmpdir(), `ubume-render-debug-nested-${process.pid}`), { force: true, recursive: true });
 
   try {
     configureRenderDebug({
-      CODEXA_RENDER_DEBUG: "1",
-      CODEXA_RENDER_DEBUG_FILE: logPath,
+      UBUME_RENDER_DEBUG: "1",
+      UBUME_RENDER_DEBUG_FILE: logPath,
     });
     assert.equal(existsSync(logPath), true);
   } finally {
     configureRenderDebug({});
-    rmSync(join(tmpdir(), `codexa-render-debug-nested-${process.pid}`), { force: true, recursive: true });
+    rmSync(join(tmpdir(), `ubume-render-debug-nested-${process.pid}`), { force: true, recursive: true });
   }
 });
 
 test("render debug records lifecycle, layout, and blank-frame diagnostics", () => {
-  const logPath = join(tmpdir(), `codexa-render-diagnostics-${process.pid}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-render-diagnostics-${process.pid}.jsonl`);
   clean(logPath);
 
   try {
     configureRenderDebug({
-      CODEXA_RENDER_DEBUG: "1",
-      CODEXA_RENDER_DEBUG_FILE: logPath,
+      UBUME_RENDER_DEBUG: "1",
+      UBUME_RENDER_DEBUG_FILE: logPath,
     });
     traceLifecycleEvent("Timeline", "mount", { viewportRows: 12 });
     traceLayoutValidity("Timeline", { viewportRows: 0, cols: 120 });
@@ -127,18 +127,18 @@ test("render debug records lifecycle, layout, and blank-frame diagnostics", () =
 });
 
 test("terminal writes are classified for clear and reset diagnosis", () => {
-  const logPath = join(tmpdir(), `codexa-terminal-classification-${process.pid}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-terminal-classification-${process.pid}.jsonl`);
   clean(logPath);
 
   try {
     configureRenderDebug({
-      CODEXA_RENDER_DEBUG: "1",
-      CODEXA_RENDER_DEBUG_FILE: logPath,
+      UBUME_RENDER_DEBUG: "1",
+      UBUME_RENDER_DEBUG_FILE: logPath,
     });
     traceTerminalWrite(
       "stdout",
       "unit",
-      "\x1b[2J\x1b[3J\x1b[H\x1bc\x1b[?1049h\x1b]0;CODEXA\x07\x1b[?2004h\x1b[?1000h",
+      "\x1b[2J\x1b[3J\x1b[H\x1bc\x1b[?1049h\x1b]0;UBUME\x07\x1b[?2004h\x1b[?1000h",
     );
 
     const records = readFileSync(logPath, "utf8").trim().split("\n").map((line) => JSON.parse(line));
@@ -157,14 +157,14 @@ test("terminal writes are classified for clear and reset diagnosis", () => {
   }
 });
 
-test("CODEXA_DEBUG_RENDER aliases render debug logging", () => {
-  const logPath = join(tmpdir(), `codexa-debug-render-alias-${process.pid}.jsonl`);
+test("UBUME_DEBUG_RENDER aliases render debug logging", () => {
+  const logPath = join(tmpdir(), `ubume-debug-render-alias-${process.pid}.jsonl`);
   clean(logPath);
 
   try {
     configureRenderDebug({
-      CODEXA_DEBUG_RENDER: "1",
-      CODEXA_RENDER_DEBUG_FILE: logPath,
+      UBUME_DEBUG_RENDER: "1",
+      UBUME_RENDER_DEBUG_FILE: logPath,
     });
     traceRender("AliasComponent", "unit");
 
@@ -179,13 +179,13 @@ test("CODEXA_DEBUG_RENDER aliases render debug logging", () => {
 });
 
 test("render trace flag enables compact render diagnostics", () => {
-  const logPath = join(tmpdir(), `codexa-render-trace-${process.pid}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-render-trace-${process.pid}.jsonl`);
   clean(logPath);
 
   try {
     configureRenderDebug({
-      CODEXA_DEBUG_RENDER_TRACE: "1",
-      CODEXA_RENDER_DEBUG_FILE: logPath,
+      UBUME_DEBUG_RENDER_TRACE: "1",
+      UBUME_RENDER_DEBUG_FILE: logPath,
     });
     traceRender("TraceComponent", "unit");
     traceFlickerEvent("viewportSlice", { reason: "unit" });
@@ -202,14 +202,14 @@ test("render trace flag enables compact render diagnostics", () => {
   }
 });
 
-test("lifecycle trace is gated by CODEXA_DEBUG_LIFECYCLE", () => {
-  const logPath = join(tmpdir(), `codexa-lifecycle-debug-${process.pid}.jsonl`);
+test("lifecycle trace is gated by UBUME_DEBUG_LIFECYCLE", () => {
+  const logPath = join(tmpdir(), `ubume-lifecycle-debug-${process.pid}.jsonl`);
   clean(logPath);
 
   try {
     configureRenderDebug({
-      CODEXA_DEBUG_LIFECYCLE: "1",
-      CODEXA_RENDER_DEBUG_FILE: logPath,
+      UBUME_DEBUG_LIFECYCLE: "1",
+      UBUME_RENDER_DEBUG_FILE: logPath,
     });
     traceLifecycleTransition({
       prevKind: "THINKING",
@@ -227,14 +227,14 @@ test("lifecycle trace is gated by CODEXA_DEBUG_LIFECYCLE", () => {
   }
 });
 
-test("flicker trace is gated by CODEXA_DEBUG_FLICKER", () => {
-  const logPath = join(tmpdir(), `codexa-flicker-debug-${process.pid}.jsonl`);
+test("flicker trace is gated by UBUME_DEBUG_FLICKER", () => {
+  const logPath = join(tmpdir(), `ubume-flicker-debug-${process.pid}.jsonl`);
   clean(logPath);
 
   try {
     configureRenderDebug({
-      CODEXA_DEBUG_FLICKER: "1",
-      CODEXA_RENDER_DEBUG_FILE: logPath,
+      UBUME_DEBUG_FLICKER: "1",
+      UBUME_RENDER_DEBUG_FILE: logPath,
     });
     traceFlickerEvent("timelineRender", { reason: "unit" });
     traceStatusTick({ owner: "Status", label: "Codex is thinking" });

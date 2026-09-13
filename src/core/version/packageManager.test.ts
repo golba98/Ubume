@@ -28,18 +28,19 @@ function makeResult(overrides: Partial<CommandResult> = {}): CommandResult {
 // --- detection ---
 
 const DETECTION_CASES: Array<[string, GlobalPackageManager]> = [
-  ["/usr/local/lib/node_modules/@golba98/codexa/bin/codexa.js", "npm"],
-  ["C:\\Users\\jorda\\AppData\\Roaming\\npm\\node_modules\\@golba98\\codexa\\bin\\codexa.js", "npm"],
-  ["/home/user/.local/share/pnpm/global/5/node_modules/@golba98/codexa/bin/codexa.js", "pnpm"],
-  ["C:\\Users\\jorda\\AppData\\Local\\pnpm\\global\\5\\node_modules\\@golba98\\codexa\\bin\\codexa.js", "pnpm"],
-  ["/home/user/.bun/install/global/node_modules/@golba98/codexa/bin/codexa.js", "bun"],
-  ["C:\\Users\\jorda\\.bun\\install\\global\\node_modules\\@golba98\\codexa\\bin\\codexa.js", "bun"],
-  ["/home/user/.config/yarn/global/node_modules/@golba98/codexa/bin/codexa.js", "yarn"],
-  ["C:\\Users\\jorda\\AppData\\Local\\Yarn\\config\\global\\node_modules\\@golba98\\codexa\\bin\\codexa.js", "yarn"],
+  ["/usr/local/lib/node_modules/ubume/bin/ubume.js", "npm"],
+  ["C:\\Users\\jorda\\AppData\\Roaming\\npm\\node_modules\\ubume\\bin\\ubume.js", "npm"],
+  ["/home/user/.local/share/pnpm/global/5/node_modules/ubume/bin/ubume.js", "pnpm"],
+  ["C:\\Users\\jorda\\AppData\\Local\\pnpm\\global\\5\\node_modules\\ubume\\bin\\ubume.js", "pnpm"],
+  ["/home/user/.bun/install/global/node_modules/ubume/bin/ubume.js", "bun"],
+  ["C:\\Users\\jorda\\.bun\\install\\global\\node_modules\\ubume\\bin\\ubume.js", "bun"],
+  ["/home/user/.config/yarn/global/node_modules/ubume/bin/ubume.js", "yarn"],
+  ["C:\\Users\\jorda\\AppData\\Local\\Yarn\\config\\global\\node_modules\\ubume\\bin\\ubume.js", "yarn"],
 ];
 
 for (const [path, expected] of DETECTION_CASES) {
   test(`detectGlobalPackageManager detects ${expected} from ${path}`, () => {
+    assert.equal(detectGlobalPackageManager({ UBUME_LAUNCHER_SCRIPT: path }), expected);
     assert.equal(detectGlobalPackageManager({ CODEXA_LAUNCHER_SCRIPT: path }), expected);
   });
 }
@@ -50,8 +51,8 @@ test("detectGlobalPackageManager defaults to npm when no launcher path is availa
 
 test("detectGlobalPackageManager prefers the explicit override over the environment", () => {
   const pm = detectGlobalPackageManager(
-    { CODEXA_LAUNCHER_SCRIPT: "/usr/local/lib/node_modules/@golba98/codexa/bin/codexa.js" },
-    "/home/user/.bun/install/global/node_modules/@golba98/codexa/bin/codexa.js",
+    { UBUME_LAUNCHER_SCRIPT: "/usr/local/lib/node_modules/ubume/bin/ubume.js" },
+    "/home/user/.bun/install/global/node_modules/ubume/bin/ubume.js",
   );
   assert.equal(pm, "bun");
 });
@@ -59,10 +60,10 @@ test("detectGlobalPackageManager prefers the explicit override over the environm
 // --- commands ---
 
 test("getUpdateCommand returns the right command per package manager", () => {
-  assert.equal(getUpdateCommand("npm").displayCommand, "npm install -g @golba98/codexa@latest");
-  assert.equal(getUpdateCommand("pnpm").displayCommand, "pnpm add -g @golba98/codexa@latest");
-  assert.equal(getUpdateCommand("yarn").displayCommand, "yarn global add @golba98/codexa@latest");
-  assert.equal(getUpdateCommand("bun").displayCommand, "bun add -g @golba98/codexa@latest");
+  assert.equal(getUpdateCommand("npm").displayCommand, "npm install -g ubume@latest");
+  assert.equal(getUpdateCommand("pnpm").displayCommand, "pnpm add -g ubume@latest");
+  assert.equal(getUpdateCommand("yarn").displayCommand, "yarn global add ubume@latest");
+  assert.equal(getUpdateCommand("bun").displayCommand, "bun add -g ubume@latest");
 });
 
 test("getUpdateCommand argv matches its display command", () => {
@@ -127,7 +128,7 @@ test("runUpdateCommand uses argv spawn on POSIX", async () => {
   assert.equal(res.status, "completed");
   assert.equal(calls.length, 1);
   assert.equal(calls[0]!.executable, "npm");
-  assert.deepEqual(calls[0]!.args, ["install", "-g", "@golba98/codexa@latest"]);
+  assert.deepEqual(calls[0]!.args, ["install", "-g", "ubume@latest"]);
   assert.equal(calls[0]!.timeoutMs, 300_000);
 });
 
@@ -146,7 +147,7 @@ test("runUpdateCommand routes through the shell on Windows for .cmd shim support
     runShellCommandFn: fakeShell,
   });
   await result;
-  assert.deepEqual(shellCalls, ["pnpm add -g @golba98/codexa@latest"]);
+  assert.deepEqual(shellCalls, ["pnpm add -g ubume@latest"]);
 });
 
 test("runUpdateCommand exposes cancel from the underlying runner", () => {

@@ -18,7 +18,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 async function withLocalEnv<T>(env: Partial<NodeJS.ProcessEnv>, callback: () => T | Promise<T>): Promise<T> {
-  const keys = ["CODEXA_LOCAL_BASE_URL", "CODEXA_LOCAL_API_KEY", "CODEXA_LOCAL_MODEL", "OPENAI_BASE_URL", "OPENAI_API_BASE", "OPENAI_API_KEY"] as const;
+  const keys = ["UBUME_LOCAL_BASE_URL", "UBUME_LOCAL_API_KEY", "UBUME_LOCAL_MODEL", "OPENAI_BASE_URL", "OPENAI_API_BASE", "OPENAI_API_KEY"] as const;
   const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
   try {
     for (const key of keys) {
@@ -63,7 +63,7 @@ test("Local discovery reports an unreachable endpoint", async () => {
 });
 
 test("Local configuration normalizes endpoint and preserves credentials and model", async () => {
-  await withLocalEnv({ CODEXA_LOCAL_BASE_URL: "http://127.0.0.1:8080/v1/", CODEXA_LOCAL_API_KEY: "local-secret", CODEXA_LOCAL_MODEL: "meta-llama/Llama-4" }, () => {
+  await withLocalEnv({ UBUME_LOCAL_BASE_URL: "http://127.0.0.1:8080/v1/", UBUME_LOCAL_API_KEY: "local-secret", UBUME_LOCAL_MODEL: "meta-llama/Llama-4" }, () => {
     const config = resolveLocalProviderConfig(null);
     assert.equal(config.baseUrl, "http://127.0.0.1:8080/v1");
     assert.equal(config.apiKey, "local-secret");

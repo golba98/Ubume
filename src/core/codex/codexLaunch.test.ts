@@ -41,9 +41,9 @@ test("prepares a shared launch plan with resolved executable strategy and source
     responsibleModulePath: "C:\\project\\src\\core\\providers\\codexSubprocess.ts",
     responsibleModuleKind: "src",
     launchContext: {
-      launchKind: process.env.CODEXA_LAUNCH_KIND,
-      packageRoot: process.env.CODEXA_PACKAGE_ROOT,
-      launcherScript: process.env.CODEXA_LAUNCHER_SCRIPT,
+      launchKind: process.env.UBUME_LAUNCH_KIND,
+      packageRoot: process.env.UBUME_PACKAGE_ROOT,
+      launcherScript: process.env.UBUME_LAUNCHER_SCRIPT,
     },
     args: [
       "exec",
@@ -64,8 +64,8 @@ test("prepares a shared launch plan with resolved executable strategy and source
 });
 
 test("launch diagnostics are injectable and silent by default", async () => {
-  const previousDebug = process.env.CODEXA_DEBUG_CODEX_LAUNCH;
-  process.env.CODEXA_DEBUG_CODEX_LAUNCH = "1";
+  const previousDebug = process.env.UBUME_DEBUG_CODEX_LAUNCH;
+  process.env.UBUME_DEBUG_CODEX_LAUNCH = "1";
   const capabilities: CodexCliCapabilities = {
     askForApproval: false,
     sandbox: true,
@@ -118,12 +118,12 @@ test("launch diagnostics are injectable and silent by default", async () => {
     );
 
     assert.equal(diagnostics.length, 1);
-    assert.match(diagnostics[0]!, /\[codexa\] codex launch debug/);
+    assert.match(diagnostics[0]!, /\[ubume\] codex launch debug/);
   } finally {
     if (previousDebug == null) {
-      delete process.env.CODEXA_DEBUG_CODEX_LAUNCH;
+      delete process.env.UBUME_DEBUG_CODEX_LAUNCH;
     } else {
-      process.env.CODEXA_DEBUG_CODEX_LAUNCH = previousDebug;
+      process.env.UBUME_DEBUG_CODEX_LAUNCH = previousDebug;
     }
   }
 });

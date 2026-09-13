@@ -12,7 +12,7 @@ import {
   getDefaultRouteModel,
   getProviderRouteSetupMessage,
   getProviderRuntime,
-  isProviderRoutableInCodexa,
+  isProviderRoutableInUbume,
   isProviderRouteConfigured,
 } from "../providerRuntime/registry.js";
 import { normalizeGeminiModelId } from "../providerRuntime/models.js";
@@ -25,7 +25,7 @@ import { formatContextLength, resolveModelContextLengthCached } from "../provide
 import { resolveModelCapabilityProfileCached } from "../providerRuntime/capabilityProfile.js";
 
 // Google/Gemini remains a recognized legacy config value so existing workspace
-// files can be migrated, but it is no longer a selectable Codexa provider.
+// files can be migrated, but it is no longer a selectable Ubume provider.
 const ALL_PROVIDER_ORDER: readonly ProviderId[] = ["openai", "anthropic", "mistral", "codexa-native", "codexa-cupy", "local", "antigravity"];
 const KNOWN_PROVIDER_IDS: readonly ProviderId[] = ["openai", "anthropic", "google", "mistral", "local", "codexa-native", "codexa-cupy", "antigravity"];
 
@@ -50,7 +50,7 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderDefault> = {
     displayName: "OpenAI",
     currentModel: (activeModel) => activeModel,
     backendType: "codex-cli-auth",
-    routeMode: "in-codexa",
+    routeMode: "in-ubume",
     enabled: true,
     launchCommand: { executable: "codex", args: [] },
     isActiveRoute: false,
@@ -61,7 +61,7 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderDefault> = {
     displayName: "Anthropic",
     currentModel: () => "Claude Code default",
     backendType: "claude-code-auth",
-    routeMode: "in-codexa",
+    routeMode: "in-ubume",
     enabled: true,
     launchCommand: { executable: "claude", args: [] },
     isActiveRoute: false,
@@ -72,7 +72,7 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderDefault> = {
     displayName: "Google",
     currentModel: () => "gemini-3-flash-preview",
     backendType: "gemini-cli-auth",
-    routeMode: "in-codexa",
+    routeMode: "in-ubume",
     enabled: true,
     launchCommand: { executable: "gemini", args: [] },
     isActiveRoute: false,
@@ -83,7 +83,7 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderDefault> = {
     displayName: "Local",
     currentModel: () => "Local default",
     backendType: "local-openai-compatible",
-    routeMode: "in-codexa",
+    routeMode: "in-ubume",
     enabled: false,
     launchCommand: null,
     isActiveRoute: false,
@@ -91,32 +91,32 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderDefault> = {
   },
   "codexa-native": {
     id: "codexa-native",
-    displayName: "codexa-PyTorch",
+    displayName: "ubume-PyTorch",
     currentModel: () => CODEXA_NATIVE_MODEL_ID,
     backendType: "codexa-native-pytorch",
-    routeMode: "in-codexa",
+    routeMode: "in-ubume",
     enabled: false,
     launchCommand: null,
     isActiveRoute: false,
-    routeUnavailableReason: "Codexa Native is only available on codexa-dev.",
+    routeUnavailableReason: "Codexa Native is only available on ubume-dev.",
   },
   "codexa-cupy": {
     id: "codexa-cupy",
     displayName: "CuPy",
     currentModel: () => CODEXA_CUPY_MODEL_ID,
     backendType: "codexa-cupy",
-    routeMode: "in-codexa",
+    routeMode: "in-ubume",
     enabled: false,
     launchCommand: null,
     isActiveRoute: false,
-    routeUnavailableReason: "CuPy is only available on codexa-dev.",
+    routeUnavailableReason: "CuPy is only available on ubume-dev.",
   },
   mistral: {
     id: "mistral",
     displayName: "Mistral Vibe CLI",
     currentModel: () => "Vibe default",
     backendType: "mistral-vibe-cli-auth",
-    routeMode: "in-codexa",
+    routeMode: "in-ubume",
     enabled: true,
     launchCommand: { executable: "vibe", args: [] },
     isActiveRoute: false,
@@ -127,7 +127,7 @@ const DEFAULT_PROVIDERS: Record<ProviderId, ProviderDefault> = {
     displayName: "Antigravity",
     currentModel: () => ANTIGRAVITY_DEFAULT_MODEL_ID,
     backendType: "antigravity-cli-auth",
-    routeMode: "in-codexa",
+    routeMode: "in-ubume",
     enabled: true,
     launchCommand: { executable: "agy", args: [] },
     isActiveRoute: false,
@@ -205,7 +205,7 @@ export function getActiveRouteProviderId(
   env: NodeJS.ProcessEnv = process.env,
 ): ProviderId {
   const providerId = config?.activeRoute?.providerId;
-  return isProviderId(providerId) && providerId !== "google" && isProviderRoutableInCodexa(providerId, env)
+  return isProviderId(providerId) && providerId !== "google" && isProviderRoutableInUbume(providerId, env)
     ? providerId
     : DEFAULT_PROVIDER_ID;
 }
@@ -331,7 +331,7 @@ export function buildProviderRegistry(options: {
       backendType: id === "codexa-native" || id === "codexa-cupy"
         ? defaults.backendType
         : discovery.backendKind as ProviderBackendType,
-      routeMode: runtime.routeAvailable ? "in-codexa" : "launch-only",
+      routeMode: runtime.routeAvailable ? "in-ubume" : "launch-only",
       enabled,
       statusLabel,
       launchCommand: defaults.launchCommand ? { ...defaults.launchCommand, args: [...defaults.launchCommand.args] } : null,

@@ -306,7 +306,7 @@ test("provider picker supports setting default with S", async () => {
   }
 });
 
-test("provider picker Enter uses the selected provider directly in Codexa", async () => {
+test("provider picker Enter uses the selected provider directly in Ubume", async () => {
   const harness = createInkHarness(<ProviderPickerHarness />);
 
   try {
@@ -315,14 +315,14 @@ test("provider picker Enter uses the selected provider directly in Codexa", asyn
     await sleep(40);
     harness.stdin.write("\r");
     await sleep(40);
-    assert.match(harness.getOutput(), /action:anthropic:use-in-codexa/);
+    assert.match(harness.getOutput(), /action:anthropic:use-in-ubume/);
     assert.doesNotMatch(harness.getOutput(), /Provider action|Launch external CLI/);
   } finally {
     await harness.cleanup();
   }
 });
 
-test("provider picker reports Anthropic in-Codexa route actions without launching", async () => {
+test("provider picker reports Anthropic in-Ubume route actions without launching", async () => {
   const harness = createInkHarness(<ProviderPickerHarness />);
 
   try {
@@ -332,13 +332,13 @@ test("provider picker reports Anthropic in-Codexa route actions without launchin
     harness.stdin.write("\r");
     await sleep(80);
 
-    assert.match(harness.getOutput(), /action:anthropic:use-in-codexa/);
+    assert.match(harness.getOutput(), /action:anthropic:use-in-ubume/);
   } finally {
     await harness.cleanup();
   }
 });
 
-test("provider picker reports Mistral Vibe in-Codexa route actions without launching", async () => {
+test("provider picker reports Mistral Vibe in-Ubume route actions without launching", async () => {
   const harness = createInkHarness(<ProviderPickerHarness />);
 
   try {
@@ -349,7 +349,7 @@ test("provider picker reports Mistral Vibe in-Codexa route actions without launc
     await sleep(40);
     harness.stdin.write("\r");
     await sleep(40);
-    assert.match(harness.getOutput(), /action:mistral:use-in-codexa/);
+    assert.match(harness.getOutput(), /action:mistral:use-in-ubume/);
     assert.doesNotMatch(harness.getOutput(), /Provider action/);
   } finally {
     await harness.cleanup();
@@ -375,7 +375,7 @@ test("provider picker opens Local Backends and Enter selects LM Studio", async (
     harness.stdin.write("\r");
     await sleep(80);
 
-    assert.match(harness.getOutput(), /action:local:use-in-codexa:lm-studio/);
+    assert.match(harness.getOutput(), /action:local:use-in-ubume:lm-studio/);
     assert.doesNotMatch(harness.getOutput(), /Provider action|diagnostics/);
   } finally {
     await harness.cleanup();
@@ -397,7 +397,7 @@ test("provider picker selects Unsloth from the Local Backends page", async () =>
     await sleep(40);
     harness.stdin.write("\r");
     await sleep(60);
-    assert.match(harness.getOutput(), /action:local:use-in-codexa:unsloth/);
+    assert.match(harness.getOutput(), /action:local:use-in-ubume:unsloth/);
   } finally {
     await harness.cleanup();
   }
@@ -454,7 +454,7 @@ test("provider picker cancels from provider list with Esc", async () => {
   }
 });
 
-test('pressing U fires use-in-codexa for the selected provider', async () => {
+test('pressing U fires use-in-ubume for the selected provider', async () => {
   const harness = createInkHarness(<ProviderPickerHarness />);
 
   try {
@@ -462,13 +462,13 @@ test('pressing U fires use-in-codexa for the selected provider', async () => {
     harness.stdin.write('u');
     await sleep(80);
 
-    assert.match(harness.getOutput(), /action:openai:use-in-codexa/);
+    assert.match(harness.getOutput(), /action:openai:use-in-ubume/);
   } finally {
     await harness.cleanup();
   }
 });
 
-test('pressing U after navigating down fires use-in-codexa for the selected provider', async () => {
+test('pressing U after navigating down fires use-in-ubume for the selected provider', async () => {
   const harness = createInkHarness(<ProviderPickerHarness />);
 
   try {
@@ -478,7 +478,7 @@ test('pressing U after navigating down fires use-in-codexa for the selected prov
     harness.stdin.write('u');
     await sleep(80);
 
-    assert.match(harness.getOutput(), /action:anthropic:use-in-codexa/);
+    assert.match(harness.getOutput(), /action:anthropic:use-in-ubume/);
   } finally {
     await harness.cleanup();
   }
@@ -490,7 +490,7 @@ function buildMockProvider(override: Partial<ProviderConfig>): ProviderConfig {
     displayName: "OpenAI",
     currentModel: "gpt-5.4-mini",
     backendType: "openai-api-key",
-    routeMode: "in-codexa",
+    routeMode: "in-ubume",
     enabled: true,
     statusLabel: "Enabled",
     launchCommand: null,
@@ -879,7 +879,7 @@ test("ProviderPicker cursor remains visible on Codexa Native, Local, and Antigra
   const providers = buildProviderRegistry({
     activeModel: "gpt-5.4-mini",
     workspaceConfig: { workspaceDefaultProviderId: "openai" },
-    env: { CODEXA_CHANNEL: "local-dev" },
+    env: { UBUME_CHANNEL: "local-dev" },
   });
 
   const nativeFrame = await renderProviderPickerAtIndex({
@@ -904,7 +904,7 @@ test("ProviderPicker cursor remains visible on Codexa Native, Local, and Antigra
 test("Codexa Native grouping keeps route identities while improving model labels", () => {
   const providers = buildProviderRegistry({
     activeModel: "gpt-5.4-mini",
-    env: { CODEXA_CHANNEL: "local-dev" },
+    env: { UBUME_CHANNEL: "local-dev" },
   });
 
   const grouped = groupCodexaNativeProviders(providers);
@@ -922,7 +922,7 @@ test("Codexa Native grouping keeps route identities while improving model labels
 test("Codexa Native opens a responsive child page and selects exactly one backend", async () => {
   const providers = buildProviderRegistry({
     activeModel: "gpt-5.4-mini",
-    env: { CODEXA_CHANNEL: "local-dev" },
+    env: { UBUME_CHANNEL: "local-dev" },
   });
   const actions: string[] = [];
   const harness = createInkHarness(
@@ -958,7 +958,7 @@ test("Codexa Native opens a responsive child page and selects exactly one backen
     await sleep(30);
     harness.stdin.write("\r");
     await sleep(80);
-    assert.deepEqual(actions, ["codexa-cupy:use-in-codexa"]);
+    assert.deepEqual(actions, ["codexa-cupy:use-in-ubume"]);
   } finally {
     await harness.cleanup();
   }
@@ -967,7 +967,7 @@ test("Codexa Native opens a responsive child page and selects exactly one backen
 test("Codexa Native child page inherits compact resize windowing and Escape returns to providers", async () => {
   const providers = buildProviderRegistry({
     activeModel: "gpt-5.4-mini",
-    env: { CODEXA_CHANNEL: "local-dev" },
+    env: { UBUME_CHANNEL: "local-dev" },
   });
   const harness = createInkHarness(
     <ThemeProvider theme="purple">

@@ -54,7 +54,7 @@ function makeRunningRun(turnId: number): RunEvent {
     startedAt: 2,
     durationMs: null,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: "Do work",
     progressEntries: [],
@@ -161,7 +161,7 @@ test("does not render duplicate transcript working placeholder before streaming 
 
   await sleep();
   frame = harness.readOutput();
-  assert.match(frame, /Codexa/);
+  assert.match(frame, /Ubume/);
   assert.match(frame, /Streaming line/i);
 
   harness.instance.unmount();
@@ -270,12 +270,12 @@ test("finalization with same content does not cause visual flash", async () => {
   let finalFrame = harness.readOutput();
   // Content should still be present — no flash/disappearance
   assert.match(finalFrame, /response content stays/i);
-  assert.match(finalFrame, /Codexa/);
+  assert.match(finalFrame, /Ubume/);
 
   harness.instance.unmount();
 });
 
-test("assistant output 'Codexa' label is indented by transcriptContentIndent", async () => {
+test("assistant output 'Ubume' label is indented by transcriptContentIndent", async () => {
   const turnId = 100;
   const user = makeUser(turnId);
   const run = makeRunningRun(turnId);
@@ -301,10 +301,10 @@ test("assistant output 'Codexa' label is indented by transcriptContentIndent", a
   await sleep();
   const frame = harness.readOutput();
   const lines = frame.split("\n");
-  const codexaLine = lines.find((l) => l.includes("Codexa"));
-  assert.ok(codexaLine, "expected Codexa label");
+  const ubumeLine = lines.find((l) => l.includes("Ubume"));
+  assert.ok(ubumeLine, "expected Ubume label");
   // Check that the line starts with exactly 4 spaces (transcriptContentIndent = 4)
-  assert.match(codexaLine, /^    Codexa/);
+  assert.match(ubumeLine, /^    Ubume/);
 
   harness.instance.unmount();
 });
@@ -366,7 +366,7 @@ test("renders accumulated Local reasoning once and keeps the final response sepa
   await sleep();
   const frame = harness.readOutput();
   assert.equal(frame.match(/Reasoning/g)?.length, 1);
-  assert.equal(frame.match(/^    Codexa$/gm)?.length, 1);
+  assert.equal(frame.match(/^    Ubume$/gm)?.length, 1);
   assert.match(frame, /The user said Hi/);
   assert.match(frame, /Hi! How can I help/);
   harness.instance.unmount();

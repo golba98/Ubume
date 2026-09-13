@@ -121,6 +121,7 @@ interface CreateClearFrameBoundaryOptions {
 }
 
 interface FrameMarkerCounts {
+  ubumeLogoCount: number;
   codexaLogoCount: number;
   providerMigratedCount: number;
   launchModeCount: number;
@@ -128,7 +129,7 @@ interface FrameMarkerCounts {
   footerCount: number;
 }
 
-const LOGO_LINE = /██╔════╝██╔═══██╗/g;
+const LOGO_LINE = /██║   ██║██╔══██╗██║   ██║████╗ ████║██╔════╝|██╔════╝██╔═══██╗/g;
 const PROVIDER_MIGRATED = /Provider migrated/g;
 const LAUNCH_MODE = /Launch mode/g;
 const COMPOSER = /│ ❯/g;
@@ -160,6 +161,7 @@ export function __resetClearFrameBoundaryTraceStatsForTests(): void {
 }
 
 const EMPTY_MARKER_COUNTS: FrameMarkerCounts = Object.freeze({
+  ubumeLogoCount: 0,
   codexaLogoCount: 0,
   providerMigratedCount: 0,
   launchModeCount: 0,
@@ -183,8 +185,10 @@ function countMatches(text: string, pattern: RegExp): number {
 function countFrameMarkers(text: string): FrameMarkerCounts {
   markerScanCount += 1;
   const plainText = text.replace(ANSI_SEQUENCE, "");
+  const logoMatches = countMatches(plainText, LOGO_LINE);
   return {
-    codexaLogoCount: countMatches(plainText, LOGO_LINE),
+    ubumeLogoCount: logoMatches,
+    codexaLogoCount: logoMatches,
     providerMigratedCount: countMatches(plainText, PROVIDER_MIGRATED),
     launchModeCount: countMatches(plainText, LAUNCH_MODE),
     composerCount: countMatches(plainText, COMPOSER),

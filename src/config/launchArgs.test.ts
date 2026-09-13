@@ -9,7 +9,7 @@ test("parses profile and repeated config overrides", () => {
     "--config",
     "model=\"gpt-5.4\"",
     "-c",
-    "codexa.mode=\"suggest\"",
+    "ubume.mode=\"suggest\"",
   ]);
 
   assert.equal(parsed.ok, true);
@@ -21,7 +21,7 @@ test("parses profile and repeated config overrides", () => {
   assert.equal(parsed.value.profile, "review");
   assert.deepEqual(parsed.value.configOverrides, [
     "model=\"gpt-5.4\"",
-    "codexa.mode=\"suggest\"",
+    "ubume.mode=\"suggest\"",
   ]);
   assert.deepEqual(parsed.value.passthroughArgs, [
     "--profile",
@@ -29,7 +29,7 @@ test("parses profile and repeated config overrides", () => {
     "--config",
     "model=\"gpt-5.4\"",
     "-c",
-    "codexa.mode=\"suggest\"",
+    "ubume.mode=\"suggest\"",
   ]);
 });
 
@@ -51,7 +51,7 @@ test("parses inline profile and config assignments", () => {
   const parsed = parseLaunchArgs([
     "--profile=review",
     "--config=model=\"gpt-5.4-mini\"",
-    "-c=codexa.mode=\"auto-edit\"",
+    "-c=ubume.mode=\"auto-edit\"",
   ]);
 
   assert.equal(parsed.ok, true);
@@ -60,12 +60,12 @@ test("parses inline profile and config assignments", () => {
   assert.equal(parsed.value.profile, "review");
   assert.deepEqual(parsed.value.configOverrides, [
     "model=\"gpt-5.4-mini\"",
-    "codexa.mode=\"auto-edit\"",
+    "ubume.mode=\"auto-edit\"",
   ]);
   assert.deepEqual(parsed.value.passthroughArgs, [
     "--profile=review",
     "--config=model=\"gpt-5.4-mini\"",
-    "-c=codexa.mode=\"auto-edit\"",
+    "-c=ubume.mode=\"auto-edit\"",
   ]);
 });
 

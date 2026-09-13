@@ -84,15 +84,15 @@ test("card renders all four content lines", async () => {
   const output = await renderCard("1.0.3", "1.0.2");
 
   assert.match(output, /Update available/);
-  assert.match(output, /Codexa v1\.0\.3/);
+  assert.match(output, /Ubume v1\.0\.3/);
   assert.match(output, /Using v1\.0\.2/);
   assert.match(output, /npm install -g/);
 });
 
 test("card renders the supplied package-manager command", async () => {
-  const output = await renderCard("1.0.3", "1.0.2", undefined, "bun add -g @golba98/codexa@latest");
+  const output = await renderCard("1.0.3", "1.0.2", undefined, "bun add -g @golba98/ubume@latest");
 
-  assert.match(output, /bun add -g @golba98\/codexa@latest/);
+  assert.match(output, /bun add -g @golba98\/ubume@latest/);
   assert.doesNotMatch(output, /npm install -g/);
 });
 
@@ -108,14 +108,14 @@ test("card with width clamps long lines to fit inside the box", async () => {
 
   // The install command is long; with width=40 the inner content width is 38.
   // clampVisualText should truncate it — the full command should not appear.
-  const fullCommand = "npm install -g @golba98/codexa@latest";
+  const fullCommand = "npm install -g @golba98/ubume@latest";
   assert.doesNotMatch(output, new RegExp(escapeRegExp(fullCommand)), "long command should be clamped to fit card width");
   // But the card content should still be present (just truncated)
   assert.match(output, /npm install/, "truncated command prefix should still appear");
 });
 
 test("regex escaping handles every special character occurrence", () => {
-  const dangerous = "codexa.+*?^${}()|[]\\ codexa.+*?^${}()|[]\\";
+  const dangerous = "ubume.+*?^${}()|[]\\ ubume.+*?^${}()|[]\\";
   const escaped = escapeRegExp(dangerous);
   const matcher = new RegExp(escaped);
 

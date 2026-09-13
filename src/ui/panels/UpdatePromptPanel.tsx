@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Box, Text, useFocus, useInput, useStdin } from "ink";
 import { useTheme } from "../theme.js";
 import { getHorizontalArrowDirection, type HorizontalArrowDirection } from "../input/rawArrowKeys.js";
-import { CODEXA_NPM_PACKAGE, formatVersionLabel } from "../../core/version/updateCheck.js";
+import { UBUME_NPM_PACKAGE, formatVersionLabel } from "../../core/version/updateCheck.js";
 import {
   formatPermissionGuidance,
   getUpdateCommand,
@@ -161,7 +161,7 @@ export function UpdatePromptPanel({
   const footerText = updateState === "available"
     ? "←/→ to choose · Enter to confirm · Esc to close"
     : updateState === "success"
-      ? "Enter to restart · Esc to stay in Codexa"
+      ? "Enter to restart · Esc to stay in Ubume"
       : updateState === "installing"
         ? "Esc to cancel"
         : "Esc to close";
@@ -178,11 +178,11 @@ export function UpdatePromptPanel({
       >
         {updateState === "available" && (
           <>
-            <Text color={theme.accent} bold>{`Update available: Codexa ${latestVersion}`}</Text>
+            <Text color={theme.accent} bold>{`Update available: Ubume ${latestVersion}`}</Text>
             <Box marginTop={1}>
               <Text color={theme.text}>{`Current version: ${currentVersion}`}</Text>
             </Box>
-            <Text color={theme.textMuted}>{`Package: ${CODEXA_NPM_PACKAGE}`}</Text>
+            <Text color={theme.textMuted}>{`Package: ${UBUME_NPM_PACKAGE}`}</Text>
             <Text color={theme.textMuted}>{`Run: ${getUpdateCommand(packageManager).displayCommand}`}</Text>
             <Box marginTop={1}>
               {MENU_ITEMS.map((item, index) => (
@@ -200,7 +200,7 @@ export function UpdatePromptPanel({
 
         {updateState === "installing" && (
           <>
-            <Text color={theme.text}>{`Installing Codexa ${latestVersion}...`}</Text>
+            <Text color={theme.text}>{`Installing Ubume ${latestVersion}...`}</Text>
             {outputLines.map((line, i) => (
               <Text key={i} color={theme.textMuted}>{line}</Text>
             ))}
@@ -209,8 +209,8 @@ export function UpdatePromptPanel({
 
         {updateState === "success" && (
           <>
-            <Text color={theme.success}>{`Codexa ${formatVersionLabel(latestVersion)} installed successfully.`}</Text>
-            <Text color={theme.textMuted}>{"Restart Codexa to use the new version."}</Text>
+            <Text color={theme.success}>{`Ubume ${formatVersionLabel(latestVersion)} installed successfully.`}</Text>
+            <Text color={theme.textMuted}>{"Restart Ubume to use the new version."}</Text>
             <Box marginTop={1}>
               <Text color={theme.text} bold>{"❯ [ Restart now ]"}</Text>
             </Box>

@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import type { ProviderBackendKind } from "../providerRuntime/types.js";
 import type { ProviderId } from "../providerLauncher/types.js";
 import type { LocalBackendId } from "../providerLauncher/types.js";
-import { resolveCodexaConversationDir } from "./appData.js";
+import { resolveUbumeConversationDir } from "./appData.js";
 
 export type ConversationMessageRole = "user" | "assistant";
 
@@ -210,7 +210,7 @@ export class ConversationStore {
   private readonly onDiagnostic: (message: string) => void;
 
   constructor(workspaceRoot: string, options: ConversationStoreOptions = {}) {
-    this.rootDir = options.rootDir ?? resolveCodexaConversationDir(workspaceRoot);
+    this.rootDir = options.rootDir ?? resolveUbumeConversationDir(workspaceRoot);
     this.now = options.now ?? (() => new Date());
     this.idFactory = options.idFactory ?? (() => randomUUID());
     this.onDiagnostic = options.onDiagnostic ?? (() => undefined);

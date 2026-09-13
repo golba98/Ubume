@@ -1,6 +1,6 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { dirname } from "path";
-import { getCodexaTrustStoreFile } from "./settings.js";
+import { getLegacyCodexaTrustStoreFile, getUbumeTrustStoreFile } from "./settings.js";
 import { normalizeWorkspaceRoot } from "../core/workspace/workspaceRoot.js";
 
 interface TrustStoreData {
@@ -30,8 +30,24 @@ function parseTrustStoreData(data: unknown): TrustStoreData {
 
 function loadTrustStore(): TrustStoreData {
   try {
-    const trustStoreFile = getCodexaTrustStoreFile();
-    const text = readFileSync(trustStoreFile, "utf-8");
+    const ubumeFile = getUbumeTrustStoreFile();
+    const legacyFile = getLegacyCodexaTrustStoreFile();
+
+    let text = "";
+    if (existsSync(ubumeFile)) {
+      text = readFileSync(ubumeFile, "utf-8");
+    } else if (existsSync(legacyFile)) {
+      text = readFileSync(legacyFile, "utf-8");
+      try {
+        const parsed = parseTrustStoreData(JSON.parse(text));
+        saveTrustStore(parsed);
+      } catch {
+        // Non-destructive best-effort migration
+      }
+    } else {
+      return getDefaultTrustStore();
+    }
+
     return parseTrustStoreData(JSON.parse(text));
   } catch {
     // Best-effort persistence; corrupt or missing file silently resets to empty.
@@ -41,7 +57,7 @@ function loadTrustStore(): TrustStoreData {
 
 function saveTrustStore(data: TrustStoreData): void {
   try {
-    const trustStoreFile = getCodexaTrustStoreFile();
+    const trustStoreFile = getUbumeTrustStoreFile();
     mkdirSync(dirname(trustStoreFile), { recursive: true });
     const tmpFile = `${trustStoreFile}.tmp`;
     writeFileSync(tmpFile, JSON.stringify(data, null, 2), "utf-8");

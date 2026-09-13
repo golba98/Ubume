@@ -95,7 +95,7 @@ test("model picker displays grammar-correct selection message for OpenAI", async
   try {
     await sleep(100);
     const stripped = stripAnsi(output);
-    assert.match(stripped, /Choose an OpenAI model to use inside Codexa/);
+    assert.match(stripped, /Choose an OpenAI model to use inside Ubume/);
   } finally {
     cleanup();
   }
@@ -125,7 +125,7 @@ test("model picker displays grammar-correct selection message for Google", async
   try {
     await sleep(100);
     const stripped = stripAnsi(output);
-    assert.match(stripped, /Choose a Google model to use inside Codexa/);
+    assert.match(stripped, /Choose a Google model to use inside Ubume/);
   } finally {
     cleanup();
   }

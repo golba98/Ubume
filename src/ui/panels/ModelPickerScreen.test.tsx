@@ -110,7 +110,7 @@ test("model picker shows emptyMessage when not loading", async () => {
 
 test("model picker shows default routeText when no override provided", async () => {
   const output = await renderModelPicker({ activeProviderLabel: "Google" });
-  assert.match(output, /Choose a Google model to use inside Codexa\./);
+  assert.match(output, /Choose a Google model to use inside Ubume\./);
 });
 
 test("model picker shows routeTextOverride when provided", async () => {
@@ -133,7 +133,7 @@ test("routeTextOverride suppresses the default Choose copy", async () => {
 
 test("default routeText uses 'a' for non-vowel provider labels", async () => {
   const output = await renderModelPicker({ activeProviderLabel: "Google" });
-  assert.match(output, /Choose a Google model to use inside Codexa\./);
+  assert.match(output, /Choose a Google model to use inside Ubume\./);
 });
 
 test("default routeText uses 'an' for vowel-starting provider labels", async () => {

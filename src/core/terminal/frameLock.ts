@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { resolveCodexaDebugLogPath } from "../workspace/appData.js";
+import { resolveUbumeDebugLogPath } from "../workspace/appData.js";
 import { isTerminalResizing } from "./terminalControl.js";
 
 export interface FrameLockOptions {
@@ -26,10 +26,10 @@ export function wrapStdoutWithFrameLock({
   let isFlushing = false;
   let debugLogStream: fs.WriteStream | null = null;
 
-  if (env.CODEXA_RENDER_DEBUG === "1") {
+  if (env.UBUME_RENDER_DEBUG === "1") {
     try {
-      const logPath = env.CODEXA_RENDER_DEBUG_FILE?.trim()
-        || resolveCodexaDebugLogPath(env);
+      const logPath = env.UBUME_RENDER_DEBUG_FILE?.trim()
+        || resolveUbumeDebugLogPath(env);
       const logDir = path.dirname(logPath);
       if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir, { recursive: true });

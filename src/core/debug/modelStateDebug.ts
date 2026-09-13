@@ -1,19 +1,19 @@
 import { appendFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
-import { resolveCodexaDebugLogPath } from "../workspace/appData.js";
+import { resolveUbumeDebugLogPath } from "../workspace/appData.js";
 
 type ModelStateDebugDetails = Record<string, unknown>;
 
 let sequence = 0;
 
 export function isModelStateDebugEnabled(): boolean {
-  return process.env.CODEXA_RENDER_DEBUG === "1" || process.env.CODEXA_DEBUG_MODEL_STATE === "1";
+  return process.env.UBUME_RENDER_DEBUG === "1" || process.env.UBUME_DEBUG_MODEL_STATE === "1";
 }
 
 export function getModelStateDebugLogPath(): string {
-  return process.env.CODEXA_RENDER_DEBUG_FILE?.trim()
-    || process.env.CODEXA_DEBUG_MODEL_STATE_LOG?.trim()
-    || resolveCodexaDebugLogPath();
+  return process.env.UBUME_RENDER_DEBUG_FILE?.trim()
+    || process.env.UBUME_DEBUG_MODEL_STATE_LOG?.trim()
+    || resolveUbumeDebugLogPath();
 }
 
 export function traceModelStateDebug(event: string, details: ModelStateDebugDetails = {}): void {

@@ -95,7 +95,7 @@ function makeActiveEvents(actionStatus: ActionStatus | null = "completed", secon
       startedAt: 2,
       durationMs: null,
       backendId: "codex-subprocess",
-      backendLabel: "Codexa",
+      backendLabel: "Ubume",
       runtime: TEST_RUNTIME,
       prompt: "What is the point of 5-Date Verification",
       progressEntries: [{
@@ -273,11 +273,11 @@ function stripAnsi(text: string): string {
 }
 
 test("status dot ticks do not invalidate timeline rendering", async () => {
-  const logPath = join(tmpdir(), `codexa-status-isolation-${process.pid}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-status-isolation-${process.pid}.jsonl`);
   rmSync(logPath, { force: true });
   renderDebug.configureRenderDebug({
-    CODEXA_DEBUG_RENDER_TRACE: "1",
-    CODEXA_RENDER_DEBUG_FILE: logPath,
+    UBUME_DEBUG_RENDER_TRACE: "1",
+    UBUME_RENDER_DEBUG_FILE: logPath,
   });
 
   const stdin = new TestInput();
@@ -312,11 +312,11 @@ test("status dot ticks do not invalidate timeline rendering", async () => {
 });
 
 test("app-scroll action rows update without remounting when a running action completes", async () => {
-  const logPath = join(tmpdir(), `codexa-action-remount-${process.pid}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-action-remount-${process.pid}.jsonl`);
   rmSync(logPath, { force: true });
   renderDebug.configureRenderDebug({
-    CODEXA_DEBUG_RENDER_TRACE: "1",
-    CODEXA_RENDER_DEBUG_FILE: logPath,
+    UBUME_DEBUG_RENDER_TRACE: "1",
+    UBUME_RENDER_DEBUG_FILE: logPath,
   });
 
   const stdin = new TestInput();
@@ -357,11 +357,11 @@ test("app-scroll action rows update without remounting when a running action com
 });
 
 test("first action activity keeps the shell frame mounted and visible", async () => {
-  const logPath = join(tmpdir(), `codexa-first-action-shell-${process.pid}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-first-action-shell-${process.pid}.jsonl`);
   rmSync(logPath, { force: true });
   renderDebug.configureRenderDebug({
-    CODEXA_RENDER_DEBUG: "1",
-    CODEXA_RENDER_DEBUG_FILE: logPath,
+    UBUME_RENDER_DEBUG: "1",
+    UBUME_RENDER_DEBUG_FILE: logPath,
   });
   const stdin = new TestInput();
   const stdout = new TestOutput();
@@ -386,7 +386,7 @@ test("first action activity keeps the shell frame mounted and visible", async ()
     const frame = stripAnsi(output);
     assert.match(frame, /workspace/);
     assert.match(frame, /What is the point of 5-Date Verification/);
-    assert.match(frame, /Codexa is thinking/i);
+    assert.match(frame, /Ubume is thinking/i);
     assert.match(frame, /Get-Content README\.md/);
 
     const records = readRecords(logPath);
@@ -409,11 +409,11 @@ test("first action activity keeps the shell frame mounted and visible", async ()
 });
 
 test("appending a second action does not remount existing action rows", async () => {
-  const logPath = join(tmpdir(), `codexa-action-append-${process.pid}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-action-append-${process.pid}.jsonl`);
   rmSync(logPath, { force: true });
   renderDebug.configureRenderDebug({
-    CODEXA_DEBUG_RENDER_TRACE: "1",
-    CODEXA_RENDER_DEBUG_FILE: logPath,
+    UBUME_DEBUG_RENDER_TRACE: "1",
+    UBUME_RENDER_DEBUG_FILE: logPath,
   });
 
   const stdin = new TestInput();
@@ -461,8 +461,8 @@ test("native AppShell finalize keeps transcript rows in one keyed tree", async (
   const logPath = join(tmpdir(), `codexa-native-finalize-${process.pid}.jsonl`);
   rmSync(logPath, { force: true });
   renderDebug.configureRenderDebug({
-    CODEXA_DEBUG_RENDER_TRACE: "1",
-    CODEXA_RENDER_DEBUG_FILE: logPath,
+    UBUME_DEBUG_RENDER_TRACE: "1",
+    UBUME_RENDER_DEBUG_FILE: logPath,
   });
 
   const stdin = new TestInput();
@@ -550,11 +550,11 @@ test("native AppShell finalize keeps transcript rows in one keyed tree", async (
 
 
 test("THINKING -> RESPONDING -> FINALIZE_RUN preserves action rows and renders response below", async () => {
-  const logPath = join(tmpdir(), `codexa-action-response-finalize-${process.pid}.jsonl`);
+  const logPath = join(tmpdir(), `ubume-action-response-finalize-${process.pid}.jsonl`);
   rmSync(logPath, { force: true });
   renderDebug.configureRenderDebug({
-    CODEXA_DEBUG_RENDER_TRACE: "1",
-    CODEXA_RENDER_DEBUG_FILE: logPath,
+    UBUME_DEBUG_RENDER_TRACE: "1",
+    UBUME_RENDER_DEBUG_FILE: logPath,
   });
 
   const stdin = new TestInput();

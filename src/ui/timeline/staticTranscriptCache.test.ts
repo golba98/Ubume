@@ -15,14 +15,14 @@ import {
   buildNativeTranscriptParts,
 } from "./timelineMeasure.js";
 
-const OPTIONS = { totalWidth: 100, verboseMode: false, workspaceRoot: "/workspace/codexa" };
+const OPTIONS = { totalWidth: 100, verboseMode: false, workspaceRoot: "/workspace/ubume" };
 
 function finalizedTurn(turnId: number): TimelineEvent[] {
   const user: UserPromptEvent = { id: turnId * 10, type: "user", createdAt: turnId, prompt: `task ${turnId}`, turnId };
   let run: RunEvent = createRunEvent({
     id: turnId * 10 + 1,
     backendId: "codex-subprocess",
-    backendLabel: "Codexa",
+    backendLabel: "Ubume",
     runtime: TEST_RUNTIME,
     prompt: `task ${turnId}`,
     turnId,
@@ -117,7 +117,7 @@ test("does not cache a turn that is still running", () => {
   const events = finalizedTurns(2);
   const runningUser: UserPromptEvent = { id: 900, type: "user", createdAt: 9, prompt: "live", turnId: 90 };
   const runningRun = createRunEvent({
-    id: 901, backendId: "codex-subprocess", backendLabel: "Codexa", runtime: TEST_RUNTIME, prompt: "live", turnId: 90,
+    id: 901, backendId: "codex-subprocess", backendLabel: "Ubume", runtime: TEST_RUNTIME, prompt: "live", turnId: 90,
   });
   const cache = createStaticTranscriptCache();
   const parts = buildStaticTranscript(cache, renderItems([...events, runningUser, runningRun]), OPTIONS);

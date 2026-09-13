@@ -106,7 +106,7 @@ test("resolveVibeExecutable returns null when command -v cannot find vibe", asyn
 });
 
 test("detectVibeActiveModel follows environment, project, and user config precedence", () => {
-  const root = join(tmpdir(), `codexa-vibe-model-${Date.now()}`);
+  const root = join(tmpdir(), `ubume-vibe-model-${Date.now()}`);
   const workspace = join(root, "workspace", "nested");
   const home = join(root, "home");
   mkdirSync(join(root, "workspace", ".vibe"), { recursive: true });
@@ -139,7 +139,7 @@ test("detectVibeActiveModel follows environment, project, and user config preced
 });
 
 test("detectVibeActiveModel falls back safely when configuration is malformed", () => {
-  const root = join(tmpdir(), `codexa-vibe-invalid-${Date.now()}`);
+  const root = join(tmpdir(), `ubume-vibe-invalid-${Date.now()}`);
   const home = join(root, "home");
   mkdirSync(join(home, ".vibe"), { recursive: true });
   writeFileSync(join(home, ".vibe", "config.toml"), "active_model = [\n");
@@ -155,7 +155,7 @@ test("detectVibeActiveModel falls back safely when configuration is malformed", 
 });
 
 test("configured Vibe models prefer the project config, deduplicate aliases, and keep the active model first", () => {
-  const root = join(tmpdir(), `codexa-vibe-models-${Date.now()}`);
+  const root = join(tmpdir(), `ubume-vibe-models-${Date.now()}`);
   const workspace = join(root, "workspace", "nested");
   const home = join(root, "home");
   mkdirSync(join(root, "workspace", ".vibe"), { recursive: true });
@@ -343,7 +343,7 @@ test("launchMistralVibeCli restores terminal state after SIGINT termination", as
 });
 
 test("findLatestVibeSession selects the newest matching workspace session after the run started", async () => {
-  const root = join(tmpdir(), `codexa-vibe-sessions-${Date.now()}`);
+  const root = join(tmpdir(), `ubume-vibe-sessions-${Date.now()}`);
   const sessionRoot = join(root, ".vibe", "logs", "session");
   const workspaceRoot = join(root, "workspace");
   const startedAt = Date.now();

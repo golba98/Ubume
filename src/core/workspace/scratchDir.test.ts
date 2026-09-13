@@ -6,15 +6,15 @@ import test from "node:test";
 import { ensureSessionScratchDir, pruneStaleScratchDirs, resolveScratchRoot } from "./scratchDir.js";
 
 function createTempWorkspace(): string {
-  return mkdtempSync(join(tmpdir(), "codexa-scratch-"));
+  return mkdtempSync(join(tmpdir(), "ubume-scratch-"));
 }
 
 test("creates a self-gitignored session scratch folder inside the workspace", () => {
   const root = createTempWorkspace();
   try {
     const scratch = ensureSessionScratchDir(root, "session-1");
-    assert.equal(scratch.absolutePath, join(root, ".codexa", "scratch", "session-1"));
-    assert.equal(scratch.relativePath, ".codexa/scratch/session-1");
+    assert.equal(scratch.absolutePath, join(root, ".ubume", "scratch", "session-1"));
+    assert.equal(scratch.relativePath, ".ubume/scratch/session-1");
     assert.ok(existsSync(scratch.absolutePath));
     assert.equal(readFileSync(join(resolveScratchRoot(root), ".gitignore"), "utf8"), "*\n");
     assert.deepEqual(ensureSessionScratchDir(root, "session-1"), scratch);

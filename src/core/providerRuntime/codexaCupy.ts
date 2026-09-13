@@ -38,7 +38,7 @@ function missing(config: Config): string[] {
 }
 
 export function discoverCodexaCupyModels(config = resolveCodexaCupyConfig(), env: NodeJS.ProcessEnv = process.env): ProviderModelDiscoveryResult {
-  if (!isLocalDevChannel(env)) return { status: "not-configured", providerId: "codexa-cupy", backendKind: "unavailable", models: [], message: "CuPy is only available on codexa-dev." };
+  if (!isLocalDevChannel(env)) return { status: "not-configured", providerId: "codexa-cupy", backendKind: "unavailable", models: [], message: "CuPy is only available on ubume-dev." };
   const missingPaths = missing(config);
   if (missingPaths.length) return { status: "not-configured", providerId: "codexa-cupy", backendKind: "unavailable", models: [], message: `CuPy is missing required files:\n${missingPaths.join("\n")}`, diagnostics: { modelRoot: config.modelRoot, missingPaths: missingPaths.join(", ") } };
   return {

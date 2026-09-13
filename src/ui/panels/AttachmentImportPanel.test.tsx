@@ -86,16 +86,16 @@ const TEST_FILE: PendingImportFile = {
   isImage: true,
 };
 
-const ATTACHMENTS_DIR = "C:\\Users\\jorda\\AppData\\Local\\Codexa\\workspaces\\example\\attachments";
+const ATTACHMENTS_DIR = "C:\\Users\\jorda\\AppData\\Local\\Ubume\\workspaces\\example1\\attachments";
 const WORKSPACE_ROOT = "C:\\Development\\1-JavaScript\\13-Custom-CLI-Normal";
 
 test("compactHomePath abbreviates attachment paths below the home directory", () => {
   assert.equal(
     compactHomePath(
-      "/home/k9-vortex/.local/share/codexa/workspaces/example/attachments",
+      "/home/k9-vortex/.local/share/ubume/workspaces/example/attachments",
       "/home/k9-vortex",
     ),
-    "~/.local/share/codexa/workspaces/example/attachments",
+    "~/.local/share/ubume/workspaces/example/attachments",
   );
 });
 
@@ -138,7 +138,7 @@ test("AttachmentImportPanel renders filename and destination path", async () => 
     await sleep();
     const output = harness.getOutput();
     assert.match(output, /Screenshot 2026-05-18\.png/);
-    assert.match(output, /AppData.*Codexa.*attachments/);
+    assert.match(output, /AppData.*Ubume.*attachments/);
   } finally {
     await harness.cleanup();
   }

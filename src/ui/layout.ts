@@ -289,7 +289,7 @@ export function computeAppLayoutBudget({
   const shellHeight = getShellHeight(safeRows);
 
   const showNormalLogo =
-    process.env["CODEXA_NO_ASCII_LOGO"] !== "1" && (
+    process.env["UBUME_NO_ASCII_LOGO"] !== "1" && (
       mode === "regular" ||
       mode === "expanded" ||
       (mode === "compact" && safeCols >= 72)
@@ -434,7 +434,7 @@ export function advanceTerminalViewport(
 ): TerminalViewport {
   const next = createTerminalViewport(cols, rows, current, isResizing);
   
-  if (process.env.CODEXA_LAYOUT_DEBUG === "1") {
+  if (process.env.UBUME_LAYOUT_DEBUG === "1") {
     renderDebug.traceEvent("layout", "advanceViewport", {
       cols: next.cols,
       rows: next.rows,

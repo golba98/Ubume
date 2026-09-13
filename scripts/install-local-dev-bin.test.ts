@@ -6,28 +6,29 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 // @ts-expect-error JavaScript utility script exports are exercised directly.
-import { createCodexaDevShim, resolveInstallBinDir } from "./install-local-dev-bin.mjs";
+import { createUbumeDevShim, resolveInstallBinDir } from "./install-local-dev-bin.mjs";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
-test("resolveInstallBinDir honors explicit codexa dev bin override", () => {
-  assert.equal(resolveInstallBinDir({ CODEXA_DEV_BIN_DIR: "/tmp/codexa-dev-bin" }), "/tmp/codexa-dev-bin");
+test("resolveInstallBinDir honors explicit ubume dev bin override", () => {
+  assert.equal(resolveInstallBinDir({ UBUME_DEV_BIN_DIR: "/tmp/ubume-dev-bin" }), "/tmp/ubume-dev-bin");
 });
 
-test("install-local-dev-bin preserves published codexa while creating local dev shims", () => {
-  const binDir = mkdtempSync(join(tmpdir(), "codexa-dev-bin-"));
-  const publishedBin = join(binDir, "codexa");
+test("install-local-dev-bin preserves published ubume while creating local dev shims", () => {
+  const binDir = mkdtempSync(join(tmpdir(), "ubume-dev-bin-"));
+  const publishedBin = join(binDir, "ubume");
   writeFileSync(publishedBin, "published", "utf8");
 
   try {
-    const result = createCodexaDevShim({ binDir });
+    const result = createUbumeDevShim({ binDir });
     const shim = readFileSync(result.shimPath, "utf8");
 
     assert.equal(readFileSync(publishedBin, "utf8"), "published");
-    assert.equal(existsSync(join(binDir, "codexa-dev")), process.platform !== "win32");
+    assert.equal(existsSync(join(binDir, "ubume-dev")), process.platform !== "win32");
+    assert.equal(existsSync(join(binDir, "ubume-dev")), process.platform !== "win32");
     assert.match(shim, /run-local-dev\.mjs/);
     assert.match(shim, /node/);
-    assert.doesNotMatch(shim, /bin\/codexa\.js/);
+    assert.doesNotMatch(shim, /bin\/ubume\.js/);
   } finally {
     rmSync(binDir, { recursive: true, force: true });
   }

@@ -1,27 +1,29 @@
-# Codexa
+# Ubume CLI
 
-Codexa is a terminal coding workspace for provider CLIs and local
+Ubume is a terminal coding workspace for provider CLIs and local
 OpenAI-compatible models.
+
+*Ubume* (IsiXhosa) conveys structure, form, embodiment, and configuration — reflecting how Ubume coordinates external provider engines and local models into a unified, stateful CLI environment.
 
 ## Install
 
 ```bash
-npm install -g @golba98/codexa
-codexa
+npm install -g ubume
+ubume
 ```
 
 Requires Node.js and one supported provider CLI, unless you use a local model.
 
-Update Codexa with:
+Update Ubume with:
 
 ```bash
-npm install -g @golba98/codexa@latest
-codexa --version
+npm install -g ubume@latest
+ubume --version
 ```
 
 ## Providers
 
-Codexa can use these routes:
+Ubume can use these routes:
 
 | Provider | Setup |
 | --- | --- |
@@ -30,19 +32,19 @@ Codexa can use these routes:
 | Mistral Vibe | Install and authenticate the `vibe` CLI. |
 | Antigravity | Install and authenticate the `agy` CLI. |
 | Local model | Open Local, choose LM Studio or Unsloth, and use a model loaded in that server. |
-| Codexa Native | Available only from the local `codexa-dev` channel. |
+| Codexa Native | Available only from the local `ubume-dev` channel. |
 
 Credentials remain with the provider CLI or local server.
 
 ## Usage
 
 ```bash
-codexa --version
-codexa exec "summarize this project"
-codexa --model gpt-5.4
+ubume --version
+ubume exec "summarize this project"
+ubume --model gpt-5.4
 ```
 
-Useful commands inside Codexa:
+Useful commands inside Ubume:
 
 ```text
 /help       Show commands
@@ -70,7 +72,7 @@ Install the separate local development launcher with:
 
 ```bash
 bun run install:dev-bin
-codexa-dev
+ubume-dev
 ```
 
 Developer references:

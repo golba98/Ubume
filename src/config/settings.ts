@@ -14,7 +14,7 @@ import { getAppVersion } from "./appVersion.js";
 // Authoritative runtime version: resolved from the installed package.json at
 // startup (buildInfo.ts is only the committed fallback and can drift).
 export const APP_VERSION: string = getAppVersion();
-export const APP_NAME = "Codexa";
+export const APP_NAME = "Ubume";
 export const DEFAULT_BACKEND = "codex-subprocess";
 export const DEFAULT_MODEL = "gpt-5.4";
 export const DEFAULT_MODE = "full-auto";
@@ -38,21 +38,30 @@ export function getCodexConfigFile(): string {
   return smartJoin(getCodexHome(), "config.toml");
 }
 
-export function getCodexaTrustStoreFile(): string {
+export function getUbumeTrustStoreFile(): string {
+  return smartJoin(getCodexHome(), "ubume-trust.json");
+}
+
+export function getLegacyCodexaTrustStoreFile(): string {
   return smartJoin(getCodexHome(), "codexa-trust.json");
 }
 
+export const getCodexaTrustStoreFile = getUbumeTrustStoreFile;
+
 export const CODEX_HOME = getCodexHome();
 export const CODEX_CONFIG_FILE = getCodexConfigFile();
-export const CODEXA_TRUST_STORE_FILE = getCodexaTrustStoreFile();
-export const SETTINGS_FILE = join(homedir(), ".codexa-settings.json");
-export const MODEL_SPECS_FILE = join(homedir(), ".codexa-model-specs.json");
+export const UBUME_TRUST_STORE_FILE = getUbumeTrustStoreFile();
+export const CODEXA_TRUST_STORE_FILE = getLegacyCodexaTrustStoreFile();
+export const SETTINGS_FILE = join(homedir(), ".ubume-settings.json");
+export const LEGACY_SETTINGS_FILE = join(homedir(), ".codexa-settings.json");
+export const MODEL_SPECS_FILE = join(homedir(), ".ubume-model-specs.json");
+export const LEGACY_MODEL_SPECS_FILE = join(homedir(), ".codexa-model-specs.json");
 
 export const AVAILABLE_BACKENDS = [
   {
     id: "codex-subprocess",
-    label: "Codexa Core",
-    description: "Direct connection to the Codexa neural network.",
+    label: "Ubume Core",
+    description: "Direct connection to the Ubume neural network.",
   },
   {
     id: "openai-native",
@@ -129,7 +138,7 @@ export const USER_SETTING_DEFINITIONS: readonly UserSettingDefinition[] = [
   {
     key: "workspaceDisplayMode",
     label: "Workspace display",
-    description: "Controls how the workspace label is displayed in the Codexa header.",
+    description: "Controls how the workspace label is displayed in the Ubume header.",
     options: [
       { value: "dir", label: "Dir" },
       { value: "name", label: "Name" },
@@ -149,7 +158,7 @@ export const USER_SETTING_DEFINITIONS: readonly UserSettingDefinition[] = [
   {
     key: "showBusyLoader",
     label: "Busy loader",
-    description: "Controls whether the footer shows a subtle loading animation while Codexa is busy.",
+    description: "Controls whether the footer shows a subtle loading animation while Ubume is busy.",
     options: [
       { value: "true", label: "True" },
       { value: "false", label: "False" },
@@ -192,7 +201,7 @@ export const AUTH_PREFERENCES = [
   },
   {
     id: "runner-managed",
-    label: "Codexa managed",
+    label: "Ubume managed",
     description: "Rely on the core neural bridge to manage authentication.",
   },
 ] as const;
@@ -266,7 +275,7 @@ export function formatReasoningLabel(reasoning: string): string {
 }
 
 export const AVAILABLE_THEMES = [
-  { id: "dark", label: "Codexa Dark" },
+  { id: "dark", label: "Ubume Dark" },
   { id: "purple", label: "Midnight Purple" },
   { id: "mono", label: "Black & White" },
   { id: "black", label: "Codex the Black" },

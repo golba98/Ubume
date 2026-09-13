@@ -13,7 +13,7 @@ import {
 } from "./updateCheckCache.js";
 
 function makeTempDir(): string {
-  return mkdtempSync(join(tmpdir(), "codexa-update-cache-"));
+  return mkdtempSync(join(tmpdir(), "ubume-update-cache-"));
 }
 
 function makeCache(overrides: Partial<UpdateCheckCache> = {}): UpdateCheckCache {
@@ -78,10 +78,10 @@ test("cache file path is resolved from the environment per call, not at module l
   try {
     delete process.env.USERPROFILE;
     process.env.HOME = dirA;
-    assert.equal(getUpdateCheckCacheFilePath(), join(dirA, ".codexa-update-check.json"));
+    assert.equal(getUpdateCheckCacheFilePath(), join(dirA, ".ubume-update-check.json"));
 
     process.env.HOME = dirB;
-    assert.equal(getUpdateCheckCacheFilePath(), join(dirB, ".codexa-update-check.json"));
+    assert.equal(getUpdateCheckCacheFilePath(), join(dirB, ".ubume-update-check.json"));
   } finally {
     if (originalHome === undefined) delete process.env.HOME;
     else process.env.HOME = originalHome;
@@ -107,7 +107,7 @@ test("save/load honor a HOME change between calls", () => {
     assert.equal(loadUpdateCheckCache(), null);
     // The file landed under dirA, not dirB.
     const written = JSON.parse(
-      readFileSync(join(dirA, ".codexa-update-check.json"), "utf8"),
+      readFileSync(join(dirA, ".ubume-update-check.json"), "utf8"),
     ) as UpdateCheckCache;
     assert.equal(written.latestVersion, "1.0.5");
   } finally {

@@ -455,7 +455,7 @@ function CodexResponseBlock({
 
   return (
     <Box flexDirection="column" width="100%" paddingLeft={transcriptContentIndent} paddingRight={1}>
-      <Text color={theme.textMuted} bold>Codexa</Text>
+      <Text color={theme.textMuted} bold>Ubume</Text>
       {run.status === "failed" && !streaming && isLast && (
         <Box flexDirection="column">
           {wrapPlainText(sanitizeTerminalOutput(run.errorMessage ?? run.summary), contentWidth).map((row, i) => (

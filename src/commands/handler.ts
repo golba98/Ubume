@@ -334,7 +334,7 @@ function formatRenderCounts(): string {
     .map(([name, count]) => `  ${name}: ${count}`);
   return lines.length > 0
     ? `Render counts:\n${lines.join("\n")}`
-    : "No render counts recorded. Set CODEXA_RENDER_DEBUG=1 to enable.";
+    : "No render counts recorded. Set UBUME_RENDER_DEBUG=1 to enable.";
 }
 
 function buildHelpMessage(context: CommandContext): string {
@@ -382,7 +382,7 @@ function buildHelpMessage(context: CommandContext): string {
     "  /themes            Open visual theme picker (Up/Down + Enter)",
     "  /verbose           Toggle verbose mode (shows detailed processing info)",
     "  /auth [option]     Open auth panel or set auth preference",
-    "  /auth status       Probe Codexa auth status",
+    "  /auth status       Probe Ubume auth status",
     "  /login             Show guided ChatGPT subscription login steps",
     "  /logout            Show guided logout steps",
     "  /backends          List all available backends",
@@ -393,12 +393,12 @@ function buildHelpMessage(context: CommandContext): string {
     `  Current plan mode: ${context.runtime.planMode ? "Enabled" : "Disabled"}`,
     "  /copy              Copy last response to clipboard",
     "  /paste-image       Attach the image currently on the clipboard",
-    "  /update [status]   Check for updates and install the latest Codexa (status: cached result only)",
+    "  /update [status]   Check for updates and install the latest Ubume (status: cached result only)",
     "  /help              Show this help",
     "",
     "Local development:",
-    "  npm run install:dev-bin  Install the codexa-dev command",
-    "  codexa-dev               Run this repo without replacing codexa",
+    "  npm run install:dev-bin  Install the ubume-dev command",
+    "  ubume-dev                Run this repo without replacing ubume",
     "",
     "Shortcuts:",
     "  Ctrl+B    Open backend picker",
@@ -457,7 +457,7 @@ export function handleCommand(text: string, context: CommandContext): CommandRes
             "  Workspace default: OpenAI",
             `  Active chat route: OpenAI / ${context.runtime.model}`,
             `  Active model: ${context.runtime.model}`,
-            "  Active provider mode: Usable inside Codexa",
+            "  Active provider mode: Usable inside Ubume",
           ].join("\n"),
         };
 
@@ -571,7 +571,7 @@ export function handleCommand(text: string, context: CommandContext): CommandRes
               `Workspace display: ${formatWorkspaceDisplayModeLabel(context.settings.workspaceDisplayMode)} (${context.settings.workspaceDisplayMode})`,
               "Allowed values: dir, name, simple",
               "dir = show the current workspace folder name",
-              "name = show Codexa",
+              "name = show Ubume",
               "simple = show only the final folder name",
             ].join("\n"),
           };
@@ -607,7 +607,7 @@ export function handleCommand(text: string, context: CommandContext): CommandRes
               `Terminal title: ${formatWorkspaceDisplayModeLabel(context.settings.terminalTitleMode)} (${context.settings.terminalTitleMode})`,
               "Allowed values: dir, name, simple",
               "dir = show the current workspace folder name",
-              "name = show Codexa",
+              "name = show Ubume",
               "simple = show only the final folder name",
             ].join("\n"),
           };

@@ -55,7 +55,7 @@ export function writeTerminalControl(
   traceTerminalTitleSequences(sequence, {
     source,
     stream: channel,
-    origin: "codexa",
+    origin: "ubume",
     action: "allowed",
     lifecycleState: currentUIStateKind,
   });
@@ -104,7 +104,7 @@ export function writeTerminalControl(
   return writeGuardedTerminalOutput(write, sequence, {
     source,
     stream: channel,
-    origin: "codexa",
+    origin: "ubume",
     action: "allowed",
     lifecycleState: currentUIStateKind,
   });

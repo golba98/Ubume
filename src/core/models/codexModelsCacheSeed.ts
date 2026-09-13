@@ -11,7 +11,7 @@ import type {
 import { loadCachedProviderModels, type CachedProviderModels } from "./providerModelCache.js";
 
 // The codex CLI maintains its own model catalog cache with slugs, labels and
-// reasoning levels. Reading it seeds Codexa's OpenAI model list instantly —
+// reasoning levels. Reading it seeds Ubume's OpenAI model list instantly —
 // no subprocess — and stays current because the codex CLI refreshes the file
 // on its own runs.
 // Resolved per call from env (matching claudeCodeDiscovery) so HOME
@@ -100,7 +100,7 @@ export function loadCodexSeedModels(cacheFile = getCodexModelsCacheFile()): Code
 }
 
 // Freshest locally known OpenAI models without spawning a subprocess:
-// codex's own cache file vs Codexa's persisted last-good discovery.
+// codex's own cache file vs Ubume's persisted last-good discovery.
 export function loadSeededOpenAiModels(options: {
   codexCacheFile?: string;
   providerCacheFile?: string;

@@ -24,13 +24,13 @@ export function ProviderSetupPrompt({
     <Box flexDirection="column" width="100%">
       <Box flexDirection="column" paddingX={1} marginBottom={1}>
         <Text color="yellow" bold>{providerLabel} is not ready</Text>
-        <Text color="gray">Codexa could not find `{executable}` on this computer.</Text>
+        <Text color="gray">Ubume could not find `{executable}` on this computer.</Text>
         <Text color="gray">
           {installCommand
             ? `Install it and open ${providerLabel}'s sign-in/setup flow?`
             : `Install ${providerLabel} manually, then retry the launch?`}
         </Text>
-        <Text color="gray">Credentials stay in the provider’s own CLI and are not stored by Codexa.</Text>
+        <Text color="gray">Credentials stay in the provider’s own CLI and are not stored by Ubume.</Text>
         {installCommand && <Text color="gray">Setup command: {setupCommand}</Text>}
       </Box>
       <SelectionPanel

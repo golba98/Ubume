@@ -47,7 +47,7 @@ test("isImageFile returns false for no extension", () => {
 // ─── resolveAttachmentDestPath ────────────────────────────────────────────────
 
 test("resolveAttachmentDestPath returns base filename when no collision", async () => {
-  const dir = path.join(tmpdir(), `codexa-attach-test-${Date.now()}`);
+  const dir = path.join(tmpdir(), `ubume-attach-test-${Date.now()}`);
   await mkdir(dir, { recursive: true });
   try {
     const dest = await resolveAttachmentDestPath("/some/path/file.png", dir);
@@ -59,7 +59,7 @@ test("resolveAttachmentDestPath returns base filename when no collision", async 
 });
 
 test("resolveAttachmentDestPath appends -1 on collision", async () => {
-  const dir = path.join(tmpdir(), `codexa-attach-test-${Date.now()}`);
+  const dir = path.join(tmpdir(), `ubume-attach-test-${Date.now()}`);
   await mkdir(dir, { recursive: true });
   try {
     // Create a file that would collide
@@ -72,7 +72,7 @@ test("resolveAttachmentDestPath appends -1 on collision", async () => {
 });
 
 test("resolveAttachmentDestPath appends -2 on double collision", async () => {
-  const dir = path.join(tmpdir(), `codexa-attach-test-${Date.now()}`);
+  const dir = path.join(tmpdir(), `ubume-attach-test-${Date.now()}`);
   await mkdir(dir, { recursive: true });
   try {
     await writeFile(path.join(dir, "file.png"), "existing");
@@ -87,7 +87,7 @@ test("resolveAttachmentDestPath appends -2 on double collision", async () => {
 // ─── importExternalFile ───────────────────────────────────────────────────────
 
 test("importExternalFile creates attachments dir if missing and copies file", async () => {
-  const baseDir = path.join(tmpdir(), `codexa-import-test-${Date.now()}`);
+  const baseDir = path.join(tmpdir(), `ubume-import-test-${Date.now()}`);
   const srcDir = path.join(baseDir, "src");
   const destDir = path.join(baseDir, "attachments");
   await mkdir(srcDir, { recursive: true });
@@ -107,7 +107,7 @@ test("importExternalFile creates attachments dir if missing and copies file", as
 });
 
 test("importExternalFile skips Cargo registry files without copying", async () => {
-  const baseDir = path.join(tmpdir(), `codexa-import-test-${Date.now()}`);
+  const baseDir = path.join(tmpdir(), `ubume-import-test-${Date.now()}`);
   const srcDir = path.join(baseDir, ".cargo", "registry", "src", "index.crates.io-123", "iced_widget", "src");
   const destDir = path.join(baseDir, "attachments");
   await mkdir(srcDir, { recursive: true });
@@ -122,7 +122,7 @@ test("importExternalFile skips Cargo registry files without copying", async () =
 });
 
 test("importExternalFile skips non-existent diagnostic paths without throwing", async () => {
-  const baseDir = path.join(tmpdir(), `codexa-import-test-${Date.now()}`);
+  const baseDir = path.join(tmpdir(), `ubume-import-test-${Date.now()}`);
   const destDir = path.join(baseDir, "attachments");
   try {
     const destPath = await importExternalFile(path.join(baseDir, "missing.rs") + ":10:5", destDir);
@@ -138,25 +138,25 @@ test("rewritePromptWithImportedPaths rewrites quoted path with spaces", () => {
   const prompt = '"C:\\Users\\jorda\\OneDrive\\Screenshots\\Screenshot 2026.png" what is this?';
   const result = rewritePromptWithImportedPaths(prompt, [{
     rawPath: "C:\\Users\\jorda\\OneDrive\\Screenshots\\Screenshot 2026.png",
-    replacementPath: "/home/test/.local/share/codexa/attachments/Screenshot 2026.png",
+    replacementPath: "/home/test/.local/share/ubume/attachments/Screenshot 2026.png",
   }]);
-  assert.equal(result, '"/home/test/.local/share/codexa/attachments/Screenshot 2026.png" what is this?');
+  assert.equal(result, '"/home/test/.local/share/ubume/attachments/Screenshot 2026.png" what is this?');
 });
 
 test("rewritePromptWithImportedPaths rewrites unquoted path without spaces", () => {
   const prompt = "Look at C:\\Users\\jorda\\file.png please";
   const result = rewritePromptWithImportedPaths(prompt, [{
     rawPath: "C:\\Users\\jorda\\file.png",
-    replacementPath: "/home/test/.local/share/codexa/attachments/file.png",
+    replacementPath: "/home/test/.local/share/ubume/attachments/file.png",
   }]);
-  assert.equal(result, "Look at /home/test/.local/share/codexa/attachments/file.png please");
+  assert.equal(result, "Look at /home/test/.local/share/ubume/attachments/file.png please");
 });
 
 test("rewritePromptWithImportedPaths leaves non-matched text unchanged", () => {
   const prompt = "hello world, no paths here";
   const result = rewritePromptWithImportedPaths(prompt, [{
     rawPath: "C:\\some\\other\\path.png",
-    replacementPath: "/home/test/.local/share/codexa/attachments/path.png",
+    replacementPath: "/home/test/.local/share/ubume/attachments/path.png",
   }]);
   assert.equal(result, "hello world, no paths here");
 });
@@ -165,18 +165,18 @@ test("rewritePromptWithImportedPaths does not double-quote already-quoted replac
   const prompt = '"C:\\Users\\file with spaces.png" describe';
   const result = rewritePromptWithImportedPaths(prompt, [{
     rawPath: "C:\\Users\\file with spaces.png",
-    replacementPath: "/home/test/.local/share/codexa/attachments/file with spaces.png",
+    replacementPath: "/home/test/.local/share/ubume/attachments/file with spaces.png",
   }]);
   // replacementPath has spaces → re-quoted; original was quoted → double-quoted match replaced
-  assert.equal(result, '"/home/test/.local/share/codexa/attachments/file with spaces.png" describe');
+  assert.equal(result, '"/home/test/.local/share/ubume/attachments/file with spaces.png" describe');
 });
 
 test("rewritePromptWithImportedPaths handles multiple replacements", () => {
   // Paths without spaces get no quotes; the enclosing quotes from the original are consumed
   const prompt = '"C:\\path\\a.png" and "C:\\path\\b.png" compare them';
   const result = rewritePromptWithImportedPaths(prompt, [
-    { rawPath: "C:\\path\\a.png", replacementPath: "/home/test/.local/share/codexa/attachments/a.png" },
-    { rawPath: "C:\\path\\b.png", replacementPath: "/home/test/.local/share/codexa/attachments/b.png" },
+    { rawPath: "C:\\path\\a.png", replacementPath: "/home/test/.local/share/ubume/attachments/a.png" },
+    { rawPath: "C:\\path\\b.png", replacementPath: "/home/test/.local/share/ubume/attachments/b.png" },
   ]);
-  assert.equal(result, "/home/test/.local/share/codexa/attachments/a.png and /home/test/.local/share/codexa/attachments/b.png compare them");
+  assert.equal(result, "/home/test/.local/share/ubume/attachments/a.png and /home/test/.local/share/ubume/attachments/b.png compare them");
 });

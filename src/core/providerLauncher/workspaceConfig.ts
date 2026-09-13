@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { DEFAULT_MODEL } from "../../config/settings.js";
-import { resolveCodexaWorkspaceDataDir } from "../workspace/appData.js";
+import { resolveUbumeWorkspaceDataDir } from "../workspace/appData.js";
 import { normalizeWorkspaceRoot } from "../workspace/workspaceRoot.js";
 import { isKnownProviderId } from "./registry.js";
-import { getDefaultRouteModel, getProviderRuntime, isProviderRouteConfigured, isProviderRoutableInCodexa } from "../providerRuntime/registry.js";
+import { getDefaultRouteModel, getProviderRuntime, isProviderRouteConfigured, isProviderRoutableInUbume } from "../providerRuntime/registry.js";
 import { normalizeGeminiModelId } from "../providerRuntime/models.js";
 import type {
   ProviderActiveRoute,
@@ -19,7 +19,7 @@ const DEPRECATED_ANTIGRAVITY_BACKENDS = new Set(["antigravity-cli-auth", "agy"])
 const DEPRECATED_GOOGLE_PROVIDER_ID = "google";
 
 export function getProviderWorkspaceConfigFile(workspaceRoot: string): string {
-  return join(resolveCodexaWorkspaceDataDir(normalizeWorkspaceRoot(workspaceRoot)), "providers.json");
+  return join(resolveUbumeWorkspaceDataDir(normalizeWorkspaceRoot(workspaceRoot)), "providers.json");
 }
 
 export function getLegacyProviderWorkspaceConfigFile(workspaceRoot: string): string {
@@ -49,7 +49,7 @@ function resolveDeprecatedProviderFallback(
 ): ProviderId {
   const candidates: readonly ProviderId[] = ["openai", "anthropic", "local"];
   return candidates.find((providerId) =>
-    isProviderRoutableInCodexa(providerId)
+    isProviderRoutableInUbume(providerId)
     && (providerId === "openai" || providers[providerId] !== undefined || isProviderRouteConfigured(providerId))
   ) ?? "openai";
 }
@@ -210,7 +210,7 @@ function parseActiveRoute(value: unknown): ProviderActiveRoute | undefined {
   const modelSelection = value.modelSelection ?? value.model_selection;
   const localBackend = value.localBackend ?? value.local_backend;
 
-  if (typeof providerId !== "string" || !isKnownProviderId(providerId) || !isProviderRoutableInCodexa(providerId)) return undefined;
+  if (typeof providerId !== "string" || !isKnownProviderId(providerId) || !isProviderRoutableInUbume(providerId)) return undefined;
   if (typeof modelId !== "string" || !modelId.trim()) return undefined;
 
   const normalizedModelId = providerId === "google" ? normalizeGeminiModelId(modelId.trim()) : modelId.trim();
@@ -448,7 +448,7 @@ export function setProviderActiveRoute(
   config: ProviderWorkspaceConfig,
   activeRoute: ProviderActiveRoute,
 ): ProviderWorkspaceConfig {
-  if (activeRoute.providerId === DEPRECATED_GOOGLE_PROVIDER_ID || !isProviderRoutableInCodexa(activeRoute.providerId) || !isProviderRouteConfigured(activeRoute.providerId)) {
+  if (activeRoute.providerId === DEPRECATED_GOOGLE_PROVIDER_ID || !isProviderRoutableInUbume(activeRoute.providerId) || !isProviderRouteConfigured(activeRoute.providerId)) {
     return config;
   }
 

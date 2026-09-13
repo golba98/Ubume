@@ -251,13 +251,13 @@ export function ProviderPicker({
   };
 
   const actions = useMemo<ProviderActionItem[]>(() => {
-    const routeUnavailable = selectedProvider?.routeMode === "in-codexa";
+    const routeUnavailable = selectedProvider?.routeMode === "in-ubume";
     const disabledReason = routeUnavailable
       ? null
-      : selectedProvider?.routeUnavailableReason ?? "In-Codexa routing is not configured yet.";
+      : selectedProvider?.routeUnavailableReason ?? "In-Ubume routing is not configured yet.";
 
     return [
-      { value: "use-in-codexa", label: "Use in Codexa", disabledReason },
+      { value: "use-in-ubume", label: "Use in Ubume", disabledReason },
       { value: "select-model", label: "Select model", disabledReason },
       { value: "refresh-models", label: selectedProvider?.id === "anthropic" ? "Refresh Claude capabilities" : selectedProvider?.id === "local" ? "Refresh LM Studio metadata" : "Refresh models", disabledReason },
       ...(selectedProvider?.id === "google" || selectedProvider?.id === "local"
@@ -333,7 +333,7 @@ export function ProviderPicker({
           openLocalBackends();
           return;
         }
-        onAction(selectedProvider.id, "use-in-codexa", mode === "local-backends" ? selectedLocalBackend : undefined);
+        onAction(selectedProvider.id, "use-in-ubume", mode === "local-backends" ? selectedLocalBackend : undefined);
         return;
       }
       if (input.toLowerCase() === "s" && selectedProvider) {
@@ -353,7 +353,7 @@ export function ProviderPicker({
           openLocalBackends();
           return;
         }
-        onAction(selectedProvider.id, "use-in-codexa", mode === "local-backends" ? selectedLocalBackend : undefined);
+        onAction(selectedProvider.id, "use-in-ubume", mode === "local-backends" ? selectedLocalBackend : undefined);
       }
       return;
     }
@@ -508,7 +508,7 @@ export function ProviderPicker({
         )}
       </Box>
 
-      {process.env.CODEXA_DEBUG_LAYOUT === "1" && (
+      {process.env.UBUME_DEBUG_LAYOUT === "1" && (
         <Box flexDirection="column" marginTop={1} flexShrink={0}>
           <Text color="red">
             DEBUG layout: rows={layout?.rows} cols={layout?.cols} mode={layout?.mode} headerRows={budget?.headerRows ?? 6} panelRows={availableRows} bottomChromeRows={budget?.bottomChromeBudget.totalRows ?? 4} composerRows={budget?.composerRows ?? 3} providerRows={visibleProviders.length} renderMode={windowResult?.renderMode}

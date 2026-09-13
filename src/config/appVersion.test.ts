@@ -9,17 +9,28 @@ import { getAppVersion, resolveAppVersion } from "./appVersion.js";
 import { APP_VERSION as BUILD_INFO_VERSION } from "./buildInfo.js";
 
 function makeTempDir(): string {
-  return mkdtempSync(join(tmpdir(), "codexa-app-version-"));
+  return mkdtempSync(join(tmpdir(), "ubume-app-version-"));
 }
 
 function writePackageJson(dir: string, contents: string): void {
   writeFileSync(join(dir, "package.json"), contents, "utf8");
 }
 
-test("resolveAppVersion prefers CODEXA_PACKAGE_ROOT package.json version", () => {
+test("resolveAppVersion prefers UBUME_PACKAGE_ROOT package.json version", () => {
   const dir = makeTempDir();
   try {
-    writePackageJson(dir, JSON.stringify({ name: "@golba98/codexa", version: "9.9.9" }));
+    writePackageJson(dir, JSON.stringify({ name: "ubume", version: "9.9.9" }));
+    const version = resolveAppVersion({ UBUME_PACKAGE_ROOT: dir }, dir);
+    assert.equal(version, "9.9.9");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("resolveAppVersion supports legacy CODEXA_PACKAGE_ROOT package.json version", () => {
+  const dir = makeTempDir();
+  try {
+    writePackageJson(dir, JSON.stringify({ name: "ubume", version: "9.9.9" }));
     const version = resolveAppVersion({ CODEXA_PACKAGE_ROOT: dir }, dir);
     assert.equal(version, "9.9.9");
   } finally {
@@ -30,49 +41,49 @@ test("resolveAppVersion prefers CODEXA_PACKAGE_ROOT package.json version", () =>
 test("resolveAppVersion returns the version from a newly installed package", () => {
   const dir = makeTempDir();
   try {
-    writePackageJson(dir, JSON.stringify({ name: "@golba98/codexa", version: "1.0.6" }));
-    assert.equal(resolveAppVersion({ CODEXA_PACKAGE_ROOT: dir }, dir), "1.0.6");
+    writePackageJson(dir, JSON.stringify({ name: "ubume", version: "0.1.0" }));
+    assert.equal(resolveAppVersion({ UBUME_PACKAGE_ROOT: dir }, dir), "0.1.0");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("resolveAppVersion falls back to buildInfo when CODEXA_PACKAGE_ROOT package.json is corrupt", () => {
+test("resolveAppVersion falls back to buildInfo when UBUME_PACKAGE_ROOT package.json is corrupt", () => {
   const dir = makeTempDir();
   try {
     writePackageJson(dir, "{ not valid json");
-    const version = resolveAppVersion({ CODEXA_PACKAGE_ROOT: dir }, dir);
+    const version = resolveAppVersion({ UBUME_PACKAGE_ROOT: dir }, dir);
     assert.equal(version, BUILD_INFO_VERSION);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("resolveAppVersion falls back to buildInfo when CODEXA_PACKAGE_ROOT package.json is missing", () => {
+test("resolveAppVersion falls back to buildInfo when UBUME_PACKAGE_ROOT package.json is missing", () => {
   const dir = makeTempDir();
   try {
-    const version = resolveAppVersion({ CODEXA_PACKAGE_ROOT: dir }, dir);
+    const version = resolveAppVersion({ UBUME_PACKAGE_ROOT: dir }, dir);
     assert.equal(version, BUILD_INFO_VERSION);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("resolveAppVersion rejects invalid semver from CODEXA_PACKAGE_ROOT", () => {
+test("resolveAppVersion rejects invalid semver from UBUME_PACKAGE_ROOT", () => {
   const dir = makeTempDir();
   try {
-    writePackageJson(dir, JSON.stringify({ name: "@golba98/codexa", version: "not-a-version" }));
-    const version = resolveAppVersion({ CODEXA_PACKAGE_ROOT: dir }, dir);
+    writePackageJson(dir, JSON.stringify({ name: "ubume", version: "not-a-version" }));
+    const version = resolveAppVersion({ UBUME_PACKAGE_ROOT: dir }, dir);
     assert.equal(version, BUILD_INFO_VERSION);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test("resolveAppVersion walks up to a package.json named @golba98/codexa", () => {
+test("resolveAppVersion walks up to a package.json named ubume", () => {
   const dir = makeTempDir();
   try {
-    writePackageJson(dir, JSON.stringify({ name: "@golba98/codexa", version: "8.7.6" }));
+    writePackageJson(dir, JSON.stringify({ name: "ubume", version: "8.7.6" }));
     const nested = join(dir, "src", "config");
     mkdirSync(nested, { recursive: true });
     const version = resolveAppVersion({}, nested);

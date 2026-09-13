@@ -217,7 +217,7 @@ test("parseAgyModelsOutput preserves unknown repeated variants without a hardcod
 });
 
 test("discoverAgyModels uses the last-good cache when live discovery fails", async () => {
-  const tempHome = mkdtempSync(join(tmpdir(), "codexa-agy-cache-"));
+  const tempHome = mkdtempSync(join(tmpdir(), "ubume-agy-cache-"));
   const previousHome = process.env.HOME;
   const previousUserProfile = process.env.USERPROFILE;
   try {

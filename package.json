@@ -1,9 +1,10 @@
 {
-  "name": "@golba98/codexa",
-  "version": "1.0.28",
-  "description": "Terminal UI for Codexa — TypeScript + Bun + Ink",
+  "name": "ubume",
+  "version": "0.1.0",
+  "description": "Terminal UI for Ubume — TypeScript + Bun + Ink",
   "type": "module",
   "bin": {
+    "ubume": "bin/ubume.js",
     "codexa": "bin/codexa.js"
   },
   "scripts": {
@@ -14,7 +15,8 @@
     "debug:claude-models": "bun run --silent src/core/providerRuntime/claudeCodeDiscoveryDebug.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test --max-concurrency=1",
-    "audit:codexa-gap": "node scripts/audit-codexa-capabilities.mjs",
+    "audit:ubume-gap": "node scripts/audit-ubume-capabilities.mjs",
+    "audit:codexa-gap": "node scripts/audit-ubume-capabilities.mjs",
     "smoke:terminal-bench": "node scripts/smoke-terminal-bench.mjs",
     "gen-build-info": "node scripts/gen-build-info.mjs",
     "build": "bun run gen-build-info && bun run typecheck",
@@ -45,12 +47,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/golba98/Codexa.git"
+    "url": "git+https://github.com/golba98/Ubume.git"
   },
   "bugs": {
-    "url": "https://github.com/golba98/Codexa/issues"
+    "url": "https://github.com/golba98/Ubume/issues"
   },
-  "homepage": "https://github.com/golba98/Codexa#readme",
+  "homepage": "https://github.com/golba98/Ubume#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
   },

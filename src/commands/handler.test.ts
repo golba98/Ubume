@@ -57,7 +57,7 @@ const baseContext: CommandContext = {
       "Active workspace:",
       "  C:\\Workspace",
       "",
-      "Launch mode: installed codexa",
+      "Launch mode: installed ubume",
     ].join("\n"),
   },
   tokensUsed: 1200,
@@ -582,8 +582,8 @@ test("parses /route as distinct route status", () => {
       "  Workspace default: Anthropic",
       "  Active chat route: OpenAI / gpt-5.4",
       "  Active model: gpt-5.4",
-      "  Active provider mode: Usable inside Codexa",
-      "  Anthropic in-Codexa routing: not configured yet",
+      "  Active provider mode: Usable inside Ubume",
+      "  Anthropic in-Ubume routing: not configured yet",
     ].join("\n"),
   });
 

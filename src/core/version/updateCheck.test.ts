@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  CODEXA_NPM_REGISTRY_URL,
-  CODEXA_UPDATE_COMMAND,
+  UBUME_NPM_REGISTRY_URL,
+  UBUME_UPDATE_COMMAND,
   checkForUpdates,
   compareSemver,
   formatUpdateInstructions,
@@ -25,7 +25,7 @@ test("checkForUpdates returns update-available when installed version is lower t
     {
       currentVersion: "1.0.2",
       fetchNpmMetadataFn: async (url) => {
-        assert.equal(url, CODEXA_NPM_REGISTRY_URL);
+        assert.equal(url, UBUME_NPM_REGISTRY_URL);
         return metadata("1.0.3");
       },
     },
@@ -207,9 +207,9 @@ test("checkForUpdates returns unknown immediately when enabled=false", async () 
 });
 
 test("startup update check is disabled for local-dev channel", () => {
-  assert.equal(shouldRunStartupUpdateCheck({ CODEXA_CHANNEL: "local-dev" }, true), false);
-  assert.equal(shouldRunStartupUpdateCheck({ CODEXA_CHANNEL: "published" }, true), true);
-  assert.equal(shouldRunStartupUpdateCheck({ CODEXA_CHANNEL: "local-dev" }, false), false);
+  assert.equal(shouldRunStartupUpdateCheck({ UBUME_CHANNEL: "local-dev" }, true), false);
+  assert.equal(shouldRunStartupUpdateCheck({ UBUME_CHANNEL: "published" }, true), true);
+  assert.equal(shouldRunStartupUpdateCheck({ UBUME_CHANNEL: "local-dev" }, false), false);
 });
 
 test("explicit update checks still work for local-dev callers", async () => {
@@ -319,8 +319,8 @@ test("formatUpdateInstructions formats update-available npm status", () => {
 
   assert.match(result, /Current installed version: 1\.0\.1/);
   assert.match(result, /npm latest version:\s+1\.0\.2/);
-  assert.match(result, /Update available: Codexa v1\.0\.2/);
-  assert.match(result, new RegExp(`Run: ${CODEXA_UPDATE_COMMAND.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  assert.match(result, /Update available: Ubume v1\.0\.2/);
+  assert.match(result, new RegExp(`Run: ${UBUME_UPDATE_COMMAND.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
 });
 
 test("formatUpdateInstructions leads with up-to-date confirmation and both versions", () => {
@@ -331,7 +331,7 @@ test("formatUpdateInstructions leads with up-to-date confirmation and both versi
     checkedAt: Date.now(),
   });
 
-  assert.match(result, /^Codexa is up to date\./);
+  assert.match(result, /^Ubume is up to date\./);
   assert.match(result, /Current installed version: 1\.0\.2/);
   assert.match(result, /npm latest version:\s+1\.0\.2/);
 });
@@ -342,9 +342,9 @@ test("formatUpdateInstructions shows the caller-provided update command", () => 
     currentVersion: "1.0.1",
     latestVersion: "1.0.2",
     checkedAt: Date.now(),
-  }, "bun add -g @golba98/codexa@latest");
+  }, "bun add -g ubume@latest");
 
-  assert.match(result, /Run: bun add -g @golba98\/codexa@latest/);
+  assert.match(result, /Run: bun add -g ubume@latest/);
 });
 
 test("formatUpdateInstructions formats manual npm errors", () => {

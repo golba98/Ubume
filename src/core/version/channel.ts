@@ -1,23 +1,27 @@
 import { APP_VERSION } from "../../config/settings.js";
 
+export const UBUME_CHANNEL_ENV = "UBUME_CHANNEL";
 export const CODEXA_CHANNEL_ENV = "CODEXA_CHANNEL";
 export const LOCAL_DEV_CHANNEL = "local-dev";
 
-export function getCodexaChannel(env: NodeJS.ProcessEnv = process.env): string {
-  return env[CODEXA_CHANNEL_ENV]?.trim() || "published";
+export function getUbumeChannel(env: NodeJS.ProcessEnv = process.env): string {
+  return env[UBUME_CHANNEL_ENV]?.trim() || env[CODEXA_CHANNEL_ENV]?.trim() || "published";
 }
+export const getCodexaChannel = getUbumeChannel;
 
 export function isLocalDevChannel(env: NodeJS.ProcessEnv = process.env): boolean {
-  return getCodexaChannel(env) === LOCAL_DEV_CHANNEL;
+  return getUbumeChannel(env) === LOCAL_DEV_CHANNEL;
 }
 
-export function formatCodexaVersionLabel(
+export function formatUbumeVersionLabel(
   version: string = APP_VERSION,
   env: NodeJS.ProcessEnv = process.env,
 ): string {
   return isLocalDevChannel(env) ? `${version}-dev local` : version;
 }
+export const formatCodexaVersionLabel = formatUbumeVersionLabel;
 
-export function formatCodexaBrandLabel(env: NodeJS.ProcessEnv = process.env): string {
-  return `Codexa v${formatCodexaVersionLabel(APP_VERSION, env)}`;
+export function formatUbumeBrandLabel(env: NodeJS.ProcessEnv = process.env): string {
+  return `Ubume v${formatUbumeVersionLabel(APP_VERSION, env)}`;
 }
+export const formatCodexaBrandLabel = formatUbumeBrandLabel;

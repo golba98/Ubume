@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import { useEffect, useRef } from "react";
-import { resolveCodexaDebugLogPath } from "../workspace/appData.js";
+import { resolveUbumeDebugLogPath } from "../workspace/appData.js";
 
 type DebugEnv = Record<string, string | undefined>;
 
@@ -12,25 +12,31 @@ let renderTraceEnabled = false;
 let lifecycleEnabled = false;
 let flickerEnabled = false;
 let plainActionsEnabled = false;
-let logPath = resolveCodexaDebugLogPath();
+let logPath = resolveUbumeDebugLogPath();
 let sessionId = `${Date.now()}-${process.pid}`;
 const counters = new Map<string, number>();
 
 function configureFromEnv(env: DebugEnv = process.env): void {
-  renderTraceEnabled = env["CODEXA_DEBUG_RENDER_TRACE"] === "1";
-  // Both CODEXA_RENDER_DEBUG and CODEXA_DEBUG_RENDER activate render debugging —
+  renderTraceEnabled = env["UBUME_DEBUG_RENDER_TRACE"] === "1" || env["CODEXA_DEBUG_RENDER_TRACE"] === "1";
+  // Both UBUME_RENDER_DEBUG and UBUME_DEBUG_RENDER activate render debugging —
   // two names exist for historical reasons; either one is sufficient.
-  // CODEXA_TERMINAL_TRACE is a focused alias for diagnosing terminal/clear/resize
+  // UBUME_TERMINAL_TRACE is a focused alias for diagnosing terminal/clear/resize
   // render-state issues; it lights up the same `terminal` trace channel.
-  enabled = env["CODEXA_RENDER_DEBUG"] === "1"
+  enabled = env["UBUME_RENDER_DEBUG"] === "1"
+    || env["UBUME_DEBUG_MODEL_STATE"] === "1"
+    || env["UBUME_DEBUG_RENDER"] === "1"
+    || env["UBUME_TERMINAL_TRACE"] === "1"
+    || env["CODEXA_RENDER_DEBUG"] === "1"
     || env["CODEXA_DEBUG_MODEL_STATE"] === "1"
     || env["CODEXA_DEBUG_RENDER"] === "1"
     || env["CODEXA_TERMINAL_TRACE"] === "1"
     || renderTraceEnabled;
-  lifecycleEnabled = env["CODEXA_DEBUG_LIFECYCLE"] === "1";
-  flickerEnabled = env["CODEXA_DEBUG_FLICKER"] === "1";
-  plainActionsEnabled = env["CODEXA_DEBUG_PLAIN_ACTIONS"] === "1";
-  logPath = env["CODEXA_RENDER_DEBUG_FILE"]?.trim() || resolveCodexaDebugLogPath(env);
+  lifecycleEnabled = env["UBUME_DEBUG_LIFECYCLE"] === "1" || env["CODEXA_DEBUG_LIFECYCLE"] === "1";
+  flickerEnabled = env["UBUME_DEBUG_FLICKER"] === "1" || env["CODEXA_DEBUG_FLICKER"] === "1";
+  plainActionsEnabled = env["UBUME_DEBUG_PLAIN_ACTIONS"] === "1" || env["CODEXA_DEBUG_PLAIN_ACTIONS"] === "1";
+  logPath = env["UBUME_RENDER_DEBUG_FILE"]?.trim()
+    || env["CODEXA_RENDER_DEBUG_FILE"]?.trim()
+    || resolveUbumeDebugLogPath(env);
   sessionId = `${Date.now()}-${process.pid}`;
   configured = true;
 }
@@ -327,7 +333,7 @@ export function traceTimelineUpdate(fields: Record<string, unknown>): void {
 }
 
 /**
- * Set CODEXA_DEBUG_LIFECYCLE=1 to write one JSONL record for every UIState
+ * Set UBUME_DEBUG_LIFECYCLE=1 to write one JSONL record for every UIState
  * transition, including the derived composer and animation state.
  */
 export function traceLifecycleTransition(fields: Record<string, unknown>): void {

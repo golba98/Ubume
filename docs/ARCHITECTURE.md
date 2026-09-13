@@ -1,10 +1,10 @@
-# Codexa Architecture
+# Ubume Architecture
 
-This document explains what Codexa does, how the application is assembled, how a prompt moves through the system, and which architectural boundaries maintainers must preserve. For the purpose and maintenance notes for every file under `src/`, see [Source Guide](SOURCE_GUIDE.md).
+This document explains what Ubume does, how the application is assembled, how a prompt moves through the system, and which architectural boundaries maintainers must preserve. For the purpose and maintenance notes for every file under `src/`, see [Source Guide](SOURCE_GUIDE.md).
 
-## What Codexa is
+## What Ubume is
 
-Codexa is a terminal user interface around coding-agent command-line tools. It gives those tools a shared workspace-oriented experience with:
+Ubume is a terminal user interface around coding-agent command-line tools. It gives those tools a shared workspace-oriented experience with:
 
 - an Ink/React terminal UI with native terminal scrollback;
 - interactive and headless execution modes;
@@ -14,13 +14,13 @@ Codexa is a terminal user interface around coding-agent command-line tools. It g
 - workspace trust, project-instruction loading, file-activity tracking, and path guards;
 - provider discovery and routing for Codex, Claude Code, Mistral Vibe, Antigravity, and local OpenAI-compatible servers.
 
-Codexa does not replace provider authentication. External provider CLIs remain responsible for their own installation and sign-in state.
+Ubume does not replace provider authentication. External provider CLIs remain responsible for their own installation and sign-in state.
 
 ## Technology and runtime
 
 | Area | Technology | Responsibility |
 | --- | --- | --- |
-| Launcher | Node.js ESM | Installed `codexa` command, argument dispatch, child-process environment, and terminal hand-off. |
+| Launcher | Node.js ESM | Installed `ubume` command, argument dispatch, child-process environment, and terminal hand-off. |
 | Application runtime | Bun + TypeScript | Executes the interactive or headless TypeScript entry point. |
 | Terminal UI | Ink 7 + React 19 | Declarative terminal components, input, focus, panels, and rendering. |
 | Provider integration | Child processes, JSON streams, HTTP | Runs provider CLIs, parses events, and talks to local OpenAI-compatible endpoints. |
@@ -36,16 +36,16 @@ flowchart LR
   Package[package.json commands] --> Dev[run-local-dev.mjs]
   Package --> Install[install-local-dev-bin.mjs]
   Package --> Build[gen-build-info.mjs]
-  Package --> Audit[audit-codexa-capabilities.mjs]
+  Package --> Audit[audit-ubume-capabilities.mjs]
   Package --> Smoke[smoke-terminal-bench.mjs]
 
-  Install --> Shims[codexa-dev and cxd]
+  Install --> Shims[ubume-dev and cxd]
   Shims --> Dev
   Dev --> Interactive[src/index.tsx]
   Dev --> Headless[src/exec.ts]
   Build --> BuildInfo[src/config/buildInfo.ts]
   Audit --> Source[Read-only src inspection]
-  Smoke --> Launcher[bin/codexa.js exec]
+  Smoke --> Launcher[bin/ubume.js exec]
   Launcher --> Headless
 ```
 
@@ -55,7 +55,7 @@ Only build-info generation intentionally rewrites a tracked source file. The cap
 
 ```mermaid
 flowchart LR
-  User[User in a terminal] --> Launcher[bin/codexa.js]
+  User[User in a terminal] --> Launcher[bin/ubume.js]
   Launcher -->|interactive| Entry[src/index.tsx]
   Launcher -->|exec / benchmark| Exec[src/exec.ts]
 
@@ -112,7 +112,7 @@ The intended ownership rules are:
 
 ```mermaid
 sequenceDiagram
-  participant L as bin/codexa.js
+  participant L as bin/ubume.js
   participant I as src/index.tsx
   participant A as src/app.tsx
   participant S as src/session
@@ -151,7 +151,7 @@ Important details:
 
 ```mermaid
 flowchart LR
-  CLI[codexa exec] --> Launcher[bin/codexa.js]
+  CLI[ubume exec] --> Launcher[bin/ubume.js]
   Launcher --> Entry[src/exec.ts]
   Entry --> Parse[headless/execArgs.ts]
   Parse --> Resolve[Layered config + workspace]
@@ -189,7 +189,7 @@ flowchart TD
 | `providerRuntime/` | Provider availability, validation, model discovery, capability/context metadata, reasoning options, and routed execution. | Generic terminal rendering or persistent chat state. |
 | `providers/` | Backend interface and low-level Codex subprocess/JSON/transcript handling. | Workspace provider-picker state. |
 
-Provider truthfulness is an invariant: selectable routes must match actual `routeAvailable` and configuration state. A provider that can only be launched externally must not be presented as though Codexa can route an in-app conversation through it.
+Provider truthfulness is an invariant: selectable routes must match actual `routeAvailable` and configuration state. A provider that can only be launched externally must not be presented as though Ubume can route an in-app conversation through it.
 
 ### Local OpenAI-compatible model profiles
 
@@ -197,13 +197,13 @@ The `local` runtime owns compatibility for models served by LM Studio and Unslot
 
 Local capability fields resolve independently: authoritative server metadata wins, explicit per-model configuration fills missing fields, detected-family defaults fill only remaining compatibility gaps, and unknown models retain the generic Local behavior. Context length remains owned by the separate context-metadata resolver, and detected families do not invent context or output-token limits.
 
-Codexa lazily starts the official DeepSeek Harness in a workspace-scoped child process and configures its generic `dsh-llm-pi-ai` OpenAI-compatible route from the existing Local base URL, key, model, context, and output settings. Harness owns tool calling, the agent loop, shell/filesystem execution, context compaction, subagents, and durable model sessions. A thin stdio bridge maps Harness session events into Codexa assistant, reasoning, tool, usage, and lifecycle events and routes pre-execution policy through Codexa's existing permission UI. The bridge does not parse model tool syntax or execute tools itself.
+Ubume lazily starts the official DeepSeek Harness in a workspace-scoped child process and configures its generic `dsh-llm-pi-ai` OpenAI-compatible route from the existing Local base URL, key, model, context, and output settings. Harness owns tool calling, the agent loop, shell/filesystem execution, context compaction, subagents, and durable model sessions. A thin stdio bridge maps Harness session events into Ubume assistant, reasoning, tool, usage, and lifecycle events and routes pre-execution policy through Ubume's existing permission UI. The bridge does not parse model tool syntax or execute tools itself.
 
-Each writable Local Harness session gets a scratch folder at `.codexa/scratch/<session>` (see `src/core/workspace/scratchDir.ts`). The persona and a per-prompt note tell the model to keep throwaway test harnesses, probe scripts, logs, and browser profiles there instead of the project root. The folder lives inside the workspace rather than the OS temp dir because Harness's `workspace-write` sandbox (bwrap on Linux) only grants a persistent writable workspace. It carries its own `*` `.gitignore`, is excluded from workspace activity snapshots, and session folders older than seven days are pruned when a new session opens.
+Each writable Local Harness session gets a scratch folder at `.ubume/scratch/<session>` (see `src/core/workspace/scratchDir.ts`). The persona and a per-prompt note tell the model to keep throwaway test harnesses, probe scripts, logs, and browser profiles there instead of the project root. The folder lives inside the workspace rather than the OS temp dir because Harness's `workspace-write` sandbox (bwrap on Linux) only grants a persistent writable workspace. It carries its own `*` `.gitignore`, is excluded from workspace activity snapshots, and session folders older than seven days are pruned when a new session opens.
 
-Before each Local turn, Codexa resolves an ephemeral execution connection for the selected backend. This is especially important for Unsloth: its verified loopback URL and agent-cache credential are resolved through the existing Unsloth security adapter and passed to Harness in memory, rather than persisted in workspace configuration or replaced by the LM Studio default.
+Before each Local turn, Ubume resolves an ephemeral execution connection for the selected backend. This is especially important for Unsloth: its verified loopback URL and agent-cache credential are resolved through the existing Unsloth security adapter and passed to Harness in memory, rather than persisted in workspace configuration or replaced by the LM Studio default.
 
-Codexa conversation metadata stores the opaque Harness session id and a non-secret route/transcript fingerprint. `/resume` reconnects only when those fingerprints match; a legacy or divergent visible transcript is explicitly restored into a fresh Harness session rather than silently mixing two histories. `/clear` cancels active work and starts a new Codexa conversation, while the saved prior conversation remains resumable.
+Ubume conversation metadata stores the opaque Harness session id and a non-secret route/transcript fingerprint. `/resume` reconnects only when those fingerprints match; a legacy or divergent visible transcript is explicitly restored into a fresh Harness session rather than silently mixing two histories. `/clear` cancels active work and starts a new Ubume conversation, while the saved prior conversation remains resumable.
 
 ## Session and UI state
 
@@ -229,7 +229,7 @@ Reducers in `session/` are the source of truth for lifecycle transitions and eve
 
 ## Terminal rendering model
 
-Codexa uses two terminal presentation modes:
+Ubume uses two terminal presentation modes:
 
 - Main chat stays in the normal screen buffer. The intro, completed turns, and live output participate in native terminal scrollback.
 - Modal/picker screens temporarily use overlay behavior and may enter alternate-screen mode. Returning to main chat restores the normal buffer.
@@ -272,7 +272,7 @@ flowchart LR
   CLI --> Effective[Effective runtime config]
 ```
 
-Untrusted project configuration is reported but not applied. User settings, trust state, update caches, provider model caches, plans, attachments, workspace provider state, and workspace-scoped conversations use the platform-specific Codexa data directory. Legacy project-local provider state may be read for migration, but new state must not dirty the user's project.
+Untrusted project configuration is reported but not applied. User settings, trust state, update caches, provider model caches, plans, attachments, workspace provider state, and workspace-scoped conversations use the platform-specific Ubume data directory. Legacy project-local provider state may be read for migration, but new state must not dirty the user's project.
 
 Conversation history is stored below workspaces/<workspace-key>/conversations/<conversation-id>/ as versioned metadata.json and canonical messages.json files. Metadata-only listing powers /resume; complete messages are loaded only after selection. Messages and metadata use temporary-file replacement, and a partial or corrupt conversation is skipped without deleting it. The active conversation ID remains stable across resume and continuation. /clear clears the visible transcript and begins a new non-destructive conversation lifecycle.
 

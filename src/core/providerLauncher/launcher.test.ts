@@ -13,7 +13,7 @@ function makeProvider(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
     displayName: "OpenAI",
     currentModel: "gpt-5.4",
     backendType: "codex-cli-auth",
-    routeMode: "in-codexa",
+    routeMode: "in-ubume",
     enabled: true,
     statusLabel: "Enabled",
     launchCommand: { executable: "codex", args: [] },
@@ -98,8 +98,8 @@ test("commandExistsOnPath rejects unsafe executable candidates without launching
 });
 
 test("commandExistsOnPath accepts a normal executable path", async () => {
-  const tempRoot = join(tmpdir(), `codexa-provider-launcher-${Date.now()}`);
-  const executablePath = join(tempRoot, "codexa-test-tool");
+  const tempRoot = join(tmpdir(), `ubume-provider-launcher-${Date.now()}`);
+  const executablePath = join(tempRoot, "ubume-test-tool");
   mkdirSync(tempRoot, { recursive: true });
   writeFileSync(executablePath, "#!/bin/sh\nexit 0\n");
   chmodSync(executablePath, 0o755);

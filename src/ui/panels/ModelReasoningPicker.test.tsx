@@ -178,7 +178,7 @@ test("model picker renders a compact command panel", async () => {
     const output = harness.getOutput();
     assert.match(output, /Select model/);
     assert.match(output, /↑↓ model · ←→ reasoning · Enter select · Esc cancel/);
-    assert.match(output, /Choose an OpenAI model to use inside Codexa/);
+    assert.match(output, /Choose an OpenAI model to use inside Ubume/);
     assert.match(output, /Reasoning: Medium/);
     assert.match(output, /Model Four \(model-four\)/);
     assert.match(output, /Model Two/);

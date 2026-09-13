@@ -79,7 +79,7 @@ export function formatCodexLaunchError(err: NodeJS.ErrnoException): string {
   if (err.code === "ENOENT") {
     return [
       "Codex executable was not found in PATH.",
-      "Set CODEX_EXECUTABLE to your working command/path, then restart Codexa.",
+      "Set CODEX_EXECUTABLE to your working command/path, then restart Ubume.",
       "Alternative: install CLI with `npm install -g @openai/codex`.",
     ].join("\n") + detail;
   }
@@ -87,7 +87,7 @@ export function formatCodexLaunchError(err: NodeJS.ErrnoException): string {
   if (err.code === "EACCES" || err.code === "EPERM") {
     return [
       "Codex appears installed but this process cannot launch it (permission blocked).",
-      "Set CODEX_EXECUTABLE to a working CLI command/path and restart Codexa.",
+      "Set CODEX_EXECUTABLE to a working CLI command/path and restart Ubume.",
       "Windows note: Codex docs recommend WSL for the best CLI experience.",
     ].join("\n") + detail;
   }

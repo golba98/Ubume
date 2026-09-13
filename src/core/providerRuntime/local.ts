@@ -18,7 +18,7 @@ import { runLocalHarness } from "./localHarness/runtime.js";
 
 const DEFAULT_LOCAL_BASE_URL = "http://localhost:1234/v1";
 const DEFAULT_LOCAL_API_KEY = "lm-studio";
-const LOCAL_TIMEOUT_MS = Number(process.env.CODEXA_LOCAL_TIMEOUT_MS?.trim()) || 15_000;
+const LOCAL_TIMEOUT_MS = Number(process.env.UBUME_LOCAL_TIMEOUT_MS?.trim()) || 15_000;
 const LOCAL_ROUTE_SETUP_MESSAGE = [
   "Local provider unavailable",
   `Could not reach ${DEFAULT_LOCAL_BASE_URL}`,
@@ -78,17 +78,17 @@ export function resolveLocalProviderConfig(
   localBackend: LocalBackendId = override?.localBackend ?? "lm-studio",
 ): LocalProviderConfig {
   const baseUrl = nonEmpty(override?.baseUrl)
-    ?? nonEmpty(env.CODEXA_LOCAL_BASE_URL)
+    ?? nonEmpty(env.UBUME_LOCAL_BASE_URL)
     ?? nonEmpty(env.OPENAI_BASE_URL)
     ?? nonEmpty(env.OPENAI_API_BASE)
     ?? DEFAULT_LOCAL_BASE_URL;
   const apiKey = nonEmpty(override?.apiKey)
-    ?? nonEmpty(env.CODEXA_LOCAL_API_KEY)
+    ?? nonEmpty(env.UBUME_LOCAL_API_KEY)
     ?? nonEmpty(env.OPENAI_API_KEY)
     ?? DEFAULT_LOCAL_API_KEY;
   const currentModel = nonEmpty(override?.currentModel);
   const defaultModel = nonEmpty(override?.defaultModel)
-    ?? nonEmpty(env.CODEXA_LOCAL_MODEL);
+    ?? nonEmpty(env.UBUME_LOCAL_MODEL);
   const pinnedModel = nonEmpty(override?.pinnedModel);
 
   return {
@@ -587,7 +587,7 @@ async function resolveLocalAgentConfig(
         supports_vision: status.is_vision,
       };
       if (typeof status.active_model === "string" && status.active_model !== modelId) {
-        throw new Error(`Unsloth has model "${status.active_model}" active, but Codexa selected "${modelId}".`);
+        throw new Error(`Unsloth has model "${status.active_model}" active, but Ubume selected "${modelId}".`);
       }
     }
   } else {

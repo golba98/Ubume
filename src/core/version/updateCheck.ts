@@ -1,9 +1,13 @@
 import { APP_VERSION } from "../../config/settings.js";
 import { isLocalDevChannel } from "./channel.js";
 
-export const CODEXA_NPM_PACKAGE = "@golba98/codexa";
-export const CODEXA_NPM_REGISTRY_URL = "https://registry.npmjs.org/@golba98%2Fcodexa";
-export const CODEXA_UPDATE_COMMAND = `npm install -g ${CODEXA_NPM_PACKAGE}@latest`;
+export const UBUME_NPM_PACKAGE = "ubume";
+export const UBUME_NPM_REGISTRY_URL = "https://registry.npmjs.org/ubume";
+export const UBUME_UPDATE_COMMAND = `npm install -g ${UBUME_NPM_PACKAGE}@latest`;
+
+export const CODEXA_NPM_PACKAGE = UBUME_NPM_PACKAGE;
+export const CODEXA_NPM_REGISTRY_URL = UBUME_NPM_REGISTRY_URL;
+export const CODEXA_UPDATE_COMMAND = UBUME_UPDATE_COMMAND;
 
 export type UpdateStatus = "up-to-date" | "update-available" | "unknown" | "error";
 
@@ -92,7 +96,7 @@ async function defaultFetchNpmMetadata(url: string): Promise<NpmRegistryMetadata
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { "User-Agent": `${CODEXA_NPM_PACKAGE}-update-checker/1.0` },
+      headers: { "User-Agent": `${UBUME_NPM_PACKAGE}-update-checker/1.0` },
     });
     if (!res.ok) throw new Error(`npm registry returned HTTP ${res.status}`);
     return await res.json() as NpmRegistryMetadata;
@@ -113,7 +117,7 @@ export async function checkForUpdates(
 
   try {
     const fetchFn = overrides?.fetchNpmMetadataFn ?? defaultFetchNpmMetadata;
-    const metadata = await fetchFn(CODEXA_NPM_REGISTRY_URL);
+    const metadata = await fetchFn(UBUME_NPM_REGISTRY_URL);
     const rawLatest = metadata["dist-tags"]?.latest;
 
     if (typeof rawLatest !== "string" || !rawLatest.trim()) {
@@ -156,7 +160,7 @@ export async function checkForUpdates(
 
 export function formatUpdateInstructions(
   result: UpdateCheckResult | null,
-  updateCommand: string = CODEXA_UPDATE_COMMAND,
+  updateCommand: string = UBUME_UPDATE_COMMAND,
 ): string {
   const current = result?.currentVersion ?? APP_VERSION;
   const latest = result?.latestVersion ?? "unknown";
@@ -171,14 +175,14 @@ export function formatUpdateInstructions(
 
   if (result?.status === "up-to-date") {
     return [
-      "Codexa is up to date.",
+      "Ubume is up to date.",
       `Current installed version: ${current}`,
       `npm latest version:        ${latest}`,
     ].join("\n");
   }
 
   const statusLine = result?.status === "update-available" && result.latestVersion
-    ? `Update available: Codexa ${formatVersionLabel(result.latestVersion)}`
+    ? `Update available: Ubume ${formatVersionLabel(result.latestVersion)}`
     : "Status unknown — could not reach npm registry.";
 
   return [
@@ -192,7 +196,7 @@ export function formatUpdateInstructions(
 
 export function formatLocalDevUpdateStatus(): string {
   return [
-    "Running local-dev Codexa.",
+    "Running local-dev Ubume.",
     "Automatic published npm update prompts are disabled for this channel.",
     "Run /update check to explicitly check the published npm package.",
   ].join("\n");

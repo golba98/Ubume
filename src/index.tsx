@@ -1,3 +1,4 @@
+import "./legacyEnvBootstrap.js";
 import React from "react";
 import { render, type Instance, type RenderOptions } from "ink";
 import { App } from "./app.js";
@@ -70,11 +71,11 @@ interface ActiveRootState {
 let activeRoot: ActiveRootState | null = null;
 
 function debugLaunch(env: Record<string, string | undefined>, write: (chunk: string, source: string) => boolean, fields: Record<string, unknown>): void {
-  if (env.CODEXA_DEBUG_LAUNCH !== "1") {
+  if (env.UBUME_DEBUG_LAUNCH !== "1" && env.CODEXA_DEBUG_LAUNCH !== "1") {
     return;
   }
 
-  write(`[codexa:launch] ${JSON.stringify(fields)}\n`, "src/index.tsx:launchDebug");
+  write(`[ubume:launch] ${JSON.stringify(fields)}\n`, "src/index.tsx:launchDebug");
 }
 
 function hasInvalidRestoreDimensions(stdout: Pick<AppStdout, "columns" | "rows">): boolean {

@@ -14,7 +14,7 @@ interface AnimatedStatusTextProps {
 
 function useLocalBusyStatusFrame(isActive: boolean, label: string): string {
   const [frameIndex, setFrameIndex] = useState(0);
-  const staticStatus = process.env.CODEXA_DEBUG_STATIC_STATUS === "1";
+  const staticStatus = process.env.UBUME_DEBUG_STATIC_STATUS === "1";
 
   useEffect(() => {
     if (!isActive || staticStatus) {

@@ -127,10 +127,10 @@ test("full mode renders wordmark at wide terminal", async () => {
 
   assert.equal(getHeaderHeroLayout(createLayoutSnapshot(140, 40)).mode, "wide");
   assert.match(output, /[█╔╗╚╝═║]/);
-  assert.match(output, new RegExp(`Codexa v${APP_VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  assert.match(output, new RegExp(`Ubume v${APP_VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   assert.match(output, /Authenticated/);
   assert.match(output, /Workspace:\s*C:\\Development\\1-JavaScript\\13-Custom CLI/);
-  assert.match(output, /Provider:\s*Codexa Core/);
+  assert.match(output, /Provider:\s*Ubume Core/);
   assert.doesNotMatch(output, /Model:/);
   assert.doesNotMatch(output, /Context:/);
   assert.doesNotMatch(output, /Reasoning:/);
@@ -143,16 +143,16 @@ test("full mode renders wordmark at wide terminal", async () => {
 });
 
 test("local-dev channel makes header version obvious", async () => {
-  const previous = process.env.CODEXA_CHANNEL;
-  process.env.CODEXA_CHANNEL = "local-dev";
+  const previous = process.env.UBUME_CHANNEL;
+  process.env.UBUME_CHANNEL = "local-dev";
   try {
     const output = await renderHeader(130, "authenticated", HEADER_CONFIG_WITH_AUTH);
-    assert.match(output, new RegExp(`Codexa v${APP_VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-dev local`));
+    assert.match(output, new RegExp(`Ubume v${APP_VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-dev local`));
   } finally {
     if (previous === undefined) {
-      delete process.env.CODEXA_CHANNEL;
+      delete process.env.UBUME_CHANNEL;
     } else {
-      process.env.CODEXA_CHANNEL = previous;
+      process.env.UBUME_CHANNEL = previous;
     }
   }
 });
@@ -160,14 +160,14 @@ test("local-dev channel makes header version obvious", async () => {
 test("wide header centers metadata beside the logo with a clear column gap", async () => {
   const output = await renderHeader(140, "authenticated", HEADER_CONFIG_WITH_AUTH);
   const rows = output.split("\n");
-  const firstLogoRow = rows.findIndex((row) => row.includes("██████"));
-  const brandRow = rows.findIndex((row) => row.includes(`Codexa v${APP_VERSION}`));
+  const firstLogoRow = rows.findIndex((row) => row.includes("██╗"));
+  const brandRow = rows.findIndex((row) => row.includes(`Ubume v${APP_VERSION}`));
   const workspaceRow = rows.findIndex((row) => row.includes("Workspace:"));
 
   assert.ok(firstLogoRow >= 0, "logo should render");
   assert.ok(brandRow >= firstLogoRow && brandRow <= firstLogoRow + 2, "metadata should be vertically centered within the logo block");
   assert.equal(workspaceRow, brandRow + 2, "workspace should sit below auth in the metadata block");
-  assert.ok((rows[brandRow]?.indexOf(`Codexa v${APP_VERSION}`) ?? -1) >= 53, "metadata should have a visible left gap from the logo");
+  assert.ok((rows[brandRow]?.indexOf(`Ubume v${APP_VERSION}`) ?? -1) >= 49, "metadata should have a visible left gap from the logo");
 });
 
 test("version and workspace metadata rows have a visible gap between them", async () => {
@@ -177,7 +177,7 @@ test("version and workspace metadata rows have a visible gap between them", asyn
     showModel: false,
   });
   const rows = output.split("\n");
-  const brandRow = rows.findIndex((row) => row.includes(`Codexa v${APP_VERSION}`));
+  const brandRow = rows.findIndex((row) => row.includes(`Ubume v${APP_VERSION}`));
   const workspaceRow = rows.findIndex((row) => row.includes("Workspace:"));
 
   assert.ok(brandRow >= 0, "brand line should render");
@@ -193,8 +193,8 @@ test("normal header keeps metadata beside the canonical logo with compact trunca
     HEADER_CONFIG_WITH_AUTH,
   );
   const rows = output.split("\n");
-  const brandRow = rows.findIndex((row) => row.includes(`Codexa v${APP_VERSION}`));
-  const firstLogoRow = rows.findIndex((row) => row.includes("██████"));
+  const brandRow = rows.findIndex((row) => row.includes(`Ubume v${APP_VERSION}`));
+  const firstLogoRow = rows.findIndex((row) => row.includes("██╗"));
   const workspaceRow = rows.find((row) => row.includes("Workspace:")) ?? "";
 
   assert.equal(getHeaderHeroLayout(createLayoutSnapshot(100, 40)).mode, "medium");
@@ -202,14 +202,14 @@ test("normal header keeps metadata beside the canonical logo with compact trunca
   assert.ok(brandRow >= firstLogoRow && brandRow <= firstLogoRow + 2, "metadata should stay beside the logo");
   assert.match(workspaceRow, /Workspace:\s*…\\workspace/);
   assert.doesNotMatch(output, /____|\/ ___\||\|_\|/, "thin ASCII logo must not render in the header");
-  assert.ok((rows[brandRow]?.indexOf(`Codexa v${APP_VERSION}`) ?? -1) >= 52, "normal metadata should retain a compact gap from the canonical logo");
+  assert.ok((rows[brandRow]?.indexOf(`Ubume v${APP_VERSION}`) ?? -1) >= 47, "normal metadata should retain a compact gap from the canonical logo");
 });
 
 test("compact header uses text-only identity instead of logo art", async () => {
   const output = await renderHeader(65, "authenticated", HEADER_CONFIG_WITH_AUTH);
 
   assert.equal(getHeaderHeroLayout(createLayoutSnapshot(65, 40)).mode, "compact");
-  assert.match(output, /Codexa/);
+  assert.match(output, /Ubume/);
   assert.match(output, new RegExp(`v${APP_VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   assert.doesNotMatch(output, /[█╔╗╚╝═║]/);
   assert.doesNotMatch(output, /____/);
@@ -218,7 +218,7 @@ test("compact header uses text-only identity instead of logo art", async () => {
 test("header wordmark lines never contain metadata text", () => {
   const wordmarkText = HEADER_WORDMARK_LINES.join("\n");
 
-  assert.doesNotMatch(wordmarkText, /Codexa v/);
+  assert.doesNotMatch(wordmarkText, /Ubume v/);
   assert.doesNotMatch(wordmarkText, /Workspace:/);
   assert.doesNotMatch(wordmarkText, /Auth:/);
 });
@@ -226,12 +226,12 @@ test("header wordmark lines never contain metadata text", () => {
 test("normal mode renders canonical logo, version, and auth", async () => {
   const output = await renderHeader(105, "authenticated", HEADER_CONFIG_WITH_AUTH);
 
-  assert.match(output, /██████/);
+  assert.match(output, /██╗/);
   assert.doesNotMatch(output, /____|\/ ___\||\|_\|/);
   assert.match(output, new RegExp(`v${APP_VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   assert.match(output, /Authenticated/);
-  assert.match(output, /Workspace:\s*…\\13-Custom CLI/);
-  assert.match(output, /Provider:\s*Codexa Core/);
+  assert.match(output, /Workspace:\s*(?:.*\\)?13-Custom CLI/);
+  assert.match(output, /Provider:\s*Ubume Core/);
   assert.doesNotMatch(output, /Model:/);
   assert.doesNotMatch(output, /Context:/);
   assert.doesNotMatch(output, /Reasoning:/);
@@ -244,7 +244,7 @@ test("normal mode renders canonical logo, version, and auth", async () => {
 test("micro mode renders version and auth", async () => {
   const output = await renderHeader(50, "authenticated", HEADER_CONFIG_WITH_AUTH);
 
-  assert.match(output, /Codex/);
+  assert.match(output, /Ubume/);
   assert.match(output, new RegExp(`v${APP_VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   assert.doesNotMatch(output, /[█╔╗╚╝═║]/);
   assert.match(output, /Provider/);
@@ -256,7 +256,7 @@ test("full mode always shows wordmark regardless of activity", async () => {
   const output = await renderHeader(180, "authenticated", HEADER_CONFIG_WITH_AUTH);
 
   assert.match(output, /[█╔╗╚╝═║]/);
-  assert.match(output, new RegExp(`Codexa v${APP_VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  assert.match(output, new RegExp(`Ubume v${APP_VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   assert.match(output, /Authenticated/);
   assert.match(output, /Workspace:\s*C:\\Development\\1-JavaScript\\13-Custom CLI/);
   assert.doesNotMatch(output, /Runtime:/);
@@ -277,7 +277,7 @@ test("compact mode preserves workspace truncation with runtime text", async () =
 
   assert.match(output, /Workspace:/);
   assert.doesNotMatch(output, /packages\\really-long-subfolder/);
-  assert.match(output, /Provider:\s*Codexa Core/);
+  assert.match(output, /Provider:\s*Ubume Core/);
   assert.doesNotMatch(output, /Model:/);
 });
 
@@ -329,9 +329,9 @@ test("header layout changes when width changes without duplicating the component
   await sleep(20);
 
   const rows = stripAnsi(output).split("\n");
-  const brandRows = rows.filter((row) => row.includes(`Codexa v${APP_VERSION}`));
-  const firstLogoRow = rows.findIndex((row) => row.includes("██████"));
-  const firstBrandRow = rows.findIndex((row) => row.includes(`Codexa v${APP_VERSION}`));
+  const brandRows = rows.filter((row) => row.includes(`Ubume v${APP_VERSION}`));
+  const firstLogoRow = rows.findIndex((row) => row.includes("██╗"));
+  const firstBrandRow = rows.findIndex((row) => row.includes(`Ubume v${APP_VERSION}`));
 
   assert.equal(getHeaderHeroLayout(createLayoutSnapshot(100, 40), HEADER_CONFIG_WITH_AUTH).mode, "medium");
   assert.ok(firstBrandRow >= firstLogoRow, "rerendered medium header should show metadata beside or aligned with logo");
@@ -353,7 +353,7 @@ test("renders configured workspace display labels", async () => {
     "authenticated",
     formatWorkspaceDisplayPath(workspaceRoot, "name"),
   );
-  assert.match(nameOutput, /Workspace:\s*Codexa/);
+  assert.match(nameOutput, /Workspace:\s*Ubume/);
 
   const simpleOutput = await renderHeaderWithWorkspace(
     130,
@@ -461,15 +461,15 @@ test("compact mode renders a deliberate one-line header with accent", async () =
   assert.doesNotMatch(text, /Resize to ≥72×24/, "compact header should not show a recommended-size hint");
 });
 
-test("CODEXA_NO_ASCII_LOGO compact header omits the resize hint row", () => {
-  process.env["CODEXA_NO_ASCII_LOGO"] = "1";
+test("UBUME_NO_ASCII_LOGO compact header omits the resize hint row", () => {
+  process.env["UBUME_NO_ASCII_LOGO"] = "1";
   try {
     // With ASCII art disabled, compact is intentional at any size — no nag hint.
     const hero = getHeaderHeroLayout(createLayoutSnapshot(120, 40));
     assert.equal(hero.mode, "compact");
     assert.equal(hero.compactHintRows, 0);
   } finally {
-    delete process.env["CODEXA_NO_ASCII_LOGO"];
+    delete process.env["UBUME_NO_ASCII_LOGO"];
   }
 });
 
@@ -481,7 +481,7 @@ test("wide mode with update available renders update card in right column", asyn
   // Round-border box uses ╭ and ╰
   assert.match(output, /[╭╰]/, "update card border should appear");
   assert.match(output, /Update available/, "card title should appear");
-  assert.match(output, /Codexa v1\.0\.3/, "latest version should appear");
+  assert.match(output, /Ubume v1\.0\.3/, "latest version should appear");
   assert.match(output, /Using v1\.0\.2/, "current version should appear");
 });
 
@@ -490,14 +490,14 @@ test("medium mode with update available renders update card in right column", as
 
   assert.match(output, /[╭╰]/, "update card border should appear at 100 cols");
   assert.match(output, /Update available/);
-  assert.match(output, /Codexa v1\.0\.3/);
+  assert.match(output, /Ubume v1\.0\.3/);
 });
 
 test("compact mode with update available omits the update card", async () => {
   const output = await renderHeaderWithUpdate(65, MOCK_UPDATE);
 
   assert.doesNotMatch(output, /[╭╰]/, "no card border in narrow mode");
-  assert.doesNotMatch(output, /Codexa v1\.0\.3/, "compact header should not spend rows on update notice");
+  assert.doesNotMatch(output, /Ubume v1\.0\.3/, "compact header should not spend rows on update notice");
 });
 
 test("wide mode without update shows no update notice", async () => {
@@ -531,7 +531,7 @@ test("80 cols selects narrow mode and renders logo art with metadata below", asy
   const output = await renderHeader(80, "authenticated", HEADER_CONFIG_WITH_AUTH);
   assert.match(output, /[█╔╗╚╝═║]/);
   assert.doesNotMatch(output, /____/);
-  assert.match(output, /Codexa/);
+  assert.match(output, /Ubume/);
 });
 
 test("70 cols selects compact mode and renders no logo art", async () => {
@@ -540,7 +540,7 @@ test("70 cols selects compact mode and renders no logo art", async () => {
   const output = await renderHeader(70, "authenticated", HEADER_CONFIG_WITH_AUTH);
   assert.doesNotMatch(output, /[█╔╗╚╝═║]/);
   assert.doesNotMatch(output, /____/);
-  assert.match(output, /Codexa/);
+  assert.match(output, /Ubume/);
 });
 
 test("95 cols is the minimum for placing metadata beside logo", () => {
@@ -556,7 +556,7 @@ test("71 cols selects compact mode", () => {
 
 test("normal canonical wordmark renders at 100 cols without thin ASCII fallback", async () => {
   const output = await renderHeader(100, "authenticated", HEADER_CONFIG_DEFAULTS);
-  assert.match(output, /██████/, "canonical block wordmark must appear at 100 cols");
+  assert.match(output, /██╗/, "canonical block wordmark must appear at 100 cols");
   assert.doesNotMatch(output, /____|\/ ___\||\|_\|/, "thin ASCII wordmark must not appear at 100 cols");
 });
 
@@ -603,7 +603,7 @@ test("model line does not render in the header even when showModel is true", asy
   instance.cleanup();
   await new Promise((resolve) => setTimeout(resolve, 20));
   const stripped = stripAnsi(output);
-  assert.match(stripped, /Provider:\s*Codexa Core/);
+  assert.match(stripped, /Provider:\s*Ubume Core/);
   assert.doesNotMatch(stripped, /Model:/, "Model belongs below the composer, not in the header");
 });
 
@@ -640,7 +640,7 @@ test("context line does not render in the header even when contextLabel is provi
   instance.cleanup();
   await new Promise((resolve) => setTimeout(resolve, 20));
   const stripped = stripAnsi(output);
-  assert.match(stripped, /Provider:\s*Codexa Core/);
+  assert.match(stripped, /Provider:\s*Ubume Core/);
   assert.doesNotMatch(stripped, /Context:/, "Context belongs below the composer, not in the header");
 });
 

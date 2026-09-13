@@ -2,13 +2,13 @@ import { APP_NAME, type TerminalTitleMode, formatTerminalTitlePath } from "../..
 import { appendFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import * as renderDebug from "../perf/renderDebug.js";
-import { resolveCodexaDebugLogPath } from "../workspace/appData.js";
+import { resolveUbumeDebugLogPath } from "../workspace/appData.js";
 
 export const DEFAULT_TERMINAL_TITLE = APP_NAME;
 
 // ─── Constants & diagnostics ──────────────────────────────────────────────────
 
-const DEBUG_TERMINAL_TITLE = Boolean(process.env["CODEXA_DEBUG_TERMINAL_TITLE"]);
+const DEBUG_TERMINAL_TITLE = Boolean(process.env["UBUME_DEBUG_TERMINAL_TITLE"]);
 
 /** Hard cap applied at every entry-point to prevent O(n²) scanning cost on adversarial input. */
 const MAX_TERMINAL_TITLE_INPUT_LENGTH = 65536;
@@ -51,9 +51,9 @@ function findIncompleteOscTitleStart(text: string): number {
   return -1;
 }
 
-const TERMINAL_TITLE_DEBUG_LOG_PATH = process.env["CODEXA_TERMINAL_TITLE_DEBUG_FILE"]?.trim()
-  || process.env["CODEXA_RENDER_DEBUG_FILE"]?.trim()
-  || resolveCodexaDebugLogPath();
+const TERMINAL_TITLE_DEBUG_LOG_PATH = process.env["UBUME_TERMINAL_TITLE_DEBUG_FILE"]?.trim()
+  || process.env["UBUME_RENDER_DEBUG_FILE"]?.trim()
+  || resolveUbumeDebugLogPath();
 
 let terminalTitleLifecycleState = "unknown";
 
@@ -118,7 +118,7 @@ export function normalizeTerminalTitle(title: string | null | undefined): string
 
 export function setIntendedTerminalTitle(title: string | null | undefined, options?: TerminalTitleOptions): string {
   intendedTerminalTitle = normalizeTerminalTitle(title);
-  writeCodexaTerminalTitle(intendedTerminalTitle, {
+  writeUbumeTerminalTitle(intendedTerminalTitle, {
     ...options,
     reason: options?.reason ?? "set-intended-title",
   });
@@ -130,14 +130,14 @@ export function getIntendedTerminalTitle(): string {
 }
 
 export function reassertIntendedTerminalTitle(options?: TerminalTitleOptions): void {
-  writeCodexaTerminalTitle(intendedTerminalTitle, {
+  writeUbumeTerminalTitle(intendedTerminalTitle, {
     force: true,
     ...options,
     reason: options?.reason ?? "reassert-intended-title",
   });
 }
 
-export function writeCodexaTerminalTitle(title: string, options?: TerminalTitleOptions) {
+export function writeUbumeTerminalTitle(title: string, options?: TerminalTitleOptions) {
   const cleanTitle = normalizeTerminalTitle(title);
 
   if (!options?.force && cleanTitle === lastWrittenTerminalTitle) {
@@ -150,7 +150,7 @@ export function writeCodexaTerminalTitle(title: string, options?: TerminalTitleO
   const sequence = buildTerminalTitleSequence(cleanTitle);
   renderDebug.traceTerminalWrite("stdout", `terminalTitle:${options?.reason ?? "unknown"}`, sequence);
   writeTerminalTitleDebugRecord({
-    event: "codexaTitleWrite",
+    event: "ubumeTitleWrite",
     title: cleanTitle,
     reason: options?.reason ?? "unknown",
     force: !!options?.force,
@@ -166,7 +166,7 @@ export function writeCodexaTerminalTitle(title: string, options?: TerminalTitleO
   const stdoutIsTTY = Boolean(process.stdout?.isTTY);
   const stderrIsTTY = Boolean(process.stderr?.isTTY);
 
-  debugLog(`writeCodexaTerminalTitle("${cleanTitle}") force=${!!options?.force} reason=${options?.reason ?? "unknown"} stdoutIsTTY=${stdoutIsTTY} stderrIsTTY=${stderrIsTTY}`);
+  debugLog(`writeUbumeTerminalTitle("${cleanTitle}") force=${!!options?.force} reason=${options?.reason ?? "unknown"} stdoutIsTTY=${stdoutIsTTY} stderrIsTTY=${stderrIsTTY}`);
 
   if (stderrIsTTY) {
     process.stderr.write(sequence);
@@ -185,8 +185,10 @@ export function writeCodexaTerminalTitle(title: string, options?: TerminalTitleO
  * Directly writes the terminal title escape sequence to process.stdout or process.stderr,
  * bypassing any Ink/React state management to ensure it reaches the terminal.
  */
+export const writeCodexaTerminalTitle = writeUbumeTerminalTitle;
+
 export function setTerminalTitle(title: string, options?: TerminalTitleOptions) {
-  writeCodexaTerminalTitle(title, options);
+  writeUbumeTerminalTitle(title, options);
 }
 
 /**
@@ -197,7 +199,7 @@ export function computeTerminalTitle(options: {
   workspaceName?: string;
   appName?: string;
 }) {
-  const appName = options.appName || "Codexa";
+  const appName = options.appName || APP_NAME;
 
   if (options.terminalTitleMode === "dir") {
     return options.workspaceName || appName;
@@ -236,7 +238,7 @@ export function refreshTerminalTitle(options: {
 export interface TerminalTitleSequenceTraceContext {
   source: string;
   stream: "stdout" | "stderr" | "unknown";
-  origin: "codexa" | "child" | "shell" | "codex-cli" | "unknown";
+  origin: "ubume" | "child" | "shell" | "codex-cli" | "unknown";
   action?: "observed" | "stripped" | "allowed";
   lifecycleState?: string;
 }

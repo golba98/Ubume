@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 // The shipped Harness plugin is JavaScript because the child runs it directly with Node.
 // @ts-expect-error no declaration file is needed for this private bridge module
-import { notifyBounded, policyArguments, projectHarnessEvent } from "../../../../bin/codexa-local-harness-bridge.js";
+import { notifyBounded, policyArguments, projectHarnessEvent } from "../../../../bin/ubume-local-harness-bridge.js";
 
 test("bridge drops unused events and does not copy large tool results", () => {
   assert.equal(projectHarnessEvent({ type: "step/start", data: { large: "x".repeat(100_000) } }), null);

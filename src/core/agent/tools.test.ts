@@ -15,7 +15,7 @@ function runtime(sandboxMode: ResolvedRuntimeConfig["policy"]["sandboxMode"]): R
 }
 
 async function withTempWorkspace<T>(callback: (workspaceRoot: string) => Promise<T>): Promise<T> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "codexa-agent-tools-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "ubume-agent-tools-"));
   try {
     return await callback(root);
   } finally {
